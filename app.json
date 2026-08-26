@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "HealthNet",
+    "slug": "atomwalk-patient-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "android": {
+      "package": "com.atomwalk.patient",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F4A3A",
+        "backgroundImage": "./assets/adaptive-icon-background.png",
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      }
+    },
+    "ios": {
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "HealthNet uses Face ID to unlock the app so only you can see your appointments and medical records."
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "https://clinic.atomwalk.com/api/v1",
+      "eas": {
+        "projectId": "e202f380-fea0-4a2e-b1c7-30772fc09d96"
+      }
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ],
+    "owner": "subrat2114"
+  }
+}
