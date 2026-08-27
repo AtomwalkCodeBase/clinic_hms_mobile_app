@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -10,13 +10,21 @@ export function Screen({
   scroll = true,
   onRefresh,
   refreshing,
+  topColor,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** Extends this color into the status-bar safe-area inset instead of the
+   * default page background — for screens whose first element is a
+   * MetalHero, so the hero's own color reaches all the way to the top of
+   * the screen instead of showing a mismatched light strip above it. Pass
+   * the hero gradient's own top-left stop (see MetalHero's METAL_STOPS). */
+  topColor?: string;
 }) {
   const Body = scroll ? ScrollView : View;
+  const insets = useSafeAreaInsets();
   // Every screen used to pop in the instant its data resolved — fine on a
   // fast connection, but a visible "blank, then sudden content" flash on
   // any real network delay. A short fade+rise on mount doesn't remove the
@@ -32,17 +40,20 @@ export function Screen({
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
-        <Body
-          style={styles.body}
-          contentContainerStyle={scroll ? styles.scrollContent : undefined}
-          refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
-        >
-          {children}
-        </Body>
-      </Animated.View>
-    </SafeAreaView>
+    <View style={styles.safe}>
+      {!!topColor && <View style={{ height: insets.top, backgroundColor: topColor }} />}
+      <SafeAreaView style={styles.safeInner} edges={topColor ? ["bottom"] : ["top", "bottom"]}>
+        <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
+          <Body
+            style={styles.body}
+            contentContainerStyle={scroll ? styles.scrollContent : undefined}
+            refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
+          >
+            {children}
+          </Body>
+        </Animated.View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -85,6 +96,7 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: NEUTRAL.bg },
+  safeInner: { flex: 1 },
   body: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
   backRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 16 },

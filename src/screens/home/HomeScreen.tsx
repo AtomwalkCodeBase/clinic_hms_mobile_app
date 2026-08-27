@@ -80,14 +80,14 @@ export function HomeScreen() {
     setLoading(true);
     setError("");
     try {
-      const [s, bookings, notifs, profile] = await Promise.all([
+      const [s, bookingsPage, notifs, profile] = await Promise.all([
         getStats(),
         getMyBookings(),
         getNotifications().catch(() => null),
         getProfile().catch(() => null),
       ]);
       setStats(s);
-      setUpcoming(bookings.filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status)));
+      setUpcoming(bookingsPage.results.filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status)));
       setUnreadCount(notifs?.unread_count ?? 0);
       setFirstName(profile?.full_name?.split(" ")[0] || "");
     } catch (err) {
@@ -130,7 +130,7 @@ export function HomeScreen() {
   const todayBookings = upcoming.filter((b) => b.date === todayIso);
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
       <MetalHero compact curved style={styles.hero}>
         <View style={styles.heroTop}>
           <LogoPill size={40} />

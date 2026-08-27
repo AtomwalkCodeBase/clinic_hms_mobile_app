@@ -11,14 +11,12 @@ import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { getMyBookings, getMyRecords, cancelBooking, getBookingReceipt } from "@/api/portal";
+import { getMyBookings, getMyRecords, cancelBooking } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { downloadDataUri } from "@/utils/fileHelpers";
-import { Booking, MedicalRecord } from "@/api/types";
+import { Booking, MedicalRecord, Pagination } from "@/api/types";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
 import { MetalHero } from "@/components/MetalHero";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { DownloadButton } from "@/components/DownloadButton";
 import { IconBadge } from "@/components/IconBadge";
 import { CheckCircle2, ChevronRight } from "lucide-react-native";
 
@@ -51,6 +49,8 @@ export function AppointmentsScreen() {
   const { theme } = useAppTheme();
   const [segment, setSegment] = useState<"upcoming" | "past">("upcoming");
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -62,8 +62,9 @@ export function AppointmentsScreen() {
     setLoading(true);
     setError("");
     try {
-      const [b, r] = await Promise.all([getMyBookings(), getMyRecords()]);
-      setBookings(b);
+      const [bookingsPage, r] = await Promise.all([getMyBookings(1), getMyRecords()]);
+      setBookings(bookingsPage.results);
+      setPagination(bookingsPage.pagination);
       setRecords(r);
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -77,6 +78,25 @@ export function AppointmentsScreen() {
       load();
     }, [load])
   );
+
+  // Bookings are ordered newest-first server-side, so with more than a
+  // page of history this is really "see older past visits" — upcoming
+  // appointments (future dates) sort ahead of any past ones and land on
+  // page 1 regardless, same assumption the web patient portal already
+  // makes about this same endpoint.
+  const loadMore = async () => {
+    if (!pagination?.has_next || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = await getMyBookings(pagination.page + 1);
+      setBookings((prev) => [...prev, ...nextPage.results]);
+      setPagination(nextPage.pagination);
+    } catch (err) {
+      setError(apiErrorMessage(err, "Couldn't load more appointments."));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const upcoming = bookings.filter((b) => UPCOMING_STATUSES.includes(b.status));
   const past = bookings.filter((b) => !UPCOMING_STATUSES.includes(b.status));
@@ -109,7 +129,7 @@ export function AppointmentsScreen() {
   };
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
       <MetalHero compact curved style={styles.hero}>
         <Text style={styles.bannerTitle}>Find a doctor instantly</Text>
         <Text style={styles.bannerSub}>Book across every hospital on the platform</Text>
@@ -180,7 +200,6 @@ export function AppointmentsScreen() {
               </Pressable>
             );
           }
-          const isPaid = b.payment_status === "paid";
           return (
             <Pressable key={b.id} onPress={() => setDetailBooking(b)}>
               <Card>
@@ -202,18 +221,8 @@ export function AppointmentsScreen() {
                   </Text>
                   {b.token_number != null && <Text style={styles.tokenLine}>Token #{b.token_number}</Text>}
                 </View>
-                {isPaid && (
-                  <View style={styles.rowBetween}>
-                    <Pill label={`Confirmed ✓ · PAID${b.payment_amount ? ` · ₹${b.payment_amount}` : ""}`} tone="success" />
-                  </View>
-                )}
-                {/* Once payment_status is "paid" the backend hard-rejects
-                    cancel for this appointment (see
-                    PortalCancelBookingView) — the control is removed here
-                    entirely rather than left clickable and failing with a
-                    server error. */}
                 {((RESCHEDULABLE_STATUSES.includes(b.status) && b.doctor_id != null) ||
-                  (!isPaid && CANCELLABLE_STATUSES.includes(b.status))) && (
+                  CANCELLABLE_STATUSES.includes(b.status)) && (
                   <View style={styles.compactActionsRow}>
                     {RESCHEDULABLE_STATUSES.includes(b.status) && b.doctor_id != null && (
                       <SecondaryButton
@@ -231,28 +240,24 @@ export function AppointmentsScreen() {
                         }
                       />
                     )}
-                    {!isPaid && CANCELLABLE_STATUSES.includes(b.status) && (
+                    {CANCELLABLE_STATUSES.includes(b.status) && (
                       <SecondaryButton label="Cancel" danger compact onPress={() => onCancel(b)} loading={cancellingId === b.id} />
                     )}
-                  </View>
-                )}
-                {isPaid && (
-                  <View style={styles.compactActionsRow}>
-                    <DownloadButton
-                      label="Download bill"
-                      compact
-                      fileLabel={`Receipt for ${b.hospital}`}
-                      onDownload={async () => {
-                        const receipt = await getBookingReceipt(b.id);
-                        await downloadDataUri(receipt.file_name, receipt.file_data);
-                      }}
-                    />
                   </View>
                 )}
               </Card>
             </Pressable>
           );
         })
+      )}
+
+      {pagination?.has_next && (
+        <SecondaryButton
+          label={loadingMore ? "Loading…" : "Load more"}
+          onPress={loadMore}
+          loading={loadingMore}
+          style={styles.loadMoreBtn}
+        />
       )}
 
       <ConfirmDialog
@@ -286,25 +291,6 @@ export function AppointmentsScreen() {
             {detailBooking.now_serving_token != null && <DetailRow label="Now serving" value={`#${detailBooking.now_serving_token}`} />}
             {detailBooking.people_ahead != null && <DetailRow label="Patients ahead of you" value={String(detailBooking.people_ahead)} />}
             <DetailRow label="Reason for visit" value={detailBooking.chief_complaint || "Not specified"} />
-            {detailBooking.payment_status === "paid" && (
-              <DetailRow
-                label="Payment"
-                value={`Confirmed ✓ · PAID${detailBooking.payment_amount ? ` · ₹${detailBooking.payment_amount}` : ""}`}
-                valueColor={toneColor("success")}
-              />
-            )}
-
-            {detailBooking.payment_status === "paid" && (
-              <DownloadButton
-                label="Download bill"
-                fileLabel={`Receipt for ${detailBooking.hospital}`}
-                onDownload={async () => {
-                  const receipt = await getBookingReceipt(detailBooking.id);
-                  await downloadDataUri(receipt.file_name, receipt.file_data);
-                }}
-                style={{ marginTop: 14 }}
-              />
-            )}
 
             {(() => {
               const rx = findPrescription(detailBooking);
@@ -342,4 +328,5 @@ const styles = StyleSheet.create({
   pastCard: { paddingVertical: 14 },
   pastRow: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 4 },
   pastTimeAgo: { fontSize: 11, fontWeight: "700", color: NEUTRAL.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
+  loadMoreBtn: { marginTop: 6, marginBottom: 4 },
 });

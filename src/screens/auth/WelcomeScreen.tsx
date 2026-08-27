@@ -23,7 +23,7 @@ export function WelcomeScreen() {
   };
 
   return (
-    <Screen>
+    <Screen topColor="#249c57">
       <MetalHero style={styles.hero} decorative curved>
         <View style={styles.heroInner}>
           <LogoPill size={64} />

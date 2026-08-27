@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, Image, Modal, Switch } from "react-n
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Camera, IdCard, HeartPulse, Users, Building2, Palette, Headphones, Droplet, AlertTriangle, Lock } from "lucide-react-native";
+import { Camera, IdCard, HeartPulse, Users, Building2, Palette, Headphones, Droplet, AlertTriangle, Lock, QrCode } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
@@ -125,7 +125,7 @@ export function ProfileScreen() {
   const allergyCount = summary?.active_allergies.length ?? 0;
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
       {profile && (
         <MetalHero style={styles.hero} curved>
           <View style={styles.heroContent}>
@@ -224,6 +224,14 @@ export function ProfileScreen() {
         iconShadowColor={GADGET_TINTS.blue.shadow}
       />
       <ListRow
+        icon={QrCode}
+        title="Emergency QR"
+        subtitle="Share your medical history with an outside hospital"
+        onPress={() => navigation.navigate("EmergencyQR")}
+        iconColors={GADGET_TINTS.coral.icon}
+        iconShadowColor={GADGET_TINTS.coral.shadow}
+      />
+      <ListRow
         icon={Building2}
         title="Linked hospitals"
         subtitle={summary?.linked_hospitals.length ? summary.linked_hospitals.map((h) => h.hospital_name).join(", ") : "No hospitals linked yet"}
@@ -236,7 +244,7 @@ export function ProfileScreen() {
       <ListRow
         icon={Lock}
         title="Biometric unlock"
-        subtitle={biometricEnabled ? "On — using your phone's fingerprint or face unlock" : "Off — sign in with your password each time"}
+        subtitle={biometricEnabled ? "On — fingerprint or face unlock" : "Off — sign in with your password"}
         iconColors={GADGET_TINTS.green.icon}
         iconShadowColor={GADGET_TINTS.green.shadow}
         trailing={

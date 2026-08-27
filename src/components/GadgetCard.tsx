@@ -98,7 +98,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   disabled: { opacity: 0.65 },
-  card: { borderRadius: 16, padding: 14, borderWidth: 1, overflow: "hidden" },
+  // flex: 1 so the visible gradient card fills whatever height the outer
+  // Pressable ends up with when a 2-up grid row stretches it to match a
+  // taller sibling (e.g. Vaccinations next to Health timeline's longer
+  // subtitle) — without it, the shadow (attached to the taller, stretched
+  // Pressable) sat below an invisible gap under the shorter visible card,
+  // reading as a misaligned floating shadow.
+  card: { flex: 1, borderRadius: 16, padding: 14, borderWidth: 1, overflow: "hidden" },
   content: { position: "relative" },
   title: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 10 },
   sub: { fontSize: 10.5, color: NEUTRAL.textSecondary, marginTop: 4, lineHeight: 14 },

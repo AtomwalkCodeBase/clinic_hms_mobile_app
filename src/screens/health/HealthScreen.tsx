@@ -7,7 +7,7 @@ import { Screen, ErrorBanner } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { MetalHero } from "@/components/MetalHero";
 import { GadgetCard, GADGET_TINTS } from "@/components/GadgetCard";
-import { Syringe, Clock, Stethoscope, FlaskConical } from "lucide-react-native";
+import { Syringe, Clock, Stethoscope, FlaskConical, Pill as PillIcon } from "lucide-react-native";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getFamily, getProfile, getHealthSummary, getVaccinations } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
@@ -93,8 +93,13 @@ export function HealthScreen() {
     navigation.navigate("LabReports", { patientAwpid: target, patientName: selected.full_name });
   };
 
+  const openPrescriptions = () => {
+    if (!selected) return;
+    navigation.navigate("Prescriptions", { patientAwpid: target, patientName: selected.full_name });
+  };
+
   return (
-    <Screen onRefresh={loadSummary} refreshing={loading}>
+    <Screen onRefresh={loadSummary} refreshing={loading} topColor="#249c57">
       {selected && (
         <MetalHero style={styles.hero} curved>
           <Text style={styles.name}>{selected.full_name}</Text>
@@ -160,6 +165,17 @@ export function HealthScreen() {
           title="Lab reports"
           subtitle="Tests, results, and reports"
           onPress={openLabReports}
+          style={styles.gadgetSize}
+          iconSize={34}
+          radius={22}
+          cardPadding={16}
+        />
+        <GadgetCard
+          tint={GADGET_TINTS.purple}
+          icon={PillIcon}
+          title="Prescriptions"
+          subtitle="From past visits"
+          onPress={openPrescriptions}
           style={styles.gadgetSize}
           iconSize={34}
           radius={22}

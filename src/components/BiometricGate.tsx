@@ -6,6 +6,7 @@ import { PrimaryButton } from "./Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getBiometricLockEnabled } from "@/utils/storage";
+import { isBiometricCheckSuppressed } from "@/utils/biometricSuppress";
 
 /**
  * Delegates entirely to the OS's own biometric prompt (Android
@@ -71,7 +72,11 @@ export function BiometricGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
-      if (next === "active") attempt();
+      // A photo/file picker (camera, gallery, document picker) briefly
+      // backgrounds the app too — without this check, choosing a profile
+      // photo looked identical to switching away and back, re-locking the
+      // app the instant the picker closed.
+      if (next === "active" && !isBiometricCheckSuppressed()) attempt();
     });
     return () => sub.remove();
   }, [attempt]);

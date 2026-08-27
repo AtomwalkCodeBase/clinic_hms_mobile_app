@@ -34,39 +34,14 @@ export type AppStackParamList = {
     hospitalName: string;
     date: string;
     time?: string;
-    paymentPreference?: "pay_at_desk" | "pay_online";
     chiefComplaint?: string;
     patientAwpid?: string;
     patientName: string;
     consultationFee?: string | null;
   };
   BookingSuccess: { hospital: string; doctor: string; date: string; time?: string; tokenNumber: number };
-  PaymentPending: {
-    bookingId: number;
-    gatewayOrder: import("@/api/types").GatewayOrder;
-    hospitalName: string;
-    doctorName: string;
-    date: string;
-    time?: string;
-    tokenNumber: number;
-    // Carries everything needed to make a genuinely fresh POST /portal/book/
-    // call for "Try payment again" / "Book & pay at front desk instead" —
-    // the abandoned booking is already cancelled server-side by the time
-    // either button is shown, so resuming it isn't an option, only
-    // resubmitting is (mirrors the web app's retryOnlinePayment/
-    // retryPayAtFrontDesk in DoctorProfilePage.jsx).
-    rebook: {
-      tenantId: number;
-      doctorId: number;
-      scheduledDate: string;
-      scheduledTime?: string;
-      chiefComplaint?: string;
-      patientAwpid?: string;
-      patientName: string;
-    };
-  };
   PrescriptionDetail: { record: import("@/api/types").MedicalRecord };
-  Prescriptions: undefined;
+  Prescriptions: { patientAwpid?: string; patientName?: string } | undefined;
   LabReports: { patientAwpid?: string; patientName?: string } | undefined;
   Documents: undefined;
   Notifications: undefined;
@@ -76,11 +51,12 @@ export type AppStackParamList = {
   HealthTimeline: { patientAwpid?: string; patientName: string };
   HealthVisits: { patientAwpid?: string; patientName: string };
   Growth: { patientAwpid?: string; patientName: string };
-  AddFamilyMember: undefined;
+  AddFamilyMember: { member?: import("@/api/types").FamilyMember } | undefined;
   PersonalDetails: undefined;
   HealthSummary: undefined;
   FamilyMembers: undefined;
   LinkedHospitals: undefined;
   ThemePicker: undefined;
   Support: undefined;
+  EmergencyQR: undefined;
 };

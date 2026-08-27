@@ -7,7 +7,7 @@ import { SecondaryButton } from "./Buttons";
 import { DownloadButton } from "./DownloadButton";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { getDocumentDetail } from "@/api/portal";
+import { getDocumentDetail, getLabReportFile } from "@/api/portal";
 import { downloadDataUri, downloadHtmlAsPdf } from "@/utils/fileHelpers";
 import { LabOrder } from "@/api/types";
 import { FlaskConical } from "lucide-react-native";
@@ -107,7 +107,13 @@ export function LabOrdersList({
   const open = orders.find((o) => o.id === expandedId) || null;
 
   const downloadOrder = async (order: LabOrder) => {
-    if (order.report?.status === "delivered") {
+    // Prefer the real file the lab uploaded (PortalLabReportFileView) when
+    // there is one — only fall back to the report rebuilt from structured
+    // result items when no file was attached.
+    if (order.report?.status === "delivered" && order.report.has_file) {
+      const file = await getLabReportFile(order.tenant_db, order.id);
+      await downloadDataUri(file.file_name || `${order.test_name.replace(/[^\w -]/g, "")}.pdf`, file.file_data);
+    } else if (order.report?.status === "delivered") {
       await downloadHtmlAsPdf(`${order.test_name.replace(/[^\w -]/g, "")}.pdf`, buildReportHtml(order));
     } else if (order.attached_document) {
       const full = await getDocumentDetail(order.attached_document.id);

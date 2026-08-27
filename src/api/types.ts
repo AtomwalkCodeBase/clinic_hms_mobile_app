@@ -48,6 +48,17 @@ export interface SlotEntry {
   available: boolean;
 }
 
+// Matches core/pagination.py's _build_meta — every paginated portal list
+// endpoint returns this shape alongside "results".
+export interface Pagination {
+  page: number;
+  page_size: number;
+  total_count: number;
+  total_pages: number;
+  has_next: boolean;
+  has_previous: boolean;
+}
+
 export interface Booking {
   id: number;
   tenant_id: number;
@@ -63,11 +74,6 @@ export interface Booking {
   now_serving_token: number | null;
   patient_name: string | null;
   patient_awpid: string | null;
-  // payment/billing-v1 — mirrors PortalMyBookingsView (apps/patients/
-  // portal_views.py). null for a pay_at_desk booking (no online payment
-  // was ever attempted); payment_amount is only populated once "paid".
-  payment_status: "unpaid" | "pending_online" | "paid" | null;
-  payment_amount: string | null;
 }
 
 export interface ConsentRequired {
@@ -77,24 +83,23 @@ export interface ConsentRequired {
   message: string;
 }
 
-// Shape of TenantPaymentGatewayConfig's create_order() result (apps/billing/
-// gateway/{razorpay,cashfree}_adapter.py) as handed back on PortalBookView's
-// response — provider-specific fields are optional since only one set is
-// ever populated depending on `provider`.
-export interface GatewayOrder {
-  provider: "razorpay" | "cashfree";
-  order_id: string;
-  amount: string;
-  currency: string;
-  invoice_id?: number;
-  // razorpay
-  amount_paise?: number;
-  key_id?: string;
-  // cashfree
-  cf_order_id?: string;
-  payment_session_id?: string;
-  app_id?: string;
-  environment?: "sandbox" | "production";
+// PortalEmergencyTokenView's 428 body — distinct from ConsentRequired above
+// (no hospital_name; carries ttl_minutes instead) since this is a patient-
+// initiated share to an unknown scanner, not a per-hospital HIE consent.
+export interface EmergencyConsentPrompt {
+  consent_required: true;
+  share_categories: string[];
+  ttl_minutes: number;
+  message: string;
+}
+
+export interface EmergencyTokenResult {
+  token: string;
+  view_url: string;
+  /** data:image/png;base64,... — server-rendered, ready for <Image source={{uri}}>. */
+  qr_image: string;
+  expires_at: string;
+  ttl_minutes: number;
 }
 
 export interface BookingResult {
@@ -107,16 +112,11 @@ export interface BookingResult {
   status: string;
   payment_preference: string;
   patient_name: string;
-  // Present only when payment_preference is "pay_online" and the hospital
-  // actually has a working gateway connected — see PortalBookView's
-  // docstring on gateway_order/gateway_error being mutually informative,
-  // not both-or-neither.
-  gateway_order?: GatewayOrder | null;
-  gateway_error?: string | null;
 }
 
 export interface MedicalRecord {
   hospital: string;
+  tenant_db: string;
   date: string;
   time: string | null;
   doctor: string;
@@ -131,6 +131,10 @@ export interface MedicalRecord {
     duration_days: number;
     instructions: string;
   }[];
+  // Set only once a prescription actually exists for this record (PortalMyRecordsView) —
+  // PortalPrescriptionReceiptPDFView takes exactly (tenant_db, prescription_id).
+  prescription_id: string | null;
+  rx_number: string | null;
   investigations: string;
   advice: string;
   follow_up_in_days: number | null;
@@ -183,6 +187,25 @@ export interface LabOrder {
   } | null;
   attached_document: { id: number; title: string; created_at: string } | null;
   source_ref: string;
+}
+
+// PortalPrescriptionListView's shape — "every prescription any doctor has
+// written for this patient", resolved via the full Appointment ->
+// OPDEncounter -> Prescription chain (not narrowed to one encounter per
+// appointment the way PortalMyRecordsView's display records are), with the
+// same in-house/outside choice tracking LabOrder already has.
+export interface PrescriptionOrder {
+  id: string;
+  tenant_db: string;
+  hospital: string;
+  rx_number: string | null;
+  doctor_name: string | null;
+  status: "active" | "dispensed" | "expired";
+  patient_choice: "pending" | "in_house" | "outside";
+  payment_preference: string;
+  payment_status: string;
+  created_at: string;
+  items: { drug_name: string; dosage: string; frequency: string; quantity: number }[];
 }
 
 export interface Profile {

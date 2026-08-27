@@ -59,6 +59,7 @@ export function AppTabs() {
 
 const styles = StyleSheet.create({
   bar: {
+    borderTopWidth: 1,
     borderTopColor: NEUTRAL.border,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -68,7 +69,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 8,
+    // Android's `elevation` ignores shadowColor/shadowOffset entirely and
+    // always draws its own grey drop shadow — at 8 that showed as a hazy
+    // grey band bleeding into the page above the bar, with no crisp edge
+    // to justify it (borderTopWidth was missing, so the border above
+    // wasn't actually doing anything). Now the border itself draws the
+    // real edge, and elevation is just enough to keep the bar reading as
+    // "above" the content behind it.
+    elevation: 3,
   },
   iconWrap: { width: 34, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
 });

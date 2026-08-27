@@ -7,7 +7,6 @@ import { DoctorDetailScreen } from "@/screens/appointments/DoctorDetailScreen";
 import { BookingForScreen } from "@/screens/appointments/BookingForScreen";
 import { ConfirmBookingScreen } from "@/screens/appointments/ConfirmBookingScreen";
 import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScreen";
-import { PaymentPendingScreen } from "@/screens/appointments/PaymentPendingScreen";
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
 import { PrescriptionsListScreen } from "@/screens/records/PrescriptionsListScreen";
 import { LabReportsScreen } from "@/screens/records/LabReportsScreen";
@@ -26,6 +25,7 @@ import { FamilyMembersScreen } from "@/screens/profile/FamilyMembersScreen";
 import { LinkedHospitalsScreen } from "@/screens/profile/LinkedHospitalsScreen";
 import { ThemeScreen } from "@/screens/profile/ThemeScreen";
 import { SupportScreen } from "@/screens/profile/SupportScreen";
+import { EmergencyQRScreen } from "@/screens/profile/EmergencyQRScreen";
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -43,7 +43,6 @@ export function AppStack() {
       <Stack.Screen name="BookingFor" component={BookingForScreen} />
       <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
       <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
-      <Stack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       <Stack.Screen name="Prescriptions" component={PrescriptionsListScreen} />
       <Stack.Screen name="LabReports" component={LabReportsScreen} />
@@ -62,6 +61,7 @@ export function AppStack() {
       <Stack.Screen name="LinkedHospitals" component={LinkedHospitalsScreen} />
       <Stack.Screen name="ThemePicker" component={ThemeScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
+      <Stack.Screen name="EmergencyQR" component={EmergencyQRScreen} />
     </Stack.Navigator>
   );
 }

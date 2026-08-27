@@ -10,7 +10,8 @@ import { SelectField } from "@/components/SelectField";
 import { SecondaryButton, PrimaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { GENDER_OPTIONS, RELATIONSHIP_OPTIONS } from "@/constants/options";
-import { getProfile, updateProfile } from "@/api/portal";
+import { getProfile, updateProfile, requestMobileChangeOtp } from "@/api/portal";
+import { verifyContactChangeOtp } from "@/api/auth";
 import { apiErrorMessage } from "@/api/client";
 import { Profile } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
@@ -101,9 +102,53 @@ function EditProfileForm({ profile, onSaved, onCancel }: { profile: Profile; onS
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Changing the number to a NEW value has to be verified with a code sent
+  // to the email on file before the backend PATCH will accept it (see
+  // PortalMobileChangeRequestOTPView / PortalProfileView.patch). Re-saving
+  // the same number is a no-op that needs no verification.
+  const mobileChanged = mobile.trim().length > 0 && mobile.trim() !== profile.mobile;
+  const [otpStage, setOtpStage] = useState<"idle" | "sent">("idle");
+  const [otpCode, setOtpCode] = useState("");
+  const [actionToken, setActionToken] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+
+  const sendMobileCode = async () => {
+    setError("");
+    if (!profile.email) {
+      setError("Add an email address to your profile first — we send the verification code there.");
+      return;
+    }
+    setOtpBusy(true);
+    try {
+      await requestMobileChangeOtp();
+      setOtpStage("sent");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Couldn't send a verification code."));
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
+  const verifyMobileCode = async () => {
+    setError("");
+    setOtpBusy(true);
+    try {
+      const token = await verifyContactChangeOtp(profile.email, otpCode.trim());
+      setActionToken(token);
+    } catch (err) {
+      setError(apiErrorMessage(err, "That code didn't work."));
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
   const onSave = async () => {
     if (!fullName.trim()) {
       setError("Name cannot be blank.");
+      return;
+    }
+    if (mobileChanged && !actionToken) {
+      setError("Verify your new mobile number first.");
       return;
     }
     setError("");
@@ -117,6 +162,7 @@ function EditProfileForm({ profile, onSaved, onCancel }: { profile: Profile; onS
         emergency_contact_name: emName.trim(),
         emergency_contact_phone: emPhone.trim(),
         emergency_contact_relation: emRelation.trim(),
+        ...(mobileChanged ? { action_token: actionToken } : {}),
       });
       onSaved(updated);
     } catch (err) {
@@ -130,7 +176,43 @@ function EditProfileForm({ profile, onSaved, onCancel }: { profile: Profile; onS
     <Card>
       {!!error && <ErrorBanner message={error} />}
       <TextField label="Full name" value={fullName} onChangeText={setFullName} />
-      <TextField label="Mobile number" value={mobile} onChangeText={setMobile} keyboardType="number-pad" maxLength={10} />
+      <TextField
+        label="Mobile number"
+        value={mobile}
+        onChangeText={(t) => {
+          setMobile(t);
+          // Any edit invalidates a code that was sent/verified for a
+          // previous value.
+          setOtpStage("idle");
+          setOtpCode("");
+          setActionToken("");
+        }}
+        keyboardType="number-pad"
+        maxLength={10}
+      />
+
+      {mobileChanged && !actionToken && (
+        <View style={styles.otpBox}>
+          <Text style={styles.otpHint}>
+            {profile.email
+              ? `Changing your number needs a quick check. We'll send a 6-digit code to ${profile.email}.`
+              : "Add an email to your profile first — the verification code for a number change is sent there."}
+          </Text>
+          {otpStage === "idle" ? (
+            <SecondaryButton label="Send code" compact loading={otpBusy} onPress={sendMobileCode} disabled={!profile.email} />
+          ) : (
+            <>
+              <TextField label="Verification code" value={otpCode} onChangeText={setOtpCode} keyboardType="number-pad" maxLength={6} />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <SecondaryButton label="Resend" compact onPress={sendMobileCode} disabled={otpBusy} />
+                <SecondaryButton label="Verify" compact loading={otpBusy} onPress={verifyMobileCode} />
+              </View>
+            </>
+          )}
+        </View>
+      )}
+      {mobileChanged && !!actionToken && <Text style={styles.otpOk}>New number verified — save to apply.</Text>}
+
       <SelectField label="Gender" value={gender} options={GENDER_OPTIONS} onChange={setGender} />
       <DateField label="Date of birth" value={dob} onChange={setDob} maximumDate={new Date()} />
       <TextField label="Emergency contact name" value={emName} onChangeText={setEmName} />
@@ -171,4 +253,13 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 13, color: NEUTRAL.textPrimary, fontWeight: "500" },
   emName: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
   emMeta: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 3 },
+  otpBox: {
+    backgroundColor: NEUTRAL.surfaceAlt,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    gap: 8,
+  },
+  otpHint: { fontSize: 11.5, color: NEUTRAL.textSecondary, lineHeight: 16 },
+  otpOk: { fontSize: 11.5, color: NEUTRAL.success, fontWeight: "600", marginBottom: 10 },
 });

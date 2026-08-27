@@ -5,7 +5,6 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, BackHeader, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { TextField } from "@/components/TextField";
-import { SelectField } from "@/components/SelectField";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -15,11 +14,6 @@ import { ConsentRequired } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CheckCircle2 } from "lucide-react-native";
-
-const PAYMENT_OPTIONS = [
-  { value: "pay_at_desk", label: "Pay at the front desk" },
-  { value: "pay_online", label: "Pay online", meta: "Coming soon", disabled: true },
-];
 
 // This screen exists specifically so booking a slot is never one tap —
 // the patient reviews doctor/hospital/date here and must explicitly confirm
@@ -32,7 +26,6 @@ export function ConfirmBookingScreen() {
   const { theme } = useAppTheme();
 
   const [complaint, setComplaint] = useState(params.chiefComplaint || "");
-  const [paymentPreference, setPaymentPreference] = useState<string>(params.paymentPreference || "pay_at_desk");
   const [consent, setConsent] = useState<ConsentRequired | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,36 +42,18 @@ export function ConfirmBookingScreen() {
         scheduled_date: params.date,
         scheduled_time: params.time,
         chief_complaint: complaint.trim() || undefined,
-        payment_preference: paymentPreference,
+        payment_preference: "pay_at_desk",
         patient_awpid: params.patientAwpid,
         data_sharing_consent: withConsent || undefined,
       });
       if ("consent_required" in result) {
+        // Already agreed once and the server is still asking — don't silently
+        // re-render the same consent screen (reads as "the button did nothing").
+        if (withConsent) {
+          setError("Couldn't record your consent. Please try again.");
+          return;
+        }
         setConsent(result);
-      } else if (result.payment_preference === "pay_online" && result.gateway_order) {
-        // Slot is only held, not booked, until PaymentPendingScreen sees
-        // payment_status genuinely turn "paid" via the backend — this is
-        // the ONLY path that ever navigates there for a pay_online booking,
-        // same "never trust the checkout's own success signal" contract as
-        // the web app.
-        navigation.replace("PaymentPending", {
-          bookingId: result.booking_id,
-          gatewayOrder: result.gateway_order,
-          hospitalName: result.hospital,
-          doctorName: result.doctor,
-          date: result.date,
-          time: result.time || undefined,
-          tokenNumber: result.token_number,
-          rebook: {
-            tenantId: params.tenantId,
-            doctorId: params.doctorId,
-            scheduledDate: params.date,
-            scheduledTime: params.time,
-            chiefComplaint: complaint.trim() || undefined,
-            patientAwpid: params.patientAwpid,
-            patientName: params.patientName,
-          },
-        });
       } else {
         navigation.replace("BookingSuccess", {
           hospital: result.hospital,
@@ -99,6 +74,7 @@ export function ConfirmBookingScreen() {
     return (
       <Screen>
         <BackHeader title="Share your medical history?" onBack={() => setConsent(null)} />
+        {!!error && <ErrorBanner message={error} />}
         <Text style={styles.consentMsg}>{consent.message}</Text>
         <Card>
           {consent.share_categories.map((c) => (
@@ -147,12 +123,7 @@ export function ConfirmBookingScreen() {
         onChangeText={setComplaint}
       />
 
-      <SelectField
-        label="Payment"
-        value={paymentPreference}
-        options={PAYMENT_OPTIONS}
-        onChange={setPaymentPreference}
-      />
+      <Text style={styles.payNote}>Payment is collected at the hospital's front desk when you arrive.</Text>
 
       <PrimaryButton label="Confirm booking" onPress={() => setConfirmVisible(true)} loading={loading} style={{ marginBottom: 8 }} />
       <SecondaryButton label="Cancel" onPress={() => navigation.goBack()} />
@@ -189,6 +160,7 @@ const styles = StyleSheet.create({
   },
   feeLabel: { fontSize: 11, fontWeight: "600", color: NEUTRAL.textSecondary },
   feeValue: { fontSize: 17, fontWeight: "800" },
+  payNote: { fontSize: 11.5, color: NEUTRAL.textMuted, marginTop: 12, marginBottom: 16, lineHeight: 16 },
   consentMsg: { fontSize: 13, color: NEUTRAL.textPrimary, marginBottom: 14, lineHeight: 19 },
   consentItem: { fontSize: 12.5, color: NEUTRAL.textSecondary, marginBottom: 4 },
 });

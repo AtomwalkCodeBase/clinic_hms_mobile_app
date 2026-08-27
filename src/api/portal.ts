@@ -5,6 +5,8 @@ import type {
   ConsentRequired,
   DoctorCard,
   DoctorDetail,
+  EmergencyConsentPrompt,
+  EmergencyTokenResult,
   Envelope,
   FamilyMember,
   GrowthPoint,
@@ -13,7 +15,9 @@ import type {
   LabOrder,
   MedicalRecord,
   NotificationItem,
+  Pagination,
   PatientDocument,
+  PrescriptionOrder,
   Profile,
   RescheduleResult,
   SlotEntry,
@@ -91,13 +95,27 @@ export interface BookPayload {
  * data_sharing_consent: true after showing that to the patient.
  */
 export async function book(payload: BookPayload): Promise<BookingResult | ConsentRequired> {
-  const res = await api.post("/portal/book/", payload, { validateStatus: (s) => s === 201 || s === 428 });
+  // 428 (first-booking consent gate) is an expected outcome, not a failure —
+  // let it resolve so the caller can show the consent prompt. Any 2xx is a
+  // real booking; don't pin to 201 only (a backend that answers 200 would
+  // otherwise throw here and the screen would look frozen).
+  const res = await api.post("/portal/book/", payload, {
+    validateStatus: (s) => (s >= 200 && s < 300) || s === 428,
+  });
   return res.data;
 }
 
-export async function getMyBookings() {
-  const res = await api.get<{ results: Booking[]; pagination: any }>("/portal/my-bookings/");
-  return res.data.results;
+// page_size 20 matches the backend's own default (core/pagination.py) —
+// passed explicitly so this doesn't silently drift if that default ever
+// changes. Ordered newest-first server-side, so upcoming appointments
+// (future dates sort above past ones) land on page 1 in practice; "Load
+// more" is what actually reaches deep history once someone has more than
+// a page of past visits.
+export async function getMyBookings(page = 1, pageSize = 20) {
+  const res = await api.get<{ results: Booking[]; pagination: Pagination }>("/portal/my-bookings/", {
+    params: { page, page_size: pageSize },
+  });
+  return res.data;
 }
 
 /** POST /portal/my-bookings/<id>/cancel/ — patient self-service cancellation. */
@@ -113,15 +131,40 @@ export async function rescheduleBooking(id: number, payload: { scheduled_date: s
 }
 
 /**
- * GET /portal/my-bookings/<id>/receipt/ — only ever resolves once the
- * booking-fee payment has genuinely cleared (PortalBookingReceiptPDFView
- * 404s otherwise); same base64-data-URI shape as every other file endpoint
- * in this app (see getDocumentDetail above), meant to be handed straight to
- * downloadDataUri (src/utils/fileHelpers.ts).
+ * GET /portal/prescriptions/ — "every prescription any doctor has written",
+ * with in-house/outside choice + rx_number/payment state. Distinct from
+ * getMyRecords()'s prescription arrays below: this is resolved via the full
+ * Appointment -> OPDEncounter -> Prescription chain (PortalPrescriptionListView),
+ * not narrowed to "the first encounter/prescription per appointment" the
+ * way the display records PortalMyRecordsView builds are — mirrors
+ * getLabOrders/chooseLabOrder's shape (same "buy in-house or elsewhere"
+ * pattern PortalLabOrderListView already has on the lab side).
  */
-export async function getBookingReceipt(id: number) {
+export async function getPrescriptions(patientAwpid?: string) {
+  const res = await api.get<{ results: PrescriptionOrder[]; pagination: any }>("/portal/prescriptions/", {
+    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
+  });
+  return res.data.results;
+}
+
+export async function choosePrescription(payload: {
+  tenant_db: string;
+  prescription_id: string;
+  patient_choice: "in_house" | "outside";
+  payment_preference?: "pay_online" | "pay_at_pharmacy";
+}) {
+  const res = await api.post<Envelope<null>>("/portal/prescriptions/choice/", payload);
+  return res.data;
+}
+
+/**
+ * GET /portal/prescriptions/<tenant_db>/<prescription_id>/receipt/ — the
+ * prescription PDF as a base64-data-URI in the standard envelope; only ever
+ * called for a record whose prescription_id is set (see MedicalRecord).
+ */
+export async function getPrescriptionReceipt(tenantDb: string, prescriptionId: string) {
   const res = await api.get<Envelope<{ file_data: string; file_name: string; mime_type: string }>>(
-    `/portal/my-bookings/${id}/receipt/`
+    `/portal/prescriptions/${tenantDb}/${prescriptionId}/receipt/`
   );
   return res.data.data;
 }
@@ -138,9 +181,45 @@ export async function getProfile() {
   return res.data.data;
 }
 
-export async function updateProfile(payload: Partial<Profile>) {
+/**
+ * POST /portal/emergency/token/ — mints a short-lived (20 min) QR the
+ * patient shows a doctor outside their network. Every call is a fresh
+ * disclosure decision (see core/emergency_access.py) — the first call always
+ * omits consent_confirmed and gets back the 428 share-categories prompt,
+ * same validateStatus trick as book() above so that 428 lands as a normal
+ * return value instead of a thrown error. Only the 200 body is enveloped
+ * ({success, data}); the 428 body is raw, matching PortalEmergencyTokenView.
+ */
+export async function generateEmergencyToken(payload: {
+  patient_awpid?: string;
+  consent_confirmed: boolean;
+}): Promise<EmergencyTokenResult | EmergencyConsentPrompt> {
+  const res = await api.post("/portal/emergency/token/", payload, { validateStatus: (s) => s === 200 || s === 428 });
+  return res.status === 428 ? res.data : res.data.data;
+}
+
+/**
+ * PATCH /portal/profile/ — update name / gender / DOB / photo / emergency
+ * contact. `mobile` is special: changing it to a NEW number requires
+ * `action_token` (from verifyContactChangeOtp in api/auth.ts) proving a code
+ * sent to the email on file was entered. Sending the same number back, or
+ * omitting it, needs no token. Email and AWPID are identity keys — read-only.
+ */
+export async function updateProfile(payload: Partial<Profile> & { photo?: string; action_token?: string }) {
   const res = await api.patch<Envelope<Profile>>("/portal/profile/", payload);
   return res.data.data;
+}
+
+/**
+ * POST /portal/profile/mobile-change/request-otp/ — no body. Sends a
+ * verification code to the EMAIL currently on file (proving account control
+ * before a number change). Requires an email to be set on the profile.
+ * Follow with verifyContactChangeOtp(email, code) then updateProfile({ mobile,
+ * action_token }).
+ */
+export async function requestMobileChangeOtp() {
+  const res = await api.post<Envelope<{ masked_identifier: string }>>("/portal/profile/mobile-change/request-otp/");
+  return res.data;
 }
 
 export async function changePassword(old_password: string, new_password: string) {
@@ -155,12 +234,36 @@ export async function getFamily() {
 
 export async function addFamilyMember(payload: {
   full_name: string;
-  date_of_birth?: string;
+  date_of_birth: string;
   gender?: string;
   relationship?: string;
 }) {
   const res = await api.post<Envelope<FamilyMember>>("/portal/family/", payload);
   return res.data.data;
+}
+
+/**
+ * PATCH /portal/family/<awpid>/ — edit a linked family member. The backend
+ * (PatientService.update_family_member) requires a non-empty full_name and a
+ * date_of_birth whenever either is present — DOB is the cross-hospital
+ * identity key, so it can't be cleared.
+ */
+export async function updateFamilyMember(
+  awpid: string,
+  payload: { full_name?: string; date_of_birth?: string; gender?: string; relationship?: string }
+) {
+  const res = await api.patch<Envelope<FamilyMember>>(`/portal/family/${awpid}/`, payload);
+  return res.data.data;
+}
+
+/**
+ * DELETE /portal/family/<awpid>/ — unlink a family member from this account.
+ * Their identity and any past bookings/records are untouched; they just drop
+ * off the "book for / view records of" list until re-added.
+ */
+export async function removeFamilyMember(awpid: string) {
+  const res = await api.delete<Envelope<null>>(`/portal/family/${awpid}/`);
+  return res.data;
 }
 
 export async function getHealthSummary(patientAwpid?: string) {
@@ -266,6 +369,21 @@ export async function chooseLabOrder(payload: {
 }) {
   const res = await api.post<Envelope<null>>("/portal/lab-orders/choice/", payload);
   return res.data;
+}
+
+/**
+ * GET /portal/lab-orders/<tenant_db>/<request_id>/report/ — the actual
+ * uploaded in-house lab report file (a short-lived signed URL under
+ * file_data, not a data URI — downloadDataUri handles both). Only call this
+ * when the order's report.has_file is true and it's been delivered; the
+ * backend 404s / 400s otherwise. `result_summary` rides along so a caller
+ * doesn't need the list row to show it.
+ */
+export async function getLabReportFile(tenantDb: string, requestId: number) {
+  const res = await api.get<Envelope<{ file_data: string; file_name: string; mime_type: string; result_summary: string }>>(
+    `/portal/lab-orders/${tenantDb}/${requestId}/report/`
+  );
+  return res.data.data;
 }
 
 export async function getNotifications(patientAwpid?: string) {

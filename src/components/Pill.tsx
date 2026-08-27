@@ -35,6 +35,10 @@ export function statusTone(status: string): Tone {
 }
 
 const styles = StyleSheet.create({
-  pill: { paddingHorizontal: 9, paddingVertical: 2, borderRadius: 20, alignSelf: "flex-start" },
+  // No alignSelf here on purpose — it lets each parent's own alignItems
+  // decide how the pill sits (centered in a hero column, vertically
+  // centered next to a chevron in a row, etc.) instead of always forcing
+  // flex-start regardless of context.
+  pill: { paddingHorizontal: 9, paddingVertical: 2, borderRadius: 20 },
   text: { fontSize: 10, fontWeight: "600" },
 });

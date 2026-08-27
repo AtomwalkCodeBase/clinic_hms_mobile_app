@@ -125,3 +125,19 @@ export async function otpLogin(actionToken: string) {
   const res = await api.post<Envelope<LoginResponse>>("/auth/login/patient/otp/", { action_token: actionToken });
   return res.data.data;
 }
+
+/**
+ * POST /api/v1/auth/otp/verify/ — {purpose: "contact_change_patient",
+ * identifier: <account email, lowercased>, code} -> {action_token}.
+ * Second step of a mobile-number change: the code was sent by
+ * requestMobileChangeOtp() (api/portal.ts) to the email on file; the
+ * resulting action_token is passed to updateProfile({ mobile, action_token }).
+ */
+export async function verifyContactChangeOtp(email: string, code: string) {
+  const res = await api.post<Envelope<{ action_token: string }>>("/auth/otp/verify/", {
+    purpose: "contact_change_patient",
+    identifier: email.trim().toLowerCase(),
+    code,
+  });
+  return res.data.data.action_token;
+}

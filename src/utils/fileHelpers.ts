@@ -5,6 +5,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Print from "expo-print";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { withBiometricSuppressed } from "./biometricSuppress";
 
 export interface PickedFile {
   uri: string;
@@ -14,42 +15,48 @@ export interface PickedFile {
 
 /** Opens the system file picker restricted to PDFs. Returns null if the user cancels. */
 export async function pickPdf(): Promise<PickedFile | null> {
-  const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
-  if (result.canceled || !result.assets?.[0]) return null;
-  const asset = result.assets[0];
-  return { uri: asset.uri, name: asset.name || "report.pdf", mimeType: asset.mimeType || "application/pdf" };
+  return withBiometricSuppressed(async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const asset = result.assets[0];
+    return { uri: asset.uri, name: asset.name || "report.pdf", mimeType: asset.mimeType || "application/pdf" };
+  });
 }
 
 /** Opens the photo library restricted to images. Returns null if the user cancels or denies permission. */
 export async function pickImage(): Promise<PickedFile | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) return null;
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    quality: 0.85,
+  return withBiometricSuppressed(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return null;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const asset = result.assets[0];
+    const mimeType = asset.mimeType || (asset.uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
+    const name = asset.fileName || `photo.${mimeType === "image/png" ? "png" : "jpg"}`;
+    return { uri: asset.uri, name, mimeType };
   });
-  if (result.canceled || !result.assets?.[0]) return null;
-  const asset = result.assets[0];
-  const mimeType = asset.mimeType || (asset.uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
-  const name = asset.fileName || `photo.${mimeType === "image/png" ? "png" : "jpg"}`;
-  return { uri: asset.uri, name, mimeType };
 }
 
 /** Opens the camera restricted to a square photo. Returns null if the user cancels or denies permission. */
 export async function pickImageFromCamera(): Promise<PickedFile | null> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) return null;
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    quality: 0.85,
-    allowsEditing: true,
-    aspect: [1, 1],
+  return withBiometricSuppressed(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) return null;
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const asset = result.assets[0];
+    const mimeType = asset.mimeType || "image/jpeg";
+    const name = asset.fileName || "photo.jpg";
+    return { uri: asset.uri, name, mimeType };
   });
-  if (result.canceled || !result.assets?.[0]) return null;
-  const asset = result.assets[0];
-  const mimeType = asset.mimeType || "image/jpeg";
-  const name = asset.fileName || "photo.jpg";
-  return { uri: asset.uri, name, mimeType };
 }
 
 /** Reads a local file into a base64 data URI, ready to POST to the backend. */
@@ -134,9 +141,24 @@ async function saveOrShare(fileName: string, mimeType: string, base64Content: st
   await Sharing.shareAsync(path, { mimeType, dialogTitle: fileName });
 }
 
-/** Downloads a base64 data URI to the device (see saveOrShare for platform behavior). */
-export async function downloadDataUri(fileName: string, dataUri: string): Promise<void> {
-  const { mime, base64 } = base64FromDataUri(dataUri);
+/**
+ * Downloads a file to the device (see saveOrShare for platform behavior).
+ * `source` is usually a base64 data URI, but some endpoints (lab reports,
+ * vaccination certs — anything backed by S3 storage, see core/storage.py's
+ * signed_url()) now return a real, short-lived HTTPS URL under the same
+ * field instead. Fetch that URL to a local file first so the rest of the
+ * save/share path can stay unchanged either way.
+ */
+export async function downloadDataUri(fileName: string, source: string): Promise<void> {
+  if (!source.startsWith("data:")) {
+    const dest = `${FileSystem.cacheDirectory}${fileName}`;
+    const result = await FileSystem.downloadAsync(source, dest);
+    const mime = result.mimeType || result.headers?.["Content-Type"]?.split(";")[0] || "application/octet-stream";
+    const base64 = await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
+    await saveOrShare(fileName, mime, base64);
+    return;
+  }
+  const { mime, base64 } = base64FromDataUri(source);
   await saveOrShare(fileName, mime, base64);
 }
 

@@ -4,8 +4,11 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, BackHeader, SectionTitle } from "@/components/Layout";
 import { Card } from "@/components/Card";
+import { DownloadButton } from "@/components/DownloadButton";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import { getPrescriptionReceipt } from "@/api/portal";
+import { downloadDataUri } from "@/utils/fileHelpers";
 import { AppStackParamList } from "@/navigation/types";
 
 export function PrescriptionDetailScreen() {
@@ -13,6 +16,12 @@ export function PrescriptionDetailScreen() {
   const route = useRoute<RouteProp<AppStackParamList, "PrescriptionDetail">>();
   const { record } = route.params;
   const { theme } = useAppTheme();
+
+  const downloadReceipt = async () => {
+    if (!record.prescription_id) return;
+    const receipt = await getPrescriptionReceipt(record.tenant_db, record.prescription_id);
+    await downloadDataUri(receipt.file_name, receipt.file_data);
+  };
 
   return (
     <Screen>
@@ -23,6 +32,14 @@ export function PrescriptionDetailScreen() {
         <Text style={[styles.doctorDate, { color: theme.text }]}>
           {record.doctor} · {record.date}
         </Text>
+        {!!record.prescription_id && (
+          <DownloadButton
+            label="Download prescription"
+            fileLabel={record.rx_number ? `Prescription ${record.rx_number}` : "This prescription"}
+            onDownload={downloadReceipt}
+            style={{ marginTop: 12, paddingVertical: 9 }}
+          />
+        )}
       </Card>
 
       {record.diagnoses.length > 0 && (

@@ -79,8 +79,25 @@ api.interceptors.response.use(
  */
 export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
   const e = err as AxiosError<any>;
-  if (e?.response?.data?.message) return e.response.data.message;
-  if (e?.response?.data?.error) return e.response.data.error;
+  const data = e?.response?.data;
+  if (data?.message) return data.message;
+  if (data?.error) return data.error;
+  // DRF's own default error shapes — {detail: "..."} (permissions, 404,
+  // throttling) and {non_field_errors: [...]} / first field error (serializer
+  // validation). Without these, a real 4xx reason collapses into the fallback.
+  if (data?.detail) return String(data.detail);
+  if (Array.isArray(data?.non_field_errors) && data.non_field_errors[0]) return String(data.non_field_errors[0]);
+  if (data && typeof data === "object") {
+    const first = Object.values(data).flat()[0];
+    if (typeof first === "string" && first) return first;
+  }
+  // No structured body (e.g. a 500 HTML page or a network failure) — say so,
+  // with the status, instead of a generic "try again" that hides everything.
+  if (e?.response?.status) return `${fallback} (server error ${e.response.status})`;
+  if (e?.isAxiosError && (e.code === "ECONNABORTED" || e.message?.includes("timeout"))) {
+    return "The server took too long to respond. Check your connection and try again.";
+  }
+  if (e?.isAxiosError && e.message === "Network Error") return "Can't reach the server. Check your connection and try again.";
   if (err instanceof Error && !e?.isAxiosError && err.message) return err.message;
   return fallback;
 }

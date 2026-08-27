@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Text, StyleSheet } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
@@ -9,16 +9,20 @@ import { SelectField } from "@/components/SelectField";
 import { PrimaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { GENDER_OPTIONS, RELATIONSHIP_OPTIONS } from "@/constants/options";
-import { addFamilyMember } from "@/api/portal";
+import { addFamilyMember, updateFamilyMember } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
 
 export function AddFamilyMemberScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const [fullName, setFullName] = useState("");
-  const [dob, setDob] = useState("");
-  const [gender, setGender] = useState("");
-  const [relationship, setRelationship] = useState("");
+  const route = useRoute<RouteProp<AppStackParamList, "AddFamilyMember">>();
+  const member = route.params?.member;
+  const isEdit = !!member;
+
+  const [fullName, setFullName] = useState(member?.full_name || "");
+  const [dob, setDob] = useState(member?.date_of_birth || "");
+  const [gender, setGender] = useState(member?.gender || "");
+  const [relationship, setRelationship] = useState(member?.relationship || "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -27,17 +31,32 @@ export function AddFamilyMemberScreen() {
       setError("Name is required.");
       return;
     }
+    // The backend (PatientService) requires date_of_birth for both add and
+    // edit — it's the cross-hospital identity key, not an optional field.
+    if (!dob) {
+      setError("Date of birth is required — it's how a family member is matched across hospitals.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      await addFamilyMember({
-        full_name: fullName.trim(),
-        date_of_birth: dob || undefined,
-        gender: gender || undefined,
-        relationship: relationship || undefined,
-      });
-      // Both HealthScreen and ProfileScreen reload their people/family list
-      // on useFocusEffect, so returning here is enough to refresh them —
+      if (isEdit) {
+        await updateFamilyMember(member!.awpid, {
+          full_name: fullName.trim(),
+          date_of_birth: dob,
+          gender: gender || undefined,
+          relationship: relationship || undefined,
+        });
+      } else {
+        await addFamilyMember({
+          full_name: fullName.trim(),
+          date_of_birth: dob,
+          gender: gender || undefined,
+          relationship: relationship || undefined,
+        });
+      }
+      // HealthScreen, ProfileScreen and FamilyMembersScreen all reload their
+      // family list on useFocusEffect, so returning here refreshes them —
       // no callback prop needs to cross the navigation boundary.
       navigation.goBack();
     } catch (err) {
@@ -49,16 +68,23 @@ export function AddFamilyMemberScreen() {
 
   return (
     <Screen>
-      <BackHeader title="Add family member" onBack={() => navigation.goBack()} />
-      <Text style={styles.hint}>
-        Add a spouse, child, or parent to your account to book appointments and view their health records alongside your own.
-      </Text>
+      <BackHeader title={isEdit ? "Edit family member" : "Add family member"} onBack={() => navigation.goBack()} />
+      {!isEdit && (
+        <Text style={styles.hint}>
+          Add a spouse, child, or parent to your account to book appointments and view their health records alongside your own.
+        </Text>
+      )}
       {!!error && <ErrorBanner message={error} />}
       <TextField label="Full name" placeholder="e.g. Aarav Krishnan" value={fullName} onChangeText={setFullName} />
       <DateField label="Date of birth" value={dob} onChange={setDob} maximumDate={new Date()} />
       <SelectField label="Gender" value={gender} options={GENDER_OPTIONS} onChange={setGender} />
       <SelectField label="Relationship" value={relationship} options={RELATIONSHIP_OPTIONS} onChange={setRelationship} />
-      <PrimaryButton label="Save family member" onPress={onSave} loading={saving} style={{ marginTop: 8 }} />
+      <PrimaryButton
+        label={isEdit ? "Save changes" : "Save family member"}
+        onPress={onSave}
+        loading={saving}
+        style={{ marginTop: 8 }}
+      />
     </Screen>
   );
 }
