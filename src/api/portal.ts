@@ -19,6 +19,11 @@ import type {
   PatientDocument,
   PrescriptionOrder,
   Profile,
+  RecordsShareConsentPrompt,
+  RecordsShareCreated,
+  RecordsShareDecision,
+  RecordsShareGrant,
+  RecordsShareStatus,
   RescheduleResult,
   SlotEntry,
   Specialty,
@@ -198,6 +203,64 @@ export async function generateEmergencyToken(payload: {
   return res.status === 428 ? res.data : res.data.data;
 }
 
+/* ── "Share Records" — the patient side of the doctor-has-a-laptop flow.
+ * The clinician's laptop shows a QR/code + link; the patient scans or types
+ * it here, approves once (2-hour window), and can end it or release
+ * individual downloads afterwards. Backend: apps/patients/records_share_views.py */
+
+/** The patient starts the flow: mint a pending session + a link to hand to the doctor. */
+export async function createRecordsShare(note?: string): Promise<RecordsShareCreated> {
+  const res = await api.post("/portal/records-share/", note ? { note } : {});
+  return res.data.data;
+}
+
+/** Public status lookup — accepts the 32-char token OR the 6-digit pairing code. */
+export async function getRecordsShareStatus(tokenOrCode: string): Promise<RecordsShareStatus> {
+  const res = await api.get(`/records-share/${tokenOrCode}/`);
+  return res.data.data;
+}
+
+/**
+ * Approve / decline after scanning. The patient must pass the session's
+ * `pairing` — the 6-character code on the doctor's screen, lifted out of the
+ * scanned QR (…?p=XXXXXX) or typed by hand. A wrong one is a real 400 (with
+ * errors.attempts_left); a locked session is 423; the doctor not having
+ * opened the link yet is 409. The right pairing but no consent yet is 428 +
+ * share_categories.
+ */
+export async function recordsShareDecision(
+  token: string,
+  approve: boolean,
+  consent_confirmed = false,
+  pairing = "",
+): Promise<RecordsShareDecision | RecordsShareConsentPrompt> {
+  const res = await api.post(
+    `/portal/records-share/${token}/decision/`,
+    { approve, consent_confirmed, pairing },
+    { validateStatus: (s) => s === 200 || s === 428 },
+  );
+  if (res.status === 428) {
+    return { consent_required: true, share_categories: res.data?.errors?.share_categories || [] };
+  }
+  return res.data.data;
+}
+
+/** The patient's "who currently has access" list, with any pending download request. */
+export async function getRecordsShareMine(): Promise<RecordsShareGrant[]> {
+  const res = await api.get("/portal/records-share/mine/");
+  return res.data.data.grants || [];
+}
+
+export async function endRecordsShare(token: string) {
+  const res = await api.post(`/portal/records-share/${token}/end/`);
+  return res.data.data;
+}
+
+export async function recordsShareDownloadDecision(token: string, approve: boolean) {
+  const res = await api.post(`/portal/records-share/${token}/downloads/decision/`, { approve });
+  return res.data.data;
+}
+
 /**
  * PATCH /portal/profile/ — update name / gender / DOB / photo / emergency
  * contact. `mobile` is special: changing it to a NEW number requires
@@ -331,14 +394,31 @@ export async function getTimeline(patientAwpid?: string, limit = 30) {
 }
 
 /** PortalDocumentListCreateView returns a raw object, not the {success,data} envelope. */
-export async function getMyDocuments() {
-  const res = await api.get<{ results: PatientDocument[]; pagination: any }>("/portal/documents/");
-  return res.data.results;
+export async function getMyDocuments(page = 1, patientAwpid?: string) {
+  const res = await api.get<{ results: PatientDocument[]; pagination: Pagination }>("/portal/documents/", {
+    params: { page, ...(patientAwpid ? { patient_awpid: patientAwpid } : {}) },
+  });
+  return res.data;
 }
 
-export async function getDocumentDetail(id: number) {
-  const res = await api.get<Envelope<PatientDocument & { file_data: string }>>(`/portal/documents/${id}/`);
+export async function getDocumentDetail(id: number, opts?: { download?: boolean }) {
+  const res = await api.get<Envelope<PatientDocument & { file_data: string; handwritten_doc_id?: number | null }>>(
+    `/portal/documents/${id}/`,
+    { params: opts?.download ? { download: 1 } : {} },
+  );
   return res.data.data;
+}
+
+/** Re-file an unsorted / patient-uploaded document. Verified hospital docs 409. */
+export async function recategoriseDocument(id: number, doc_type: string) {
+  const res = await api.patch<Envelope<{ id: number; doc_type: string }>>(`/portal/documents/${id}/`, { doc_type });
+  return res.data.data;
+}
+
+/** Remove from My Records — patient upload is soft-deleted, hospital doc hidden. */
+export async function deleteDocument(id: number) {
+  const res = await api.delete<Envelope<{ id: number; deleted: boolean }>>(`/portal/documents/${id}/`);
+  return res.data;
 }
 
 /** Same raw-object shape as the GET above, not the {success,data} envelope. */
@@ -348,6 +428,8 @@ export async function uploadDocument(payload: {
   file_name: string;
   mime_type: string;
   file_data: string;
+  qr_token?: string;
+  patient_awpid?: string;
 }) {
   const res = await api.post<PatientDocument>("/portal/documents/", payload);
   return res.data;

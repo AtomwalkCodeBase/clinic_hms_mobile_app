@@ -225,9 +225,9 @@ export function ProfileScreen() {
       />
       <ListRow
         icon={QrCode}
-        title="Emergency QR"
-        subtitle="Share your medical history with an outside hospital"
-        onPress={() => navigation.navigate("EmergencyQR")}
+        title="Share Records"
+        subtitle="Let a doctor view your records on their computer"
+        onPress={() => navigation.navigate("ShareRecords")}
         iconColors={GADGET_TINTS.coral.icon}
         iconShadowColor={GADGET_TINTS.coral.shadow}
       />
@@ -244,7 +244,7 @@ export function ProfileScreen() {
       <ListRow
         icon={Lock}
         title="Biometric unlock"
-        subtitle={biometricEnabled ? "On — fingerprint or face unlock" : "Off — sign in with your password"}
+        subtitle={biometricEnabled ? "On — pick fingerprint or password at sign-in" : "Off — sign in with your password"}
         iconColors={GADGET_TINTS.green.icon}
         iconShadowColor={GADGET_TINTS.green.shadow}
         trailing={

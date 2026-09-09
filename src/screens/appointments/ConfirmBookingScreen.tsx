@@ -8,8 +8,9 @@ import { TextField } from "@/components/TextField";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { book } from "@/api/portal";
-import { apiErrorMessage } from "@/api/client";
+import { book, getMyBookings } from "@/api/portal";
+import { apiErrorMessage, isLikelyNetworkError } from "@/api/client";
+import { useNetwork } from "@/context/NetworkContext";
 import { ConsentRequired } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -24,16 +25,49 @@ export function ConfirmBookingScreen() {
   const route = useRoute<RouteProp<AppStackParamList, "ConfirmBooking">>();
   const params = route.params;
   const { theme } = useAppTheme();
+  const { isOffline } = useNetwork();
 
   const [complaint, setComplaint] = useState(params.chiefComplaint || "");
   const [consent, setConsent] = useState<ConsentRequired | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  // Set when a booking POST fails on a network error — the request may have
+  // reached the server, so we point the patient at Appointments to check
+  // rather than let them blind-retry into a possible duplicate.
+  const [maybeBooked, setMaybeBooked] = useState(false);
+
+  const UPCOMING = ["scheduled", "waiting", "vitals_done", "in_progress"];
+
+  // Best-effort "did it actually go through?" check after a dropped
+  // connection: look for a booking that matches what we just tried to
+  // create. Returns the matching booking or null.
+  const findJustBooked = async () => {
+    try {
+      const page = await getMyBookings(1);
+      return (
+        page.results.find(
+          (b) =>
+            UPCOMING.includes(b.status) &&
+            b.doctor_id === params.doctorId &&
+            b.date === params.date &&
+            (params.time ? b.time === params.time : true) &&
+            (!params.patientAwpid || b.patient_awpid === params.patientAwpid)
+        ) || null
+      );
+    } catch {
+      return null;
+    }
+  };
 
   const submit = async (withConsent: boolean) => {
     setError("");
+    setMaybeBooked(false);
     setConfirmVisible(false);
+    if (isOffline) {
+      setError("You're offline. Connect to the internet to book this appointment.");
+      return;
+    }
     setLoading(true);
     try {
       const result = await book({
@@ -64,7 +98,26 @@ export function ConfirmBookingScreen() {
         });
       }
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't book this appointment. Please try again."));
+      if (isLikelyNetworkError(err)) {
+        // The connection dropped — the booking may still have been created
+        // server-side. Check before showing a plain error so the patient
+        // doesn't retry into a duplicate.
+        const existing = await findJustBooked();
+        if (existing) {
+          navigation.replace("BookingSuccess", {
+            hospital: existing.hospital,
+            doctor: existing.doctor,
+            date: existing.date,
+            time: existing.time || undefined,
+            tokenNumber: existing.token_number ?? undefined,
+          });
+          return;
+        }
+        setMaybeBooked(true);
+        setError("Your connection dropped before we could confirm. Check your appointments before trying again.");
+      } else {
+        setError(apiErrorMessage(err, "Couldn't book this appointment. Please try again."));
+      }
     } finally {
       setLoading(false);
     }
@@ -124,6 +177,14 @@ export function ConfirmBookingScreen() {
       />
 
       <Text style={styles.payNote}>Payment is collected at the hospital's front desk when you arrive.</Text>
+
+      {maybeBooked && (
+        <SecondaryButton
+          label="Check my appointments"
+          onPress={() => navigation.navigate("Tabs" as any, { screen: "Appointments" } as any)}
+          style={{ marginBottom: 8 }}
+        />
+      )}
 
       <PrimaryButton label="Confirm booking" onPress={() => setConfirmVisible(true)} loading={loading} style={{ marginBottom: 8 }} />
       <SecondaryButton label="Cancel" onPress={() => navigation.goBack()} />

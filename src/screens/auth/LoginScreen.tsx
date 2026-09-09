@@ -1,27 +1,47 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, KeyboardAvoidingView, Platform } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import * as LocalAuthentication from "expo-local-authentication";
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
-import { PrimaryButton } from "@/components/Buttons";
+import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { LogoPill } from "@/components/Logo";
 import { MetalHero } from "@/components/MetalHero";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { apiErrorMessage } from "@/api/client";
+import { getRefreshToken, getBiometricLockEnabled } from "@/utils/storage";
+import { APP_VERSION_LABEL } from "@/utils/appVersion";
 import { AuthStackParamList } from "@/navigation/types";
 
 export function LoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
   const { theme } = useAppTheme();
-  const { login } = useAuth();
+  const { login, unlock } = useAuth();
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ mobile?: string; password?: string }>({});
   const [submitError, setSubmitError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Only true when there's genuinely a stored session to unlock — a fresh
+  // install or a full sign-out has no tokens, so fingerprint can't produce a
+  // login here and the button stays hidden. Present when a patient with
+  // Biometric unlock on reopens the app (or taps "Use password instead" on
+  // the lock screen and then changes their mind).
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      if (!(await getRefreshToken())) return;
+      if (!(await getBiometricLockEnabled())) return;
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+      setBiometricReady(isEnrolled);
+    })();
+  }, []);
 
   const onSubmit = async () => {
     const nextErrors: typeof errors = {};
@@ -43,9 +63,27 @@ export function LoginScreen() {
     }
   };
 
+  const onBiometric = async () => {
+    setSubmitError("");
+    setBiometricBusy(true);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Sign in to HealthNet",
+        cancelLabel: "Cancel",
+        disableDeviceFallback: false,
+      });
+      // The stored JWT is still valid — a successful check just clears the
+      // local gate and RootNavigator swaps to AppStack.
+      if (result.success) unlock();
+    } finally {
+      setBiometricBusy(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
       <Screen topColor="#249c57">
+        {!!APP_VERSION_LABEL && <Text style={styles.version}>{APP_VERSION_LABEL}</Text>}
         <MetalHero style={styles.hero} decorative curved>
           <View style={styles.heroInner}>
             <LogoPill size={58} />
@@ -82,6 +120,22 @@ export function LoginScreen() {
 
         <PrimaryButton label="Sign in" onPress={onSubmit} loading={loading} style={{ marginTop: 6 }} />
 
+        {biometricReady && (
+          <>
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>or</Text>
+              <View style={styles.orLine} />
+            </View>
+            <SecondaryButton
+              label="Sign in with fingerprint"
+              onPress={onBiometric}
+              loading={biometricBusy}
+              style={styles.bioBtn}
+            />
+          </>
+        )}
+
         <Pressable onPress={() => navigation.navigate("OTPLogin")} style={styles.otpLoginWrap}>
           <Text style={[styles.otpLoginText, { color: theme.text }]}>Sign in with a code instead</Text>
         </Pressable>
@@ -99,6 +153,7 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  version: { fontSize: 11, color: NEUTRAL.textMuted, alignSelf: "flex-end", marginBottom: 2 },
   hero: { marginBottom: 20 },
   heroInner: { alignItems: "center", paddingVertical: 10 },
   header: { alignItems: "center", marginBottom: 24 },
@@ -106,6 +161,10 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12.5, color: NEUTRAL.textSecondary, marginTop: 4, textAlign: "center" },
   forgotWrap: { alignSelf: "flex-end", marginBottom: 18, marginTop: -6 },
   forgot: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
+  orRow: { flexDirection: "row", alignItems: "center", marginTop: 16, marginBottom: 12 },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: NEUTRAL.border },
+  orText: { fontSize: 11.5, color: NEUTRAL.textMuted, marginHorizontal: 10 },
+  bioBtn: { alignSelf: "stretch" },
   otpLoginWrap: { alignSelf: "center", marginTop: 14 },
   otpLoginText: { fontSize: 12.5, fontWeight: "600" },
   footerWrap: { alignSelf: "center", marginTop: 18 },

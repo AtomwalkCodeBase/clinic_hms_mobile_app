@@ -9,7 +9,8 @@ import { SegmentedControl } from "@/components/SegmentedControl";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getSlots, rescheduleBooking } from "@/api/portal";
-import { apiErrorMessage } from "@/api/client";
+import { apiErrorMessage, isLikelyNetworkError } from "@/api/client";
+import { useNetwork } from "@/context/NetworkContext";
 import { SlotEntry } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { MessageDialog } from "@/components/MessageDialog";
@@ -27,6 +28,7 @@ export function RescheduleScreen() {
   const route = useRoute<RouteProp<AppStackParamList, "Reschedule">>();
   const { bookingId, tenantId, doctorId, doctorName, hospitalName, patientName } = route.params;
   const { theme } = useAppTheme();
+  const { isOffline } = useNetwork();
 
   const dateOptions = [0, 1, 2, 3, 4, 5, 6].map(dateOffsetLabel);
   const [selectedDate, setSelectedDate] = useState(dateOptions[0].key);
@@ -53,12 +55,20 @@ export function RescheduleScreen() {
 
   const onConfirm = async () => {
     setError("");
+    if (isOffline) {
+      setError("You're offline. Connect to the internet and try rescheduling again.");
+      return;
+    }
     setSaving(true);
     try {
       await rescheduleBooking(bookingId, { scheduled_date: selectedDate, scheduled_time: selectedTime || undefined });
       setDone(true);
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't reschedule this appointment. Please try again."));
+      if (isLikelyNetworkError(err)) {
+        setError("Your connection dropped before we could confirm. Check the appointment in your list before trying again.");
+      } else {
+        setError(apiErrorMessage(err, "Couldn't reschedule this appointment. Please try again."));
+      }
     } finally {
       setSaving(false);
     }

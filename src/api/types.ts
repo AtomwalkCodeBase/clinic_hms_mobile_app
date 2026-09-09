@@ -102,6 +102,49 @@ export interface EmergencyTokenResult {
   ttl_minutes: number;
 }
 
+/* ── "Share Records" — patient side of the laptop flow ── */
+export interface RecordsSharePendingDownload {
+  id: number;
+  title: string;
+}
+export interface RecordsShareStatus {
+  token: string;
+  status: "pending" | "approved" | "denied" | "ended" | "expired";
+  code?: string;
+  requester_label: string;
+  window_hours: number;
+  seconds_left: number;
+  patient_name?: string;
+  pending_download?: RecordsSharePendingDownload | null;
+}
+export interface RecordsShareCreated {
+  token: string;
+  code: string;
+  link: string;
+  status: string;
+  window_hours: number;
+}
+export interface RecordsShareConsentPrompt {
+  consent_required: true;
+  share_categories: string[];
+}
+export interface RecordsShareDecision {
+  token: string;
+  status: string;
+  requester_label: string;
+  expires_at: string | null;
+  seconds_left: number;
+}
+export interface RecordsShareGrant {
+  token: string;
+  requester_label: string;
+  approved_at: string | null;
+  expires_at: string | null;
+  seconds_left: number;
+  last_seen_at: string | null;
+  pending_download: RecordsSharePendingDownload | null;
+}
+
 export interface BookingResult {
   booking_id: number;
   hospital: string;
@@ -145,11 +188,21 @@ export interface MedicalRecord {
 export interface PatientDocument {
   id: number;
   title: string;
-  doc_type: "lab_report" | "prescription" | "scan" | "discharge_summary" | "other";
+  doc_type: "lab_report" | "prescription" | "scan" | "discharge_summary" | "consult_note" | "other";
   file_name: string;
   mime_type: string;
   uploaded_by: "patient" | "staff";
   created_at: string;
+  // My Reports pipeline fields — PortalDocumentListCreateView.get()
+  document_date?: string | null;
+  public_document_id?: string;
+  hospital_label?: string;
+  doctor_label?: string;
+  source_tenant_id?: number | null;
+  review_state?: "filed" | "unsorted" | string;
+  verification_status?: "verified" | "unverified" | "needs_review" | string;
+  /** the typeset prescription's handwritten sibling, if any */
+  handwritten_doc_id?: number | null;
 }
 
 export interface Specialty {

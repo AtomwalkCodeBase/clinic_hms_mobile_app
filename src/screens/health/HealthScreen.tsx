@@ -7,10 +7,11 @@ import { Screen, ErrorBanner } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { MetalHero } from "@/components/MetalHero";
 import { GadgetCard, GADGET_TINTS } from "@/components/GadgetCard";
-import { Syringe, Clock, Stethoscope, FlaskConical, Pill as PillIcon } from "lucide-react-native";
+import { Syringe, Clock, Stethoscope, FileText } from "lucide-react-native";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getFamily, getProfile, getHealthSummary, getVaccinations } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
+import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { FamilyMember, HealthSummary, VaccinationSummary } from "@/api/types";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
 
@@ -83,19 +84,19 @@ export function HealthScreen() {
     }, [loadSummary])
   );
 
+  useReconnectRefetch(() => {
+    loadPeople();
+    loadSummary();
+  });
+
   const openGadget = (screen: "Vaccinations" | "HealthTimeline" | "HealthVisits" | "Growth") => {
     if (!selected) return;
     navigation.navigate(screen, { patientAwpid: target, patientName: selected.full_name });
   };
 
-  const openLabReports = () => {
+  const openRecords = () => {
     if (!selected) return;
-    navigation.navigate("LabReports", { patientAwpid: target, patientName: selected.full_name });
-  };
-
-  const openPrescriptions = () => {
-    if (!selected) return;
-    navigation.navigate("Prescriptions", { patientAwpid: target, patientName: selected.full_name });
+    navigation.navigate("RxReports", { patientAwpid: target, patientName: selected.full_name });
   };
 
   return (
@@ -160,22 +161,11 @@ export function HealthScreen() {
           cardPadding={16}
         />
         <GadgetCard
-          tint={GADGET_TINTS.amber}
-          icon={FlaskConical}
-          title="Lab reports"
-          subtitle="Tests, results, and reports"
-          onPress={openLabReports}
-          style={styles.gadgetSize}
-          iconSize={34}
-          radius={22}
-          cardPadding={16}
-        />
-        <GadgetCard
           tint={GADGET_TINTS.purple}
-          icon={PillIcon}
-          title="Prescriptions"
-          subtitle="From past visits"
-          onPress={openPrescriptions}
+          icon={FileText}
+          title="Rx & Reports"
+          subtitle="Prescriptions, lab reports & docs"
+          onPress={openRecords}
           style={styles.gadgetSize}
           iconSize={34}
           radius={22}

@@ -23,6 +23,27 @@ export async function pickPdf(): Promise<PickedFile | null> {
   });
 }
 
+/**
+ * Opens the system file picker for one OR many PDFs / images in a single
+ * pick — the mobile equivalent of "select the files you want to upload".
+ * Returns [] if the user cancels.
+ */
+export async function pickDocuments(): Promise<PickedFile[]> {
+  return withBiometricSuppressed(async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/*"],
+      multiple: true,
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.length) return [];
+    return result.assets.map((a) => ({
+      uri: a.uri,
+      name: a.name || "document",
+      mimeType: a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
+    }));
+  });
+}
+
 /** Opens the photo library restricted to images. Returns null if the user cancels or denies permission. */
 export async function pickImage(): Promise<PickedFile | null> {
   return withBiometricSuppressed(async () => {

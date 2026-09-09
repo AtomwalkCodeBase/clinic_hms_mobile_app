@@ -13,6 +13,8 @@ import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getMyBookings, getMyRecords, cancelBooking } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
+import { useNetwork } from "@/context/NetworkContext";
+import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { Booking, MedicalRecord, Pagination } from "@/api/types";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
 import { MetalHero } from "@/components/MetalHero";
@@ -47,6 +49,7 @@ const UPCOMING_STATUSES = ["scheduled", "waiting", "vitals_done", "in_progress"]
 export function AppointmentsScreen() {
   const navigation = useNavigation<Nav>();
   const { theme } = useAppTheme();
+  const { isOffline } = useNetwork();
   const [segment, setSegment] = useState<"upcoming" | "past">("upcoming");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -78,6 +81,8 @@ export function AppointmentsScreen() {
       load();
     }, [load])
   );
+
+  useReconnectRefetch(load);
 
   // Bookings are ordered newest-first server-side, so with more than a
   // page of history this is really "see older past visits" — upcoming
@@ -114,6 +119,11 @@ export function AppointmentsScreen() {
   const confirmCancel = async () => {
     if (!confirmTarget) return;
     const booking = confirmTarget;
+    if (isOffline) {
+      setConfirmTarget(null);
+      setError("You're offline. Connect to the internet and try cancelling again.");
+      return;
+    }
     setCancellingId(booking.id);
     setError("");
     try {

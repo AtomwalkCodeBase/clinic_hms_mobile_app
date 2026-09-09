@@ -39,11 +39,10 @@ export type AppStackParamList = {
     patientName: string;
     consultationFee?: string | null;
   };
-  BookingSuccess: { hospital: string; doctor: string; date: string; time?: string; tokenNumber: number };
+  BookingSuccess: { hospital: string; doctor: string; date: string; time?: string; tokenNumber?: number };
   PrescriptionDetail: { record: import("@/api/types").MedicalRecord };
-  Prescriptions: { patientAwpid?: string; patientName?: string } | undefined;
-  LabReports: { patientAwpid?: string; patientName?: string } | undefined;
-  Documents: undefined;
+  RxReports: { patientAwpid?: string; patientName?: string } | undefined;
+  RxCapture: { patientAwpid?: string } | undefined;
   Notifications: undefined;
   Reschedule: { bookingId: number; tenantId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
   Vaccinations: { patientAwpid?: string; patientName: string };
@@ -58,5 +57,5 @@ export type AppStackParamList = {
   LinkedHospitals: undefined;
   ThemePicker: undefined;
   Support: undefined;
-  EmergencyQR: undefined;
+  ShareRecords: undefined;
 };

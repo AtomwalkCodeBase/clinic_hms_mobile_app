@@ -8,9 +8,8 @@ import { BookingForScreen } from "@/screens/appointments/BookingForScreen";
 import { ConfirmBookingScreen } from "@/screens/appointments/ConfirmBookingScreen";
 import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScreen";
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
-import { PrescriptionsListScreen } from "@/screens/records/PrescriptionsListScreen";
-import { LabReportsScreen } from "@/screens/records/LabReportsScreen";
-import { DocumentsScreen } from "@/screens/records/DocumentsScreen";
+import { RxReportsScreen } from "@/screens/records/RxReportsScreen";
+import { CaptureScreen } from "@/screens/records/CaptureScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
 import { VaccinationsScreen } from "@/screens/health/VaccinationsScreen";
@@ -25,7 +24,7 @@ import { FamilyMembersScreen } from "@/screens/profile/FamilyMembersScreen";
 import { LinkedHospitalsScreen } from "@/screens/profile/LinkedHospitalsScreen";
 import { ThemeScreen } from "@/screens/profile/ThemeScreen";
 import { SupportScreen } from "@/screens/profile/SupportScreen";
-import { EmergencyQRScreen } from "@/screens/profile/EmergencyQRScreen";
+import { ShareRecordsScreen } from "@/screens/profile/ShareRecordsScreen";
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -44,9 +43,8 @@ export function AppStack() {
       <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
       <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
-      <Stack.Screen name="Prescriptions" component={PrescriptionsListScreen} />
-      <Stack.Screen name="LabReports" component={LabReportsScreen} />
-      <Stack.Screen name="Documents" component={DocumentsScreen} />
+      <Stack.Screen name="RxReports" component={RxReportsScreen} />
+      <Stack.Screen name="RxCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
       <Stack.Screen name="Vaccinations" component={VaccinationsScreen} />
@@ -61,7 +59,7 @@ export function AppStack() {
       <Stack.Screen name="LinkedHospitals" component={LinkedHospitalsScreen} />
       <Stack.Screen name="ThemePicker" component={ThemeScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
-      <Stack.Screen name="EmergencyQR" component={EmergencyQRScreen} />
+      <Stack.Screen name="ShareRecords" component={ShareRecordsScreen} />
     </Stack.Navigator>
   );
 }

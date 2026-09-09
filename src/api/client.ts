@@ -77,6 +77,20 @@ api.interceptors.response.use(
  * "Sharing isn't available on this device.") reach the user instead of
  * collapsing into the generic fallback.
  */
+/**
+ * True when the failure is a lost/again-unreachable connection or a timeout
+ * rather than a real answer from the server — i.e. the request may never
+ * have been processed (or its response was lost on the way back). Callers
+ * that mutate data (booking, rescheduling) use this to decide whether a
+ * blind retry is safe or whether they should re-check server state first.
+ */
+export function isLikelyNetworkError(err: unknown): boolean {
+  const e = err as AxiosError;
+  if (!e?.isAxiosError) return false;
+  if (e.response) return false; // the server did answer — not a transport failure
+  return e.code === "ECONNABORTED" || e.message === "Network Error" || !!e.message?.includes("timeout");
+}
+
 export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
   const e = err as AxiosError<any>;
   const data = e?.response?.data;

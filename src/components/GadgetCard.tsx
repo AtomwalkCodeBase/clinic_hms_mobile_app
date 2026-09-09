@@ -37,7 +37,9 @@ export const DASHBOARD_TINTS = {
   gold: { bg: ["#FDF6E3", "#F9E7B8", "#F3D687"] as const, icon: ["#DDB13A", "#A67C1B", "#6B4E0F"] as const, shadow: "#3E2C08", border: "#F1DC9E" },
 };
 
-export type GadgetTint = (typeof GADGET_TINTS)[keyof typeof GADGET_TINTS];
+export type GadgetTint =
+  | (typeof GADGET_TINTS)[keyof typeof GADGET_TINTS]
+  | (typeof DASHBOARD_TINTS)[keyof typeof DASHBOARD_TINTS];
 
 const SHEEN = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0)"] as const;
 

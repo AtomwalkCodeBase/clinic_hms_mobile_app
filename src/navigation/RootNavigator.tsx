@@ -5,14 +5,13 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { useAuth } from "@/context/AuthContext";
 import { AuthStack } from "./AuthStack";
 import { AppStack } from "./AppStack";
-import { BiometricGate } from "@/components/BiometricGate";
 import { BiometricPrimingScreen } from "@/components/BiometricPrimingScreen";
 import { getBiometricPromptSeen } from "@/utils/storage";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 
 export function RootNavigator() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, needsUnlock } = useAuth();
   const { theme } = useAppTheme();
   // null = still checking; true = show BiometricPrimingScreen once;
   // false = skip straight to the app (already asked, or no biometric
@@ -20,7 +19,7 @@ export function RootNavigator() {
   const [needsBiometricPrompt, setNeedsBiometricPrompt] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || needsUnlock) {
       setNeedsBiometricPrompt(null);
       return;
     }
@@ -34,7 +33,7 @@ export function RootNavigator() {
       const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
       setNeedsBiometricPrompt(hasHardware && isEnrolled);
     })();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, needsUnlock]);
 
   // This is the one moment a saved session actually shows a spinner —
   // just long enough to check for a stored token before deciding whether
@@ -49,13 +48,11 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer>
-      {isAuthenticated ? (
+      {isAuthenticated && !needsUnlock ? (
         needsBiometricPrompt === null ? null : needsBiometricPrompt ? (
           <BiometricPrimingScreen onDone={() => setNeedsBiometricPrompt(false)} />
         ) : (
-          <BiometricGate>
-            <AppStack />
-          </BiometricGate>
+          <AppStack />
         )
       ) : (
         <AuthStack />

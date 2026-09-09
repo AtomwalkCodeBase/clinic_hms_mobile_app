@@ -56,7 +56,8 @@ export async function clearTokens() {
 }
 
 // Off by default — a patient has to explicitly opt in from Profile before
-// BiometricGate ever prompts. Nothing changes for anyone who doesn't.
+// the login screen offers the fingerprint option. Nothing changes for
+// anyone who doesn't.
 export async function getBiometricLockEnabled(): Promise<boolean> {
   return (await getItem(BIOMETRIC_LOCK_KEY)) === "1";
 }

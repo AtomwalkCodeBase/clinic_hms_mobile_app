@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { CalendarDays, ClipboardList, HeartPulse, Pill as PillIcon, FlaskConical, Bell, ChevronRight, Users, X } from "lucide-react-native";
+import { CalendarDays, ClipboardList, HeartPulse, FileText, QrCode, Bell, ChevronRight, Users, X } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
@@ -23,6 +23,7 @@ import { Booking } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { AppTabsParamList } from "@/navigation/types";
 import { useExitOnDoubleBack } from "@/utils/useExitOnDoubleBack";
+import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { getHomeChecklistDismissed, setHomeChecklistDismissed } from "@/utils/storage";
 
 const GET_STARTED_ITEMS: { key: string; label: string; icon: LucideIcon }[] = [
@@ -44,8 +45,8 @@ type Nav = CompositeNavigationProp<
 const QUICK_ACTIONS: { key: string; label: string; sub: string; icon: LucideIcon; tint: GadgetTint }[] = [
   { key: "appointments", label: "Appointments", sub: "Upcoming and past visits", icon: ClipboardList, tint: DASHBOARD_TINTS.teal },
   { key: "health", label: "Health journey", sub: "Vaccines, visits, and more", icon: HeartPulse, tint: DASHBOARD_TINTS.rose },
-  { key: "prescriptions", label: "Prescriptions", sub: "From your past visits", icon: PillIcon, tint: DASHBOARD_TINTS.slate },
-  { key: "labs", label: "Lab reports", sub: "Tests, results, and reports", icon: FlaskConical, tint: DASHBOARD_TINTS.gold },
+  { key: "records", label: "Rx & Reports", sub: "Prescriptions, lab reports & docs", icon: FileText, tint: DASHBOARD_TINTS.slate },
+  { key: "shareRecords", label: "Share Records", sub: "Let any doctor view your records", icon: QrCode, tint: DASHBOARD_TINTS.gold },
 ];
 
 function greetingForHour(hour: number): string {
@@ -104,11 +105,13 @@ export function HomeScreen() {
     }, [load])
   );
 
+  useReconnectRefetch(load);
+
   const onQuickAction = (key: string) => {
     if (key === "appointments") navigation.navigate("Tabs" as any, { screen: "Appointments" } as any);
     else if (key === "health") navigation.navigate("Tabs" as any, { screen: "Health" } as any);
-    else if (key === "prescriptions") navigation.navigate("Prescriptions");
-    else if (key === "labs") navigation.navigate("LabReports");
+    else if (key === "records") navigation.navigate("RxReports");
+    else if (key === "shareRecords") navigation.navigate("ShareRecords");
   };
   const onBookVisit = () => navigation.navigate("BookingFor", undefined);
 

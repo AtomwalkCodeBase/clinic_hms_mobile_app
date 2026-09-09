@@ -3,6 +3,8 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { NetworkProvider } from "@/context/NetworkContext";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { RootNavigator } from "@/navigation/RootNavigator";
 
 // Temporary — Metro was only printing the bare error message for the
@@ -22,10 +24,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <StatusBar style="dark" />
-          <RootNavigator />
-        </AuthProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <StatusBar style="dark" />
+            <RootNavigator />
+            <OfflineBanner />
+          </AuthProvider>
+        </NetworkProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

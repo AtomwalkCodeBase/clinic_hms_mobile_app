@@ -8,6 +8,7 @@ import { Pill } from "@/components/Pill";
 import { NEUTRAL } from "@/theme/themes";
 import { getNotifications, markNotificationRead } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
+import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { NotificationItem } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
@@ -42,6 +43,8 @@ export function NotificationsScreen() {
       load();
     }, [load])
   );
+
+  useReconnectRefetch(load);
 
   const onMarkRead = async (item: NotificationItem) => {
     // Vaccination-due entries are computed live and have no backing row —

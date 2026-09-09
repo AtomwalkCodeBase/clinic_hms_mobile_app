@@ -1,10 +1,9 @@
-// Opening the camera, photo library, or system file picker briefly sends
-// this app to the background and back — from BiometricGate's AppState
-// listener, that's indistinguishable from someone switching away and
-// coming back, so without this every photo/file pick was re-triggering
-// the fingerprint prompt the instant the picker closed. Anything in
-// fileHelpers.ts that launches a native picker wraps itself in
-// withBiometricSuppressed so BiometricGate knows to skip that one resume.
+// Dormant since biometric unlock moved to cold-start-only (no re-lock on
+// resume) — kept because it's the hook any future "re-lock on background"
+// logic would read to ignore the brief background/foreground bounce a
+// camera / photo-library / file picker causes. Anything in fileHelpers.ts
+// that launches a native picker still wraps itself in withBiometricSuppressed
+// so that behaviour survives if resume-locking is ever reintroduced.
 let suppressed = 0;
 
 export function isBiometricCheckSuppressed(): boolean {

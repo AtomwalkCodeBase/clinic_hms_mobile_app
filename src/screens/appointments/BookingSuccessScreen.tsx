@@ -30,10 +30,12 @@ export function BookingSuccessScreen() {
           {time ? `, ${time}` : ""}
         </Text>
 
-        <View style={styles.tokenBox}>
-          <Text style={styles.tokenLabel}>TOKEN NUMBER</Text>
-          <Text style={styles.tokenValue}>#{tokenNumber}</Text>
-        </View>
+        {tokenNumber != null && (
+          <View style={styles.tokenBox}>
+            <Text style={styles.tokenLabel}>TOKEN NUMBER</Text>
+            <Text style={styles.tokenValue}>#{tokenNumber}</Text>
+          </View>
+        )}
 
         <PrimaryButton
           label="View my appointments"
