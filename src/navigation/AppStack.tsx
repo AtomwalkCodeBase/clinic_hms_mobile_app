@@ -25,7 +25,6 @@ import { LinkedHospitalsScreen } from "@/screens/profile/LinkedHospitalsScreen";
 import { ThemeScreen } from "@/screens/profile/ThemeScreen";
 import { SupportScreen } from "@/screens/profile/SupportScreen";
 import { ShareRecordsScreen } from "@/screens/profile/ShareRecordsScreen";
-import { SharedRecordsPrivacyScreen } from "@/screens/profile/SharedRecordsPrivacyScreen";
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -61,7 +60,6 @@ export function AppStack() {
       <Stack.Screen name="ThemePicker" component={ThemeScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="ShareRecords" component={ShareRecordsScreen} />
-      <Stack.Screen name="SharedRecordsPrivacy" component={SharedRecordsPrivacyScreen} />
     </Stack.Navigator>
   );
 }

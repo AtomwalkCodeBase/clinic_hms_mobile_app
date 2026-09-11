@@ -231,15 +231,6 @@ export function ProfileScreen() {
         iconColors={GADGET_TINTS.coral.icon}
         iconShadowColor={GADGET_TINTS.coral.shadow}
       />
-
-      <ListRow
-        icon={Lock}
-        title="Shared records privacy"
-        subtitle="Choose what a doctor sees when you share"
-        onPress={() => navigation.navigate("SharedRecordsPrivacy")}
-        iconColors={GADGET_TINTS.muted.icon}
-        iconShadowColor={GADGET_TINTS.muted.shadow}
-      />
       <ListRow
         icon={Building2}
         title="Linked hospitals"
