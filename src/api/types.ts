@@ -200,9 +200,86 @@ export interface PatientDocument {
   doctor_label?: string;
   source_tenant_id?: number | null;
   review_state?: "filed" | "unsorted" | string;
+  /** Which specific field(s) the classifier couldn't resolve — a subset of
+   *  "kind" | "category" | "date" | "file" (file = unreadable, needs a
+   *  retake). Empty/absent for a normal confident or QR-verified row. Drives
+   *  the review flow: ask only for what's actually missing. */
+  review_needs?: string[];
   verification_status?: "verified" | "unverified" | "needs_review" | string;
   /** the typeset prescription's handwritten sibling, if any */
   handwritten_doc_id?: number | null;
+  /** Lab-report panel slugs (cbc, lipid, thyroid, …) — used by the
+   *  shared-records privacy screen to group and filter. */
+  report_categories?: string[];
+}
+
+/** One row on the Shared-records privacy screen — the vault annotated with
+ *  its effective visibility to a scanning doctor. */
+export interface RecordsPrivacyDoc {
+  id: number;
+  title: string;
+  doc_type: PatientDocument["doc_type"];
+  report_categories: string[];
+  document_date?: string | null;
+  created_at: string;
+  hospital_label?: string | null;
+  doctor_label?: string | null;
+  /** hidden from a scanning doctor right now */
+  private: boolean;
+  /** hidden because of a category / kind / hide-all rule, not an individual lock */
+  private_by_rule: boolean;
+  /** surfaced for the currently-live visit only */
+  revealed_for_visit: boolean;
+}
+
+/** One page of the privacy list — the list is paged on category boundaries
+ *  server-side (whole panels per page), so `documents` is just this page. */
+export interface RecordsPrivacyPagination {
+  page: number;
+  page_size: number;
+  total_pages: number;
+  total_count: number;
+  has_next: boolean;
+  has_previous: boolean;
+}
+
+/** Whole-vault figures the screen's readout / facets / Hide-all speak for,
+ *  computed over every record regardless of the current page or filter. */
+export interface RecordsPrivacySummary {
+  vault_total: number;
+  filtered_total: number;
+  shown: number;
+  visit: number;
+  private: number;
+  /** individually locked & unlockable — the "Show all" target */
+  showable_ids: number[];
+  /** every vault id — the "Hide all" target */
+  hideable_ids: number[];
+  /** every id matching the current filter — for select-all on web */
+  filtered_ids: number[];
+  category_counts: Record<string, number>;
+  kind_counts: Record<string, number>;
+  category_labels: Record<string, string>;
+  kind_labels: Record<string, string>;
+  months: string[];
+  truncated: boolean;
+}
+
+export interface RecordsPrivacyPayload {
+  hide_all: boolean;
+  hidden_categories: string[];
+  hidden_kinds: string[];
+  hidden_sections: string[];
+  sections: string[];
+  section_labels: Record<string, string>;
+  documents: RecordsPrivacyDoc[];
+  pagination: RecordsPrivacyPagination;
+  summary: RecordsPrivacySummary;
+  /** present only while a Share Records grant is live — the frontend then
+   *  asks "just this visit or always?" instead of a plain confirm. */
+  active_session:
+    | { token: string; requester_label: string; seconds_left: number; shown_private_ids: number[] }
+    | null;
 }
 
 export interface Specialty {

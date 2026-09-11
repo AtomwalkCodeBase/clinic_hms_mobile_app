@@ -146,10 +146,13 @@ async function saveToDeviceAndroid(fileName: string, mimeType: string, base64Con
  * real error instead of silently doing nothing, which is what made the
  * download buttons look broken with no feedback at all.
  */
-async function saveOrShare(fileName: string, mimeType: string, base64Content: string): Promise<void> {
+/** Which path saveOrShare actually took — the caller uses this to word its success message accurately. */
+export type SaveOutcome = "saved" | "shared";
+
+async function saveOrShare(fileName: string, mimeType: string, base64Content: string): Promise<SaveOutcome> {
   if (Platform.OS === "android") {
     try {
-      if (await saveToDeviceAndroid(fileName, mimeType, base64Content)) return;
+      if (await saveToDeviceAndroid(fileName, mimeType, base64Content)) return "saved";
     } catch {
       // SAF itself failed (not just a user cancel) — fall through to share.
     }
@@ -160,6 +163,7 @@ async function saveOrShare(fileName: string, mimeType: string, base64Content: st
     throw new Error("Couldn't save this file — no folder was chosen and sharing isn't available on this device.");
   }
   await Sharing.shareAsync(path, { mimeType, dialogTitle: fileName });
+  return "shared";
 }
 
 /**
@@ -170,17 +174,16 @@ async function saveOrShare(fileName: string, mimeType: string, base64Content: st
  * field instead. Fetch that URL to a local file first so the rest of the
  * save/share path can stay unchanged either way.
  */
-export async function downloadDataUri(fileName: string, source: string): Promise<void> {
+export async function downloadDataUri(fileName: string, source: string): Promise<SaveOutcome> {
   if (!source.startsWith("data:")) {
     const dest = `${FileSystem.cacheDirectory}${fileName}`;
     const result = await FileSystem.downloadAsync(source, dest);
     const mime = result.mimeType || result.headers?.["Content-Type"]?.split(";")[0] || "application/octet-stream";
     const base64 = await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
-    await saveOrShare(fileName, mime, base64);
-    return;
+    return saveOrShare(fileName, mime, base64);
   }
   const { mime, base64 } = base64FromDataUri(source);
-  await saveOrShare(fileName, mime, base64);
+  return saveOrShare(fileName, mime, base64);
 }
 
 /**

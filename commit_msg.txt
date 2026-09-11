@@ -1,0 +1,29 @@
+﻿Add Share Records access, shared-records privacy, and My Reports viewing/download fixes
+
+Share Records:
+- ShareRecordsScreen: create a code/QR, scan the doctor's screen, approve or
+  decline, end access early. The doctor-facing entry host is now read from
+  the API's own returned link instead of a hardcoded production domain, so
+  it's correct in any environment.
+
+Shared records privacy:
+- New SharedRecordsPrivacyScreen: per-record and per-category visibility
+  toggles, independent of a live Share Records grant.
+
+My Reports (RxReportsScreen):
+- Month filter was a horizontally-scrolling row of chips; replaced with the
+  same tap-to-open SelectField dropdown already used on the Health Timeline
+  screen.
+- Review-tray items had no way to see the actual uploaded file before
+  answering what it is; added a "View the file" action.
+- View and Download are now separate actions: View opens the file directly
+  with no save/share dialog, Download keeps the save-to-device/share flow.
+  Both previously shared one busyId/loading flag, so either action lit up
+  both buttons; now tracked independently.
+- Failures while the detail sheet is open (view/download errors) now surface
+  inside the sheet itself instead of only on the screen behind it, and a
+  successful download reports whether it was saved or shared.
+- pickAndUpload's per-file failures (e.g. the ~11MB size cap) now show the
+  real backend reason instead of a generic "upload failed".
+
+CaptureScreen: multi-shot capture rebuild (camera + gallery + QR in one flow).
