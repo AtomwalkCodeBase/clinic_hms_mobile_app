@@ -33,6 +33,15 @@ const mmss = (secs: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
+// The doctor's entry page is always FRONTEND_URL + "/share" — same origin the
+// backend just handed back in `created.link` (…/share-records/<token>).
+// Deriving it from there instead of hardcoding the production domain means
+// this instruction is correct in dev (LAN IP) without ever needing a revert.
+function shareEntryHost(link?: string): string {
+  if (!link) return "clinic.atomwalk.com";
+  return link.replace(/^https?:\/\//, "").split("/")[0];
+}
+
 export function ShareRecordsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useAppTheme();
@@ -238,7 +247,7 @@ export function ShareRecordsScreen() {
               {created.code.replace(/(\d{3})(\d{3})/, "$1 $2")}
             </Text>
             <Text style={styles.codePanelHint}>
-              They open <Text style={{ fontWeight: "700" }}>clinic.atomwalk.com/share</Text> on a computer and type it.
+              They open <Text style={{ fontWeight: "700" }}>{shareEntryHost(created.link)}/share</Text> on a computer and type it.
             </Text>
           </View>
           <Pressable onPress={onShareLink} style={styles.linkInstead}>

@@ -58,4 +58,5 @@ export type AppStackParamList = {
   ThemePicker: undefined;
   Support: undefined;
   ShareRecords: undefined;
+  SharedRecordsPrivacy: undefined;
 };

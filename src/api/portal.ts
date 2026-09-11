@@ -19,6 +19,7 @@ import type {
   PatientDocument,
   PrescriptionOrder,
   Profile,
+  RecordsPrivacyPayload,
   RecordsShareConsentPrompt,
   RecordsShareCreated,
   RecordsShareDecision,
@@ -261,6 +262,74 @@ export async function recordsShareDownloadDecision(token: string, approve: boole
   return res.data.data;
 }
 
+// ── Shared-records privacy ──────────────────────────────────────────────────
+// The patient's standing "what a doctor sees when I share my records" config,
+// the per-record lock used from My Reports, and the per-visit reveal on a
+// live grant. Backend: apps/patients/records_share_views.py.
+
+export interface RecordsPrivacyQuery {
+  /** 1-based page; the list is paged on category boundaries */
+  page?: number;
+  /** csv of panel slugs */
+  category?: string;
+  /** csv of doc_type slugs */
+  kind?: string;
+  /** YYYY-MM */
+  month?: string;
+  q?: string;
+}
+
+export async function getRecordsPrivacy(
+  query: RecordsPrivacyQuery = {},
+): Promise<RecordsPrivacyPayload> {
+  const res = await api.get<Envelope<RecordsPrivacyPayload>>("/portal/records-privacy/", {
+    params: query,
+  });
+  return res.data.data;
+}
+
+/**
+ * Replace one or more of the broad-rule keys (only the keys you pass change).
+ * `add_hidden_doc_ids` / `remove_hidden_doc_ids` are incremental deltas on the
+ * individual-lock set — used for bulk lock/unlock now the list is paged and the
+ * client can't send a full replacement `hidden_doc_ids`.
+ */
+export async function updateRecordsPrivacy(
+  patch: Partial<
+    Pick<RecordsPrivacyPayload, "hide_all" | "hidden_categories" | "hidden_kinds" | "hidden_sections">
+  > & { hidden_doc_ids?: number[]; add_hidden_doc_ids?: number[]; remove_hidden_doc_ids?: number[] },
+) {
+  const res = await api.put<Envelope<{ ok: boolean }>>("/portal/records-privacy/", patch);
+  return res.data.data;
+}
+
+/** The single-record lock — add or remove one document from standing privacy. */
+export async function toggleRecordPrivacy(docId: number, isPrivate: boolean) {
+  const res = await api.post<Envelope<{ doc_id: number; private: boolean }>>(
+    "/portal/records-privacy/toggle/",
+    { doc_id: docId, private: isPrivate },
+  );
+  return res.data.data;
+}
+
+/**
+ * Reveal private records on a LIVE share grant.
+ *   "visit"   — show them to the doctor for this visit only (auto-hide on end)
+ *   "always"  — also clear them from standing privacy
+ *   "conceal" — undo a this-visit reveal now
+ */
+export async function revealForShare(
+  token: string,
+  docIds: number[],
+  scope: "visit" | "always" | "conceal",
+) {
+  const res = await api.post<Envelope<{ shown_private_ids: number[] }>>(
+    `/portal/records-share/${token}/reveal/`,
+    { doc_ids: docIds, scope },
+  );
+  return res.data.data;
+}
+
 /**
  * PATCH /portal/profile/ — update name / gender / DOB / photo / emergency
  * contact. `mobile` is special: changing it to a NEW number requires
@@ -409,10 +478,27 @@ export async function getDocumentDetail(id: number, opts?: { download?: boolean 
   return res.data.data;
 }
 
-/** Re-file an unsorted / patient-uploaded document. Verified hospital docs 409. */
-export async function recategoriseDocument(id: number, doc_type: string) {
-  const res = await api.patch<Envelope<{ id: number; doc_type: string }>>(`/portal/documents/${id}/`, { doc_type });
+/**
+ * Re-file an unsorted / patient-uploaded document. Verified hospital docs 409.
+ * Send only the field(s) the review flow is asking for right now — the
+ * server recomputes `review_needs` from what's still missing afterward, so a
+ * partial submission (e.g. just the type) correctly re-prompts for the rest
+ * (e.g. the panel) instead of prematurely marking the row filed.
+ */
+export async function fileReviewDocument(
+  id: number,
+  patch: { doc_type?: string; report_categories?: string[]; document_date?: string },
+) {
+  const res = await api.patch<Envelope<{
+    id: number; doc_type: string; report_categories: string[];
+    document_date: string | null; review_state: string; review_needs: string[];
+  }>>(`/portal/documents/${id}/`, patch);
   return res.data.data;
+}
+
+/** @deprecated use fileReviewDocument — kept for any other caller of the old, type-only shape. */
+export async function recategoriseDocument(id: number, doc_type: string) {
+  return fileReviewDocument(id, { doc_type });
 }
 
 /** Remove from My Records — patient upload is soft-deleted, hospital doc hidden. */
@@ -421,7 +507,18 @@ export async function deleteDocument(id: number) {
   return res.data;
 }
 
-/** Same raw-object shape as the GET above, not the {success,data} envelope. */
+/**
+ * One upload can come back three ways (all HTTP 200/201, raw object — not the
+ * {success,data} envelope):
+ *   • a created doc   — { id, review_state: "filed" | "unsorted", report_categories, unreadable, ... }
+ *   • not a medical doc — { skipped: true, kind: "not_medical", reason }
+ *   • already uploaded  — { duplicate: true, existing_id, existing_title, existing_doc_type }
+ */
+export type UploadResult =
+  | (PatientDocument & { review_state: string; unreadable?: boolean; quality_message?: string; report_categories?: string[] })
+  | { skipped: true; kind: string; reason: string }
+  | { duplicate: true; existing_id: number; existing_title: string; existing_doc_type: string };
+
 export async function uploadDocument(payload: {
   title: string;
   doc_type: string;
@@ -430,8 +527,8 @@ export async function uploadDocument(payload: {
   file_data: string;
   qr_token?: string;
   patient_awpid?: string;
-}) {
-  const res = await api.post<PatientDocument>("/portal/documents/", payload);
+}): Promise<UploadResult> {
+  const res = await api.post<UploadResult>("/portal/documents/", payload);
   return res.data;
 }
 
