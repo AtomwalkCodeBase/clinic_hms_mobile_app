@@ -1,6 +1,7 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AppStackParamList } from "./types";
+import { NEUTRAL } from "@/theme/themes";
 import { AppTabs } from "./AppTabs";
 import { FindDoctorsScreen } from "@/screens/appointments/FindDoctorsScreen";
 import { DoctorDetailScreen } from "@/screens/appointments/DoctorDetailScreen";
@@ -9,6 +10,7 @@ import { ConfirmBookingScreen } from "@/screens/appointments/ConfirmBookingScree
 import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScreen";
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
 import { RxReportsScreen } from "@/screens/records/RxReportsScreen";
+import { AITrendsScreen } from "@/screens/records/AITrendsScreen";
 import { CaptureScreen } from "@/screens/records/CaptureScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
@@ -36,7 +38,19 @@ const Stack = createNativeStackNavigator<AppStackParamList>();
 // useExitOnDoubleBack.
 export function AppStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        statusBarTranslucent: true,
+        statusBarColor: "transparent",
+        // react-native-screens' native Screen view defaults to a BLACK
+        // background on Android — with translucent status bar + no header,
+        // that default paints straight through as a black strip behind the
+        // status bar, since nothing in JS renders there before our own
+        // Screen component's content mounts over it. This is that fix.
+        contentStyle: { backgroundColor: NEUTRAL.bg },
+      }}
+    >
       <Stack.Screen name="Tabs" component={AppTabs} />
       <Stack.Screen name="FindDoctors" component={FindDoctorsScreen} />
       <Stack.Screen name="DoctorDetail" component={DoctorDetailScreen} />
@@ -45,6 +59,7 @@ export function AppStack() {
       <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       <Stack.Screen name="RxReports" component={RxReportsScreen} />
+      <Stack.Screen name="AITrends" component={AITrendsScreen} />
       <Stack.Screen name="RxCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />

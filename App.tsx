@@ -1,5 +1,4 @@
 import React from "react";
-import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
@@ -26,7 +25,6 @@ export default function App() {
       <ThemeProvider>
         <NetworkProvider>
           <AuthProvider>
-            <StatusBar style="dark" />
             <RootNavigator />
             <OfflineBanner />
           </AuthProvider>

@@ -1,6 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
+import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { ArrowLeft } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -39,8 +42,22 @@ export function Screen({
     ]).start();
   }, []);
 
+  // The strip above the header on Android wasn't the status bar's own paint
+  // (translucent/contentStyle changes on the navigator made no visible
+  // difference) — it was the native Activity's window background, which
+  // defaults to black and shows through in the sliver before/around
+  // whatever the JS tree renders. Coloring that root window directly (not
+  // just the RN view tree) is the fix; re-applied on every screen focus so
+  // it always matches whichever screen is currently on top.
+  useFocusEffect(
+    useCallback(() => {
+      SystemUI.setBackgroundColorAsync(topColor || NEUTRAL.bg);
+    }, [topColor])
+  );
+
   return (
     <View style={styles.safe}>
+      <StatusBar style={topColor ? "light" : "dark"} />
       {!!topColor && <View style={{ height: insets.top, backgroundColor: topColor }} />}
       <SafeAreaView style={styles.safeInner} edges={topColor ? ["bottom"] : ["top", "bottom"]}>
         <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>

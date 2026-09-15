@@ -38,7 +38,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   pill: {
     backgroundColor: "#FFFFFF",
-    alignSelf: "flex-start",
     shadowColor: "#000",
     shadowOpacity: 0.15,
     shadowOffset: { width: 0, height: 1 },

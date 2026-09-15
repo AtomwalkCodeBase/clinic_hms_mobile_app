@@ -127,7 +127,7 @@ export function ProfileScreen() {
   return (
     <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
       {profile && (
-        <MetalHero style={styles.hero} curved>
+        <MetalHero style={styles.hero} curved underStatusBar>
           <View style={styles.heroContent}>
             <View style={styles.avwrap}>
               <View style={styles.avatar}>

@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator, Linking } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, ShieldCheck,
-  ChevronDown, ChevronRight, AlertCircle, Lock, Unlock, Clock, Check,
+  ChevronDown, ChevronRight, AlertCircle, Lock, Unlock, Clock, Check, Sparkles,
+  Eye, Download, Trash2,
 } from "lucide-react-native";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
@@ -12,8 +14,10 @@ import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
 import { DateField } from "@/components/DateField";
 import { SelectField } from "@/components/SelectField";
+import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import type { LucideIcon } from "@/theme/icons";
 import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { apiErrorMessage } from "@/api/client";
 import {
@@ -159,6 +163,39 @@ function RecRow({
   );
 }
 
+// A small outlined action for the detail sheet's View/Download row — the
+// previous version reused PrimaryButton/SecondaryButton (full-width pill
+// CTAs meant for one-decision screens like Sign in), which stacked into an
+// oversized, heavy block for what's really a compact "here's what you can
+// do with this file" row. View and Download are equal-weight actions on
+// the same file, so both get the same neutral styling — no reason one
+// should read as more important than the other.
+function FileAction({
+  icon: Icon, label, loading, onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  loading?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={loading}
+      style={({ pressed }) => [styles.fileAction, pressed && { opacity: 0.7 }]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={NEUTRAL.textSecondary} />
+      ) : (
+        <>
+          <Icon size={14} color={NEUTRAL.textSecondary} strokeWidth={2.2} />
+          <Text style={styles.fileActionText} numberOfLines={1}>{label}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
 // ── screen ─────────────────────────────────────────────────────────────────
 export function RxReportsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -181,6 +218,8 @@ export function RxReportsScreen() {
   const [tab, setTab] = useState<"all" | "prescription" | "lab_report" | "other">("all");
   const [q, setQ] = useState("");
   const [month, setMonth] = useState<string>(""); // "" until resolved, "ALL", or "YYYY-MM"
+  const [catF, setCatF] = useState<Set<string>>(new Set()); // lab panel filter — only meaningful in catMode
+  const [showCatSheet, setShowCatSheet] = useState(false);
   const [visible, setVisible] = useState(PAGE);
   const [showPending, setShowPending] = useState(false);
 
@@ -346,7 +385,7 @@ export function RxReportsScreen() {
     setMonth(pick ? pick.key : "ALL");
   }, [monthOpts, month]);
 
-  useEffect(() => { setVisible(PAGE); }, [tab, q, month]);
+  useEffect(() => { setVisible(PAGE); }, [tab, q, month, catF]);
 
   const counts = useMemo(() => {
     const c = { all: 0, prescription: 0, lab_report: 0, other: 0 };
@@ -358,6 +397,20 @@ export function RxReportsScreen() {
       else c.other++;
     });
     return c;
+  }, [docs]);
+
+  // Panel filter only makes sense while looking at lab reports (or "all",
+  // which includes them) — prescriptions/documents have no panel.
+  const catMode = tab === "all" || tab === "lab_report";
+  const catOptions = useMemo(() => {
+    const c = new Map<string, number>();
+    docs.forEach((d) => {
+      if (d.review_state === "unsorted" || d.doc_type !== "lab_report") return;
+      (d.report_categories || []).forEach((slug) => c.set(slug, (c.get(slug) || 0) + 1));
+    });
+    return Object.keys(REVIEW_CATEGORY_LABELS)
+      .filter((slug) => c.has(slug))
+      .map((slug) => ({ value: slug, label: REVIEW_CATEGORY_LABELS[slug], count: c.get(slug)! }));
   }, [docs]);
 
   const unsorted = useMemo(() => docs.filter((d) => d.review_state === "unsorted"), [docs]);
@@ -398,8 +451,9 @@ export function RxReportsScreen() {
         [d.title, d.hospital_label, d.doctor_label, d.public_document_id]
           .filter(Boolean).join(" ").toLowerCase().includes(needle))
       .filter((d) => (!month || month === "ALL" ? true : ymKey(d.document_date || d.created_at) === month))
+      .filter((d) => !catMode || !catF.size || (d.report_categories || []).some((c) => catF.has(c)))
       .sort((a, b) => (b.document_date || b.created_at).localeCompare(a.document_date || a.created_at));
-  }, [docs, tab, q, month]);
+  }, [docs, tab, q, month, catF, catMode]);
 
   const shown = filtered.slice(0, visible);
 
@@ -612,6 +666,32 @@ export function RxReportsScreen() {
         {docs.length ? ` · newest ${fmtShort(docs[0]?.document_date || docs[0]?.created_at)}` : ""}
       </Text>
 
+      {counts.lab_report > 0 && (
+        <Pressable
+          onPress={() => navigation.navigate("AITrends", patientAwpid ? { patientAwpid } : undefined)}
+          style={({ pressed }) => [pressed && { opacity: 0.9 }]}
+        >
+          <LinearGradient
+            colors={[theme.text, theme.fill]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.aiBanner}
+          >
+            <View style={styles.aiBannerIcon}>
+              <Sparkles size={20} color="#fff" strokeWidth={2.2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={styles.aiBannerTitle}>AI Trends</Text>
+                <View style={styles.aiBannerBadge}><Text style={styles.aiBannerBadgeT}>NEW</Text></View>
+              </View>
+              <Text style={styles.aiBannerSub}>Spot patterns across your lab reports</Text>
+            </View>
+            <ChevronRight size={18} color="#fff" strokeWidth={2.4} />
+          </LinearGradient>
+        </Pressable>
+      )}
+
       {privEnabled && !!privSession && (
         <View style={styles.privBanner}>
           <Clock size={12} color={NEUTRAL.warning} strokeWidth={2.2} style={{ marginTop: 1 }} />
@@ -703,6 +783,19 @@ export function RxReportsScreen() {
         placeholder="All months"
         clearLabel="All months"
       />
+
+      {/* lab panel filter — only while looking at lab reports */}
+      {catMode && catOptions.length > 0 && (
+        <Pressable
+          onPress={() => setShowCatSheet(true)}
+          style={[styles.catTrigger, catF.size > 0 && { borderColor: theme.fill }]}
+        >
+          <Text style={[styles.catTriggerText, catF.size > 0 && { color: theme.text, fontWeight: "700" }]} numberOfLines={1}>
+            {catF.size === 0 ? "All categories" : catF.size === 1 ? REVIEW_CATEGORY_LABELS[[...catF][0]] : `${catF.size} categories`}
+          </Text>
+          <ChevronDown size={13} color={catF.size > 0 ? theme.text : NEUTRAL.textMuted} />
+        </Pressable>
+      )}
 
       {/* pending pharmacy / lab choices */}
       {pendingCount > 0 && (
@@ -851,7 +944,9 @@ export function RxReportsScreen() {
                 <View style={{ gap: 8, marginTop: 12 }}>
                   <PrimaryButton label="It's a prescription" onPress={() => setReviewType("prescription")} />
                   <SecondaryButton label="It's a lab report" onPress={() => setReviewType("lab_report")} />
-                  <SecondaryButton label="It's a scan / discharge summary" onPress={() => setReviewType("other")} />
+                  <SecondaryButton label="It's a scan / imaging" onPress={() => setReviewType("scan")} />
+                  <SecondaryButton label="It's a discharge summary" onPress={() => setReviewType("discharge_summary")} />
+                  <SecondaryButton label="Something else" onPress={() => setReviewType("other")} />
                   <SecondaryButton label="Not a medical record — remove" danger loading={busyId === detail.id} onPress={() => fileAs(detail, "__remove__")} />
                 </View>
               )}
@@ -909,34 +1004,46 @@ export function RxReportsScreen() {
               value={detail.verification_status === "verified" ? "Verified · QR authenticated" : "Not verified"}
               valueColor={detail.verification_status === "verified" ? NEUTRAL.success : undefined}
             />
-            <View style={{ gap: 8, marginTop: 14 }}>
-              <PrimaryButton
-                label={detail.handwritten_doc_id ? "View prescription" : "View"}
-                loading={busyId === detail.id && busyAction === "view"}
-                onPress={() => viewFile(detail.id)}
-              />
-              <SecondaryButton
-                label={detail.handwritten_doc_id ? "Download prescription" : "Download"}
-                loading={busyId === detail.id && busyAction === "download"}
-                onPress={() => openFile(detail.id)}
-              />
+            <View style={{ marginTop: 14 }}>
+              <View style={styles.actionRow}>
+                <FileAction
+                  icon={Eye}
+                  label={detail.handwritten_doc_id ? "View prescription" : "View"}
+                  loading={busyId === detail.id && busyAction === "view"}
+                  onPress={() => viewFile(detail.id)}
+                />
+                <FileAction
+                  icon={Download}
+                  label={detail.handwritten_doc_id ? "Download prescription" : "Download"}
+                  loading={busyId === detail.id && busyAction === "download"}
+                  onPress={() => openFile(detail.id)}
+                />
+              </View>
               {!!detail.handwritten_doc_id && (
-                <>
-                  <SecondaryButton
+                <View style={styles.actionRow}>
+                  <FileAction
+                    icon={Eye}
                     label="View handwritten"
                     loading={busyId === detail.handwritten_doc_id && busyAction === "view"}
                     onPress={() => viewFile(detail.handwritten_doc_id!)}
                   />
-                  <SecondaryButton
+                  <FileAction
+                    icon={Download}
                     label="Download handwritten"
                     loading={busyId === detail.handwritten_doc_id && busyAction === "download"}
                     onPress={() => openFile(detail.handwritten_doc_id!)}
                   />
-                </>
+                </View>
               )}
               {!!sheetError && <Text style={styles.sheetErrorText}>{sheetError}</Text>}
               {!!sheetMessage && <Text style={styles.sheetSuccessText}>{sheetMessage}</Text>}
-              <SecondaryButton label="Delete from my records" danger onPress={() => removeDoc(detail)} />
+              <Pressable
+                onPress={() => removeDoc(detail)}
+                style={({ pressed }) => [styles.deleteLink, pressed && { opacity: 0.6 }]}
+              >
+                <Trash2 size={13} color={NEUTRAL.danger} strokeWidth={2.2} />
+                <Text style={styles.deleteLinkText}>Delete from my records</Text>
+              </Pressable>
             </View>
             {detail.uploaded_by === "staff" && (
               <Text style={styles.sheetNote}>
@@ -983,11 +1090,34 @@ export function RxReportsScreen() {
         actions={lockSheet?.actions || []}
         onClose={() => setLockSheet(null)}
       />
+
+      <CategoryFilterSheet
+        visible={showCatSheet}
+        options={catOptions}
+        selected={[...catF]}
+        accent={theme.fill}
+        onClose={() => setShowCatSheet(false)}
+        onApply={(next) => setCatF(new Set(next))}
+      />
+
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  catTrigger: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6,
+    borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, backgroundColor: NEUTRAL.surface,
+  },
+  catTriggerText: { fontSize: 13, color: NEUTRAL.textPrimary, flex: 1 },
+  aiBanner: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, padding: 14, marginBottom: 12 },
+  aiBannerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
+  aiBannerTitle: { fontSize: 14.5, fontWeight: "800", color: "#fff" },
+  aiBannerBadge: { backgroundColor: "rgba(255,255,255,0.22)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1 },
+  aiBannerBadgeT: { fontSize: 9.5, fontWeight: "700", color: "#fff" },
+  aiBannerSub: { fontSize: 12, color: "rgba(255,255,255,0.82)", marginTop: 2 },
+
   upRep: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 12 },
   upRepHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   upRepTitle: { fontSize: 13.5, fontWeight: "800", color: NEUTRAL.textPrimary },
@@ -1055,6 +1185,16 @@ const styles = StyleSheet.create({
   sheetNote: { fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, lineHeight: 14 },
   sheetErrorText: { fontSize: 12, color: NEUTRAL.danger, marginTop: 8, lineHeight: 16 },
   sheetSuccessText: { fontSize: 12, color: NEUTRAL.success, marginTop: 8, lineHeight: 16 },
+
+  actionRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  fileAction: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 11, paddingVertical: 10, paddingHorizontal: 8,
+    backgroundColor: NEUTRAL.surface,
+  },
+  fileActionText: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary },
+  deleteLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, marginTop: 6 },
+  deleteLinkText: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.danger },
 
   mBackdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   mSheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 22 },

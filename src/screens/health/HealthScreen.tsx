@@ -102,7 +102,7 @@ export function HealthScreen() {
   return (
     <Screen onRefresh={loadSummary} refreshing={loading} topColor="#249c57">
       {selected && (
-        <MetalHero style={styles.hero} curved>
+        <MetalHero style={styles.hero} curved underStatusBar>
           <Text style={styles.name}>{selected.full_name}</Text>
           <Text style={styles.meta}>
             {ageFromDob(selected.date_of_birth)} · {selected.gender === "M" ? "Male" : selected.gender === "F" ? "Female" : "—"} · AWPID: {selected.awpid}

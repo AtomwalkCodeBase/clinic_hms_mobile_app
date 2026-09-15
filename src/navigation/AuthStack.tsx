@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AuthStackParamList } from "./types";
+import { NEUTRAL } from "@/theme/themes";
 import { WelcomeScreen } from "@/screens/auth/WelcomeScreen";
 import { LoginScreen } from "@/screens/auth/LoginScreen";
 import { RegisterScreen } from "@/screens/auth/RegisterScreen";
@@ -25,7 +26,15 @@ export function AuthStack() {
   if (!initialRoute) return null;
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        statusBarTranslucent: true,
+        statusBarColor: "transparent",
+        contentStyle: { backgroundColor: NEUTRAL.bg },
+      }}
+      initialRouteName={initialRoute}
+    >
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />

@@ -1,6 +1,7 @@
 import React from "react";
 import { View, StyleSheet, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // The brand mark stays a fixed dark green regardless of the user's chosen
 // accent theme (see theme/themes.ts) — this hero uses the same fixed
@@ -52,6 +53,7 @@ export function MetalHero({
   compact,
   decorative,
   curved,
+  underStatusBar,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
@@ -62,9 +64,29 @@ export function MetalHero({
    * hero reads as flowing into the page on screens designed for it (Home),
    * without changing the edge-to-edge look everywhere else this is used. */
   curved?: boolean;
+  /** Extends the hero's own gradient (+ sheen) up through the status-bar
+   * safe-area inset instead of stopping at the scroll content's top edge —
+   * pair with Screen's `topColor` (same color as METAL_STOPS[0]) on screens
+   * where this is the first thing rendered. Screen's `topColor` View is a
+   * flat-color placeholder for that strip; without this, the real gradient
+   * (and its sheen highlight) starts right below it and visibly doesn't
+   * match the flat fill, reading as a seam. This makes the actual gradient
+   * cover that strip too, so there's nothing left to mismatch. */
+  underStatusBar?: boolean;
 }) {
+  const insets = useSafeAreaInsets();
+  const topPad = (compact ? 14 : 18) + (underStatusBar ? insets.top : 0);
   return (
-    <View style={[styles.wrap, compact ? styles.compactPad : styles.pad, curved && styles.curved, style]}>
+    <View
+      style={[
+        styles.wrap,
+        compact ? styles.compactPad : styles.pad,
+        { paddingTop: topPad },
+        underStatusBar && { marginTop: -16 - insets.top },
+        curved && styles.curved,
+        style,
+      ]}
+    >
       <LinearGradient
         colors={METAL_STOPS}
         locations={METAL_LOCATIONS}

@@ -42,9 +42,13 @@ type Nav = CompositeNavigationProp<
 // actual primary task, not one option equally weighted against the rest.
 // That also fixes the 5-tiles-in-a-2-column-grid problem (an odd count
 // always leaves one tile orphaned on its own row).
+// "Health journey" used to live here too, but it just redirected straight
+// into the Health tab — already one tap away on the bottom nav, so the tile
+// was a dead extra step, not a shortcut to anything the grid itself
+// couldn't reach. Freed up for a visitor-management tile a teammate is
+// building.
 const QUICK_ACTIONS: { key: string; label: string; sub: string; icon: LucideIcon; tint: GadgetTint }[] = [
   { key: "appointments", label: "Appointments", sub: "Upcoming and past visits", icon: ClipboardList, tint: DASHBOARD_TINTS.teal },
-  { key: "health", label: "Health journey", sub: "Vaccines, visits, and more", icon: HeartPulse, tint: DASHBOARD_TINTS.rose },
   { key: "records", label: "Rx & Reports", sub: "Prescriptions, lab reports & docs", icon: FileText, tint: DASHBOARD_TINTS.slate },
   { key: "shareRecords", label: "Share Records", sub: "Let any doctor view your records", icon: QrCode, tint: DASHBOARD_TINTS.gold },
 ];
@@ -109,7 +113,6 @@ export function HomeScreen() {
 
   const onQuickAction = (key: string) => {
     if (key === "appointments") navigation.navigate("Tabs" as any, { screen: "Appointments" } as any);
-    else if (key === "health") navigation.navigate("Tabs" as any, { screen: "Health" } as any);
     else if (key === "records") navigation.navigate("RxReports");
     else if (key === "shareRecords") navigation.navigate("ShareRecords");
   };
@@ -134,7 +137,7 @@ export function HomeScreen() {
 
   return (
     <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
-      <MetalHero compact curved style={styles.hero}>
+      <MetalHero compact curved underStatusBar style={styles.hero}>
         <View style={styles.heroTop}>
           <LogoPill size={40} />
           <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
