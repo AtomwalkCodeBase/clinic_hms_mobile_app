@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 
@@ -28,6 +29,7 @@ export function CategoryFilterSheet({
   onClose: () => void;
   onApply: (next: string[]) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<Set<string>>(new Set(selected));
   useEffect(() => {
     if (visible) setDraft(new Set(selected));
@@ -49,7 +51,7 @@ export function CategoryFilterSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
       <Pressable style={styles.sheetBackdrop} onPress={close}>
-        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(24, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
           <View style={styles.sheetGrab} />
           <View style={styles.sheetHead}>
             <Text style={styles.sheetTitle}>Filter by category</Text>

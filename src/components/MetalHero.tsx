@@ -1,7 +1,8 @@
 import React from "react";
-import { View, StyleSheet, ViewStyle } from "react-native";
+import { View, Pressable, StyleSheet, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ArrowLeft } from "lucide-react-native";
 
 // The brand mark stays a fixed dark green regardless of the user's chosen
 // accent theme (see theme/themes.ts) — this hero uses the same fixed
@@ -54,6 +55,7 @@ export function MetalHero({
   decorative,
   curved,
   underStatusBar,
+  onBack,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
@@ -73,6 +75,15 @@ export function MetalHero({
    * match the flat fill, reading as a seam. This makes the actual gradient
    * cover that strip too, so there's nothing left to mismatch. */
   underStatusBar?: boolean;
+  /** Renders a back button as the hero's own first line instead of a
+   * separate BackHeader row above it — for auth sub-screens (Forgot
+   * password, Register, OTP login) that used to stack BackHeader on plain
+   * background above the hero, leaving a flat, unstyled strip (status bar
+   * inset + header row) before the green ever started. The on-page heading
+   * already restates the screen's purpose, so the header row's title text
+   * wasn't carrying anything unique — folding back-navigation into the hero
+   * itself lets these screens reach the top the same way Login/Welcome do. */
+  onBack?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const topPad = (compact ? 14 : 18) + (underStatusBar ? insets.top : 0);
@@ -102,7 +113,14 @@ export function MetalHero({
         style={StyleSheet.absoluteFill}
       />
       {decorative && <Decoration />}
-      <View style={styles.content}>{children}</View>
+      <View style={styles.content}>
+        {!!onBack && (
+          <Pressable onPress={onBack} hitSlop={10} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}>
+            <ArrowLeft size={18} color="#fff" strokeWidth={2.4} />
+          </Pressable>
+        )}
+        {children}
+      </View>
     </View>
   );
 }
@@ -113,6 +131,10 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 26 },
   compactPad: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 18 },
   content: { position: "relative" },
+  backBtn: {
+    width: 32, height: 32, borderRadius: 16, marginBottom: 10,
+    backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center",
+  },
   blob: { position: "absolute" },
   blobRing: { backgroundColor: "rgba(255,255,255,0.10)", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.22)" },
 });

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, Activi
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, ShieldCheck,
   ChevronDown, ChevronRight, AlertCircle, Lock, Unlock, Clock, Check, Sparkles,
@@ -203,6 +204,7 @@ export function RxReportsScreen() {
   const patientAwpid = route.params?.patientAwpid;
   const patientName = route.params?.patientName;
   const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
 
   const [docs, setDocs] = useState<PatientDocument[]>([]);
   const [pendingRx, setPendingRx] = useState<PrescriptionOrder[]>([]);
@@ -306,7 +308,7 @@ export function RxReportsScreen() {
         message: `${name} won't be shown to doctors when you share your records. You'll still see it here.`,
         actions: [
           { label: "Cancel", cancel: true },
-          { label: "Make private", primary: true, onPress: () => privToggle(d.id, true) },
+          { label: "Make private", cancel: true, onPress: () => privToggle(d.id, true) },
         ],
       });
     } else if (privSession) {
@@ -484,6 +486,15 @@ export function RxReportsScreen() {
     try {
       const full = await getDocumentDetail(id);
       const src = (full as any).file_data as string;
+      if (!src) {
+        // A handful of demo/seed rows carry no actual file (they only exist
+        // to back ExtractedLabValue test data) — signed_url() and the data:
+        // fallback both quietly return "" for a blank key rather than
+        // raising, so this is the one place that has to catch it before
+        // Linking.openURL("") throws its own unhelpful "cannot be empty".
+        setSheetError("This document doesn't have a file to view.");
+        return;
+      }
       if (src.startsWith("data:")) {
         // legacy inline rows have no viewable URL — fall back to save/share
         await downloadDataUri(full.file_name || full.title || "document", src);
@@ -507,7 +518,12 @@ export function RxReportsScreen() {
     setSheetMessage("");
     try {
       const full = await getDocumentDetail(id, { download: true });
-      const outcome = await downloadDataUri(full.file_name || full.title || "document", (full as any).file_data);
+      const src = (full as any).file_data as string;
+      if (!src) {
+        setSheetError("This document doesn't have a file to download.");
+        return;
+      }
+      const outcome = await downloadDataUri(full.file_name || full.title || "document", src);
       setSheetMessage(outcome === "saved" ? "Downloaded to your device." : "Shared.");
     } catch (err) {
       const msg = apiErrorMessage(err, "Couldn't open the file.");
@@ -1057,7 +1073,7 @@ export function RxReportsScreen() {
       {/* add sheet */}
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => !uploading && setAddOpen(false)}>
         <Pressable style={styles.mBackdrop} onPress={() => !uploading && setAddOpen(false)}>
-          <View style={styles.mSheet} onStartShouldSetResponder={() => true}>
+          <View style={[styles.mSheet, { paddingBottom: Math.max(22, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
             <View style={styles.handle} />
             <Text style={styles.mTitle}>Add a record</Text>
             <Text style={styles.mSub}>We read the QR or the page text and file each one for you.</Text>

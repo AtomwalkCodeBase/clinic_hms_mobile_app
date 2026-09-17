@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, Image, Modal, Switch } from "react-n
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Camera, IdCard, HeartPulse, Users, Building2, Palette, Headphones, Droplet, AlertTriangle, Lock, QrCode } from "lucide-react-native";
+import { Camera, IdCard, HeartPulse, Users, Building2, Palette, Headphones, Droplet, AlertTriangle, Lock } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
@@ -223,15 +223,6 @@ export function ProfileScreen() {
         iconColors={GADGET_TINTS.blue.icon}
         iconShadowColor={GADGET_TINTS.blue.shadow}
       />
-      <ListRow
-        icon={QrCode}
-        title="Share Records"
-        subtitle="Let a doctor view your records on their computer"
-        onPress={() => navigation.navigate("ShareRecords")}
-        iconColors={GADGET_TINTS.coral.icon}
-        iconShadowColor={GADGET_TINTS.coral.shadow}
-      />
-
       <ListRow
         icon={Lock}
         title="Shared records privacy"

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
+import { Screen, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
 import { PrimaryButton } from "@/components/Buttons";
 import { LogoPill } from "@/components/Logo";
@@ -81,9 +81,8 @@ export function OTPLoginScreen() {
   };
 
   return (
-    <Screen>
-      <BackHeader title="Sign in with a code" onBack={onBack} />
-      <MetalHero compact style={styles.hero} decorative curved>
+    <Screen topColor="#249c57">
+      <MetalHero compact style={styles.hero} decorative curved underStatusBar onBack={onBack}>
         <View style={styles.heroInner}>
           <LogoPill size={44} />
         </View>

@@ -1,5 +1,6 @@
 import React from "react";
 import { Modal, Pressable, View, Text, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 
@@ -34,10 +35,11 @@ export function ChoiceSheet({
   onClose: () => void;
 }) {
   const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(26, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
           <View style={styles.grab} />
           <Text style={styles.title}>{title}</Text>
           {!!message && <Text style={styles.message}>{message}</Text>}
@@ -99,9 +101,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     marginBottom: 8,
+    alignItems: "center",
   },
-  optLabel: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  optSub: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: 2 },
+  optLabel: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary, textAlign: "center" },
+  optSub: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: 2, textAlign: "center" },
   cancel: { alignItems: "center", paddingVertical: 12, marginTop: 2 },
   cancelText: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textMuted },
 });

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
+import { Screen, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
 import { DateField } from "@/components/DateField";
 import { PrimaryButton } from "@/components/Buttons";
@@ -120,9 +120,8 @@ export function RegisterScreen() {
   }[step];
 
   return (
-    <Screen>
-      <BackHeader title="Create account" onBack={onBack} />
-      <MetalHero compact style={styles.hero} decorative curved>
+    <Screen topColor="#249c57">
+      <MetalHero compact style={styles.hero} decorative curved underStatusBar onBack={onBack}>
         <View style={styles.heroInner}>
           <LogoPill size={44} />
         </View>
