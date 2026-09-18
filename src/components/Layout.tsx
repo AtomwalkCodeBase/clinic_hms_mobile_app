@@ -14,6 +14,7 @@ export function Screen({
   onRefresh,
   refreshing,
   topColor,
+  bottomInset = true,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -25,9 +26,22 @@ export function Screen({
    * the screen instead of showing a mismatched light strip above it. Pass
    * the hero gradient's own top-left stop (see MetalHero's METAL_STOPS). */
   topColor?: string;
+  /** False for a screen that sits directly under AppTabs' bottom Tab.Navigator
+   * (Home/Visits/Health/Profile) — its tabBarStyle already reserves the
+   * bottom safe-area inset (height + paddingBottom, see AppTabs.tsx), and
+   * the tab bar is NOT position:absolute, so React Navigation already sizes
+   * the content area to stop exactly at the tab bar. Also reserving that
+   * same inset here (the default, for every other screen — pushed via
+   * Stack.Navigator, no tab bar below them) double-counts it: a gap of
+   * this Screen's own plain background, exactly insets.bottom tall,
+   * appears between the content and the tab bar. */
+  bottomInset?: boolean;
 }) {
   const Body = scroll ? ScrollView : View;
   const insets = useSafeAreaInsets();
+  const edges = (topColor ? ["bottom"] : ["top", "bottom"]).filter(
+    (e) => bottomInset || e !== "bottom",
+  ) as ("top" | "bottom")[];
   // Every screen used to pop in the instant its data resolved — fine on a
   // fast connection, but a visible "blank, then sudden content" flash on
   // any real network delay. A short fade+rise on mount doesn't remove the
@@ -59,7 +73,7 @@ export function Screen({
     <View style={styles.safe}>
       <StatusBar style={topColor ? "light" : "dark"} />
       {!!topColor && <View style={{ height: insets.top, backgroundColor: topColor }} />}
-      <SafeAreaView style={styles.safeInner} edges={topColor ? ["bottom"] : ["top", "bottom"]}>
+      <SafeAreaView style={styles.safeInner} edges={edges}>
         <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
           <Body
             style={styles.body}

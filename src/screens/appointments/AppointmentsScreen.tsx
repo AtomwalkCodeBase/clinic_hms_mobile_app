@@ -139,7 +139,7 @@ export function AppointmentsScreen() {
   };
 
   return (
-    <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
+    <Screen onRefresh={load} refreshing={loading} topColor="#249c57" bottomInset={false}>
       <MetalHero compact curved underStatusBar style={styles.hero}>
         <Text style={styles.bannerTitle}>Find a doctor instantly</Text>
         <Text style={styles.bannerSub}>Book across every hospital on the platform</Text>

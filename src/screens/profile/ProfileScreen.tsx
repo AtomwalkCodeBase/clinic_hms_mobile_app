@@ -125,7 +125,7 @@ export function ProfileScreen() {
   const allergyCount = summary?.active_allergies.length ?? 0;
 
   return (
-    <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
+    <Screen onRefresh={load} refreshing={loading} topColor="#249c57" bottomInset={false}>
       {profile && (
         <MetalHero style={styles.hero} curved underStatusBar>
           <View style={styles.heroContent}>

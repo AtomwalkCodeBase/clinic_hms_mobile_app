@@ -136,7 +136,7 @@ export function HomeScreen() {
   const todayBookings = upcoming.filter((b) => b.date === todayIso);
 
   return (
-    <Screen onRefresh={load} refreshing={loading} topColor="#249c57">
+    <Screen onRefresh={load} refreshing={loading} topColor="#249c57" bottomInset={false}>
       <MetalHero compact curved underStatusBar style={styles.hero}>
         <View style={styles.heroTop}>
           <LogoPill size={40} />

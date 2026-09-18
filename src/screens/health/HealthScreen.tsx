@@ -100,7 +100,7 @@ export function HealthScreen() {
   };
 
   return (
-    <Screen onRefresh={loadSummary} refreshing={loading} topColor="#249c57">
+    <Screen onRefresh={loadSummary} refreshing={loading} topColor="#249c57" bottomInset={false}>
       {selected && (
         <MetalHero style={styles.hero} curved underStatusBar>
           <Text style={styles.name}>{selected.full_name}</Text>
