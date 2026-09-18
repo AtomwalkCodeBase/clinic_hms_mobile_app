@@ -10,9 +10,7 @@ import type {
   Envelope,
   FamilyMember,
   GrowthPoint,
-  HealthInsightNarrative,
   HealthSummary,
-  HealthTrendParameter,
   Hospital,
   LabOrder,
   MedicalRecord,
@@ -490,52 +488,6 @@ export async function getDocumentDetail(id: number, opts?: { download?: boolean 
     `/portal/documents/${id}/`,
     { params: opts?.download ? { download: 1 } : {} },
   );
-  return res.data.data;
-}
-
-/**
- * Per-analyte time series for the AI Trends screen's chart (both the line
- * and bar views draw from the same `points`) — confidence-gated and unit-
- * normalized server-side (core.lab_variation). `parameters` is sorted by
- * most confident readings first. `minPoints` defaults server-side to 2 (a
- * chart needs 2+ points) — pass 1 to get every analyte the patient has ANY
- * confident reading for, so a test they've only had once still shows up as
- * selectable (with a "needs one more reading" state) rather than being
- * absent from the picker entirely.
- */
-export async function getHealthTrends(opts?: { range?: "3m" | "6m" | "12m" | "all"; patientAwpid?: string; minPoints?: number }) {
-  const res = await api.get<Envelope<{ range: string; parameters: HealthTrendParameter[] }>>(
-    "/portal/health-insights/trends/",
-    {
-      params: {
-        range: opts?.range || "12m",
-        ...(opts?.minPoints ? { min_points: opts.minPoints } : {}),
-        ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
-      },
-    },
-  );
-  return res.data.data;
-}
-
-/**
- * The "AI trends" narrative paragraph — POST because it's the one call on
- * this screen that hits an LLM; reaching the AI Trends screen at all is
- * itself the patient's explicit ask, so this fires automatically per
- * selected parameter rather than needing a second confirm step. `narrative`
- * comes back null when there isn't enough history yet or the LLM layer is
- * unavailable — the caller shows a plain "not enough data" / "couldn't
- * generate this right now" either way, never an error state.
- */
-export async function getHealthInsightNarrative(opts?: {
-  parameterSlug?: string;
-  range?: "3m" | "6m" | "12m" | "all";
-  patientAwpid?: string;
-}) {
-  const res = await api.post<Envelope<HealthInsightNarrative>>("/portal/health-insights/narrate/", {
-    ...(opts?.parameterSlug ? { parameter_slug: opts.parameterSlug } : {}),
-    range: opts?.range || "12m",
-    ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
-  });
   return res.data.data;
 }
 

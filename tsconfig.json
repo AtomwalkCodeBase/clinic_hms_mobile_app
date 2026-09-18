@@ -8,5 +8,14 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["**/*.ts", "**/*.tsx"],
+  // AI Trends screens — kept on disk locally for ongoing work but out of the
+  // repo (see .gitignore) and unreachable from the app (no route points at
+  // them anymore). Excluded here so `tsc` doesn't choke on files nothing
+  // imports; harmless on a machine where they don't exist at all.
+  "exclude": [
+    "src/screens/records/AITrendsScreen.tsx",
+    "src/components/TrendMiniChart.tsx",
+    "src/components/ActivityAreaChart.tsx"
+  ]
 }

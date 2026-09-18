@@ -441,29 +441,3 @@ export interface RescheduleResult {
 
 export type Envelope<T> = { success: boolean; message: string; data: T };
 
-// PortalHealthInsightNarrativeView (POST /portal/health-insights/narrate/)
-export interface TrendPoint {
-  document_id: number;
-  date: string; // "YYYY-MM-DD"
-  value: number;
-  reference_low: number | null;
-  reference_high: number | null;
-  status: "high" | "low" | "normal" | null;
-}
-export interface HealthTrendParameter {
-  slug: string;
-  label: string;
-  unit: string;
-  latest_value: number;
-  latest_status: "high" | "low" | "normal" | null;
-  concern: "higher_is_concern" | "lower_is_concern" | "neutral";
-  /** Report panel(s) of this parameter's most recent contributing document
-   * (e.g. [{slug:"cbc", label:"Complete Blood Count"}]) — for filtering the
-   * AI Trends parameter picker by category. */
-  panels: { slug: string; label: string }[];
-  points: TrendPoint[];
-}
-export interface HealthInsightNarrative {
-  parameter: HealthTrendParameter | null;
-  narrative: string | null;
-}

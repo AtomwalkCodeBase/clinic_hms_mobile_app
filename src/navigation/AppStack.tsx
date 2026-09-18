@@ -10,7 +10,6 @@ import { ConfirmBookingScreen } from "@/screens/appointments/ConfirmBookingScree
 import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScreen";
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
 import { RxReportsScreen } from "@/screens/records/RxReportsScreen";
-import { AITrendsScreen } from "@/screens/records/AITrendsScreen";
 import { CaptureScreen } from "@/screens/records/CaptureScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
@@ -59,7 +58,6 @@ export function AppStack() {
       <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       <Stack.Screen name="RxReports" component={RxReportsScreen} />
-      <Stack.Screen name="AITrends" component={AITrendsScreen} />
       <Stack.Screen name="RxCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />

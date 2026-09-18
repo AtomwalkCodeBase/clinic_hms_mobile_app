@@ -2,11 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, ShieldCheck,
-  ChevronDown, ChevronRight, AlertCircle, Lock, Unlock, Clock, Check, Sparkles,
+  ChevronDown, AlertCircle, Lock, Unlock, Clock, Check,
   Eye, Download, Trash2,
 } from "lucide-react-native";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
@@ -680,32 +679,6 @@ export function RxReportsScreen() {
         {docs.length ? ` · newest ${fmtShort(docs[0]?.document_date || docs[0]?.created_at)}` : ""}
       </Text>
 
-      {counts.lab_report > 0 && (
-        <Pressable
-          onPress={() => navigation.navigate("AITrends", patientAwpid ? { patientAwpid } : undefined)}
-          style={({ pressed }) => [pressed && { opacity: 0.9 }]}
-        >
-          <LinearGradient
-            colors={[theme.text, theme.fill]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.aiBanner}
-          >
-            <View style={styles.aiBannerIcon}>
-              <Sparkles size={20} color="#fff" strokeWidth={2.2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={styles.aiBannerTitle}>AI Trends</Text>
-                <View style={styles.aiBannerBadge}><Text style={styles.aiBannerBadgeT}>NEW</Text></View>
-              </View>
-              <Text style={styles.aiBannerSub}>Spot patterns across your lab reports</Text>
-            </View>
-            <ChevronRight size={18} color="#fff" strokeWidth={2.4} />
-          </LinearGradient>
-        </Pressable>
-      )}
-
       {privEnabled && !!privSession && (
         <View style={styles.privBanner}>
           <Clock size={12} color={NEUTRAL.warning} strokeWidth={2.2} style={{ marginTop: 1 }} />
@@ -1125,12 +1098,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, backgroundColor: NEUTRAL.surface,
   },
   catTriggerText: { fontSize: 13, color: NEUTRAL.textPrimary, flex: 1 },
-  aiBanner: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, padding: 14, marginBottom: 12 },
-  aiBannerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
-  aiBannerTitle: { fontSize: 14.5, fontWeight: "800", color: "#fff" },
-  aiBannerBadge: { backgroundColor: "rgba(255,255,255,0.22)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1 },
-  aiBannerBadgeT: { fontSize: 9.5, fontWeight: "700", color: "#fff" },
-  aiBannerSub: { fontSize: 12, color: "rgba(255,255,255,0.82)", marginTop: 2 },
 
   upRep: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 12 },
   upRepHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

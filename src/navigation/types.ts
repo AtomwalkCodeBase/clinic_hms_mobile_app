@@ -43,7 +43,6 @@ export type AppStackParamList = {
   PrescriptionDetail: { record: import("@/api/types").MedicalRecord };
   RxReports: { patientAwpid?: string; patientName?: string } | undefined;
   RxCapture: { patientAwpid?: string } | undefined;
-  AITrends: { patientAwpid?: string } | undefined;
   Notifications: undefined;
   Reschedule: { bookingId: number; tenantId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
   Vaccinations: { patientAwpid?: string; patientName: string };
