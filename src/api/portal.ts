@@ -26,6 +26,7 @@ import type {
   RecordsShareCreated,
   RecordsShareDecision,
   RecordsShareGrant,
+  RecordsShareScope,
   RecordsShareStatus,
   RescheduleResult,
   SlotEntry,
@@ -230,20 +231,32 @@ export async function getRecordsShareStatus(tokenOrCode: string): Promise<Record
  * errors.attempts_left); a locked session is 423; the doctor not having
  * opened the link yet is 409. The right pairing but no consent yet is 428 +
  * share_categories.
+ *
+ * `shareScope` is the one-time bulk choice made on the consent screen:
+ * "all" shares this grant's private records too (this doctor only, this
+ * visit only — see registry.RecordsShareRequest.share_all); "default" (the
+ * default here) keeps the patient's standing privacy in effect, same as
+ * before this parameter existed. Only meaningful on the approving call —
+ * harmless to pass on a decline.
  */
 export async function recordsShareDecision(
   token: string,
   approve: boolean,
   consent_confirmed = false,
   pairing = "",
+  shareScope: RecordsShareScope = "default",
 ): Promise<RecordsShareDecision | RecordsShareConsentPrompt> {
   const res = await api.post(
     `/portal/records-share/${token}/decision/`,
-    { approve, consent_confirmed, pairing },
+    { approve, consent_confirmed, pairing, share_scope: shareScope },
     { validateStatus: (s) => s === 200 || s === 428 },
   );
   if (res.status === 428) {
-    return { consent_required: true, share_categories: res.data?.errors?.share_categories || [] };
+    return {
+      consent_required: true,
+      share_categories: res.data?.errors?.share_categories || [],
+      private_count: res.data?.errors?.private_count || 0,
+    };
   }
   return res.data.data;
 }

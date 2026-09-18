@@ -3,6 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import * as IntentLauncher from "expo-intent-launcher";
 import * as Print from "expo-print";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withBiometricSuppressed } from "./biometricSuppress";
@@ -86,7 +87,7 @@ export async function fileToDataUri(file: PickedFile): Promise<string> {
   return `data:${file.mimeType};base64,${base64}`;
 }
 
-function base64FromDataUri(dataUri: string): { mime: string; base64: string } {
+export function base64FromDataUri(dataUri: string): { mime: string; base64: string } {
   const [header, payload] = dataUri.split(",", 2);
   const mime = header.slice(5).split(";")[0] || "application/octet-stream";
   return { mime, base64: payload || "" };
@@ -184,6 +185,64 @@ export async function downloadDataUri(fileName: string, source: string): Promise
   }
   const { mime, base64 } = base64FromDataUri(source);
   return saveOrShare(fileName, mime, base64);
+}
+
+/**
+ * Hands a file off to the OS's own "open with" chooser — the mobile
+ * equivalent of tapping a PDF attachment in Gmail or a Files app. Always
+ * writes to the cache dir only (never a persisted save), and always shows
+ * the OS picker, every single call — no "silently reuse the last granted
+ * folder" shortcut, since the point here is picking an app to open the
+ * file in, not saving a copy.
+ *
+ * Android goes through expo-intent-launcher's ACTION_VIEW — this is
+ * deliberately NOT Sharing.shareAsync, which fires ACTION_SEND ("Share
+ * via…": messaging/social apps) rather than ACTION_VIEW ("Open with…":
+ * viewer apps for this file type) — visually similar chooser, different
+ * app list and intent semantics; ACTION_VIEW is the one that matches "open
+ * this like a normal PDF attachment". Needs a content:// URI (not a bare
+ * file:// path) so the receiving app is actually granted read access.
+ * iOS has no such split — its share sheet already doubles as "open in…" —
+ * so Sharing.shareAsync is used there and as the Android fallback if
+ * nothing can handle ACTION_VIEW (IntentLauncher rejects with no installed
+ * activity instead of showing an empty/broken chooser).
+ */
+export async function openInExternalApp(fileName: string, source: string, mimeTypeHint?: string): Promise<void> {
+  let localUri: string;
+  let mimeType = mimeTypeHint || "application/octet-stream";
+
+  if (source.startsWith("data:")) {
+    const { mime, base64 } = base64FromDataUri(source);
+    mimeType = mimeTypeHint || mime;
+    localUri = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+  } else {
+    const dest = `${FileSystem.cacheDirectory}${fileName}`;
+    const result = await FileSystem.downloadAsync(source, dest);
+    mimeType = result.mimeType || result.headers?.["Content-Type"]?.split(";")[0] || mimeType;
+    localUri = result.uri;
+  }
+
+  if (Platform.OS === "android") {
+    try {
+      const contentUri = await FileSystem.getContentUriAsync(localUri);
+      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+        data: contentUri,
+        flags: 1, // FLAG_GRANT_READ_URI_PERMISSION — required for a content:// URI handed to another app
+        type: mimeType,
+      });
+      return;
+    } catch {
+      // No app registered for ACTION_VIEW on this mime type (or the intent
+      // itself failed) — fall through to the share sheet rather than
+      // leaving the user with no options at all.
+    }
+  }
+
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error("No app available to open this file on this device.");
+  }
+  await Sharing.shareAsync(localUri, { mimeType, dialogTitle: fileName });
 }
 
 /**

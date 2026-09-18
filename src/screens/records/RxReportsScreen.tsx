@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator, Linking } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
@@ -40,7 +40,7 @@ const REVIEW_CATEGORY_LABELS: Record<string, string> = {
 // the old assumption (type unknown) so it still renders something sensible.
 const needsOf = (d: PatientDocument): string[] =>
   d.review_needs && d.review_needs.length ? d.review_needs : ["kind"];
-import { pickDocuments, fileToDataUri, downloadDataUri } from "@/utils/fileHelpers";
+import { pickDocuments, fileToDataUri, downloadDataUri, openInExternalApp } from "@/utils/fileHelpers";
 import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc, RecordsPrivacyPayload } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
@@ -473,11 +473,14 @@ export function RxReportsScreen() {
   }, [shown, month]);
 
   // ── actions ──────────────────────────────────────────────────────────────
-  // Just look at it — no save/share dialog. `getDocumentDetail` without
-  // `download` gets a signed URL with no attachment override, so the S3
-  // object serves inline; opening that URL shows it directly (browser for a
-  // PDF, image viewer for a photo) instead of routing through the download
-  // flow at all.
+  // Hands off to the OS's own "open with" chooser (openInExternalApp) —
+  // same as tapping a PDF attachment in Gmail or a Files app. This used to
+  // render read-only inside our own WebView so a patient couldn't export a
+  // copy from "View" (Download was the one sanctioned export path); that
+  // restriction has been dropped on purpose, so View and Download now both
+  // let the file leave the app — they just differ in whether it lands in
+  // whatever app the user picks (View, cache-only) or a persisted save
+  // (Download, see openFile below).
   async function viewFile(id: number) {
     setBusyId(id);
     setBusyAction("view");
@@ -491,16 +494,11 @@ export function RxReportsScreen() {
         // to back ExtractedLabValue test data) — signed_url() and the data:
         // fallback both quietly return "" for a blank key rather than
         // raising, so this is the one place that has to catch it before
-        // Linking.openURL("") throws its own unhelpful "cannot be empty".
+        // handing off to a chooser with nothing to open.
         setSheetError("This document doesn't have a file to view.");
         return;
       }
-      if (src.startsWith("data:")) {
-        // legacy inline rows have no viewable URL — fall back to save/share
-        await downloadDataUri(full.file_name || full.title || "document", src);
-      } else {
-        await Linking.openURL(src);
-      }
+      await openInExternalApp(full.file_name || full.title || "document", src, full.mime_type);
     } catch (err) {
       const msg = apiErrorMessage(err, "Couldn't open the file.");
       setError(msg);

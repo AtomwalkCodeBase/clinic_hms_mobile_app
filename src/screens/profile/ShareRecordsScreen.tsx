@@ -14,7 +14,7 @@ import {
   endRecordsShare, recordsShareDownloadDecision,
 } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { RecordsShareCreated, RecordsShareDecision, RecordsShareGrant } from "@/api/types";
+import { RecordsShareCreated, RecordsShareDecision, RecordsShareGrant, RecordsShareScope } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 // The doctor's laptop QR encodes …/share-records/<token>?p=<pairing>. Pull
@@ -58,6 +58,11 @@ export function ShareRecordsScreen() {
   const [pairingInput, setPairingInput] = useState("");
   const [pairingErr, setPairingErr] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
+  const [privateCount, setPrivateCount] = useState(0);
+  // The one-time bulk choice made on the consent screen — defaults to
+  // respecting the patient's standing privacy, same as every share before
+  // this existed. "all" is an explicit opt-in, never the default.
+  const [shareScope, setShareScope] = useState<RecordsShareScope>("default");
   const [grantedUntil, setGrantedUntil] = useState<string | null>(null);
 
   const [grants, setGrants] = useState<RecordsShareGrant[]>([]);
@@ -133,6 +138,7 @@ export function ShareRecordsScreen() {
       const r = await recordsShareDecision(created.token, true, false, pairingRef.current);
       if ("consent_required" in r) {
         setCategories(r.share_categories);
+        setPrivateCount(r.private_count);
         setPhase("consent");
       } else {
         setGrantedUntil((r as any).expires_at || null);
@@ -160,9 +166,10 @@ export function ShareRecordsScreen() {
     if (!created) return;
     setBusy(true); setError("");
     try {
-      const r = await recordsShareDecision(created.token, approve, consent, pairingRef.current || pairingInput);
+      const r = await recordsShareDecision(created.token, approve, consent, pairingRef.current || pairingInput, shareScope);
       if ("consent_required" in r) {
         setCategories(r.share_categories);
+        setPrivateCount(r.private_count);
         setPhase("consent");
       } else if (!approve) {
         reset();
@@ -195,6 +202,7 @@ export function ShareRecordsScreen() {
 
   function reset() {
     setPhase("home"); setCreated(null); setNote(""); setCategories([]);
+    setPrivateCount(0); setShareScope("default");
     setGrantedUntil(null); scannedRef.current = false; setError("");
     pairingRef.current = ""; setPairingInput(""); setPairingErr("");
   }
@@ -304,7 +312,42 @@ export function ShareRecordsScreen() {
               </View>
             ))}
           </View>
-          <PrimaryButton label="Allow access" onPress={() => decide(true, true)} loading={busy} style={{ marginBottom: 8 }} />
+
+          {privateCount > 0 && (
+            <>
+              <Text style={styles.scopeLabel}>
+                You've marked {privateCount} {privateCount === 1 ? "record" : "records"} private. Include {privateCount === 1 ? "it" : "them"} for this doctor?
+              </Text>
+              <Pressable
+                onPress={() => setShareScope("default")}
+                style={[styles.scopeOption, shareScope === "default" && { borderColor: theme.fill }]}
+              >
+                <View style={[styles.radio, shareScope === "default" && { borderColor: theme.fill }]}>
+                  {shareScope === "default" && <View style={[styles.radioDot, { backgroundColor: theme.fill }]} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.scopeTitle}>Share as usual</Text>
+                  <Text style={styles.scopeBody}>Records you've marked private stay hidden, same as always.</Text>
+                </View>
+              </Pressable>
+              <Pressable
+                onPress={() => setShareScope("all")}
+                style={[styles.scopeOption, shareScope === "all" && { borderColor: theme.fill }]}
+              >
+                <View style={[styles.radio, shareScope === "all" && { borderColor: theme.fill }]}>
+                  {shareScope === "all" && <View style={[styles.radioDot, { backgroundColor: theme.fill }]} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.scopeTitle}>Share everything</Text>
+                  <Text style={styles.scopeBody}>
+                    Also show this doctor the {privateCount} private {privateCount === 1 ? "record" : "records"}, for this visit only.
+                  </Text>
+                </View>
+              </Pressable>
+            </>
+          )}
+
+          <PrimaryButton label="Allow access" onPress={() => decide(true, true)} loading={busy} style={{ marginTop: 14, marginBottom: 8 }} />
           <SecondaryButton label="Cancel" onPress={reset} disabled={busy} />
         </Card>
       )}
@@ -331,7 +374,14 @@ export function ShareRecordsScreen() {
               <Card key={g.token} style={styles.grantCard}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.grantWho} numberOfLines={1}>{g.requester_label || "A doctor"}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={styles.grantWho} numberOfLines={1}>{g.requester_label || "A doctor"}</Text>
+                      {g.share_all && (
+                        <View style={styles.fullAccessTag}>
+                          <Text style={styles.fullAccessTagText}>Full access</Text>
+                        </View>
+                      )}
+                    </View>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
                       <Clock size={11} color={left < 300 ? NEUTRAL.danger : NEUTRAL.textMuted} />
                       <Text style={[styles.grantTime, left < 300 && { color: NEUTRAL.danger, fontWeight: "700" }]}>
@@ -438,6 +488,20 @@ const styles = StyleSheet.create({
   checkIcon: { marginTop: 2, flexShrink: 0 },
   checkText: { flex: 1, fontSize: 12, color: NEUTRAL.textPrimary, lineHeight: 17 },
 
+  scopeLabel: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8 },
+  scopeOption: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 10,
+    padding: 11, marginBottom: 8,
+  },
+  radio: {
+    width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: NEUTRAL.border,
+    alignItems: "center", justifyContent: "center", marginTop: 1, flexShrink: 0,
+  },
+  radioDot: { width: 9, height: 9, borderRadius: 4.5 },
+  scopeTitle: { fontSize: 12.5, fontWeight: "700", color: NEUTRAL.textPrimary },
+  scopeBody: { fontSize: 11, color: NEUTRAL.textSecondary, lineHeight: 15, marginTop: 2 },
+
   doneRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   doneTitle: { fontSize: 15, fontWeight: "700", color: NEUTRAL.success },
 
@@ -445,6 +509,8 @@ const styles = StyleSheet.create({
   grantCard: { padding: 13, marginBottom: 8 },
   grantWho: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
   grantTime: { fontSize: 11, color: NEUTRAL.textMuted },
+  fullAccessTag: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  fullAccessTagText: { fontSize: 9.5, fontWeight: "700", color: NEUTRAL.warning, textTransform: "uppercase", letterSpacing: 0.3 },
   dlBox: { marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
   dlText: { flex: 1, fontSize: 11.5, color: NEUTRAL.textSecondary, lineHeight: 16 },
 

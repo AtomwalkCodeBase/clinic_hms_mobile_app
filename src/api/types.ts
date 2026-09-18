@@ -127,13 +127,16 @@ export interface RecordsShareCreated {
 export interface RecordsShareConsentPrompt {
   consent_required: true;
   share_categories: string[];
+  private_count: number;
 }
+export type RecordsShareScope = "all" | "default";
 export interface RecordsShareDecision {
   token: string;
   status: string;
   requester_label: string;
   expires_at: string | null;
   seconds_left: number;
+  share_all: boolean;
 }
 export interface RecordsShareGrant {
   token: string;
@@ -143,6 +146,7 @@ export interface RecordsShareGrant {
   seconds_left: number;
   last_seen_at: string | null;
   pending_download: RecordsSharePendingDownload | null;
+  share_all: boolean;
 }
 
 export interface BookingResult {
