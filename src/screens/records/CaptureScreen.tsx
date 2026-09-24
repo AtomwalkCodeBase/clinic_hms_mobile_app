@@ -5,68 +5,74 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { X, Camera as CameraIcon, QrCode, Check } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
-import { uploadDocument, UploadResult } from "@/api/portal";
-import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
+import * as FileSystem from "expo-file-system/legacy";
+import { useUploadTasks, UploadCandidate } from "@/context/UploadTasksContext";
 
 type Mode = "qr" | "photo";
-// `reviewGroups` keys are the exact combination of missing fields (server's
-// review_needs, kind/category/date, joined in that order) — "could not
-// classify" and "just needs a date" are different problems and read as such.
-type Tally = { added: number; reviewGroups: Record<string, number>; retake: number; discarded: number; duplicate: number; failed: number };
-const REVIEW_REASON_ORDER = ["kind", "category", "date"];
-const REVIEW_REASON_LABEL: Record<string, string> = {
-  "kind": "couldn't be classified",
-  "kind,date": "couldn't be classified, and the date's unclear too",
-  "category": "are lab reports missing their panel",
-  "category,date": "are lab reports missing their panel and date",
-  "date": "just need a date confirmed",
-};
 
 // How many photos one capture session holds before it makes you upload and
 // start again — keeps device memory sane (each shot is a base64 JPEG).
 const MAX_SHOTS = 20;
 
+function estimateBytes(base64: string) {
+  return Math.ceil((base64.length * 3) / 4);
+}
+
+// A bulk upload PUTs each file to S3 natively from disk, and that can't read an
+// inline `data:` string — so every shot is saved to the cache folder first and
+// the candidate carries that file's path. (The instant path still sends the
+// base64 in the request, via toDataUri.)
+async function shotToCandidate(b64: string, i: number): Promise<UploadCandidate> {
+  const name = `capture-${Date.now()}-${i}.jpg`;
+  const dataUri = `data:image/jpeg;base64,${b64}`;
+  const uri = `${FileSystem.cacheDirectory}${name}`;
+  await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
+  return {
+    name,
+    mimeType: "image/jpeg",
+    size: estimateBytes(b64),
+    uri,
+    toDataUri: async () => dataUri,
+  };
+}
+
 /**
  * One camera screen, two modes chosen by a toggle at the top:
- *   • "Scan QR"  — a bounded frame; a hospital-document QR held inside it is
- *     auto-detected and uploaded on its own (server verifies + files it).
+ *   • "Scan QR"  — a bounded frame; a document QR held inside it auto-snaps
+ *     and extracts on its own.
  *   • "Photo"    — full-screen viewfinder + shutter. Each tap adds a page to a
- *     tray; "Upload N" sends them all in one go, then pops back. At MAX_SHOTS
- *     the shutter locks until you upload.
- * Rx & Reports reloads on focus afterwards.
+ *     tray; "Upload N" hands the tray off to the background extraction task
+ *     (instant or bulk, decided automatically) and you can keep shooting or
+ *     leave — nothing here blocks on the upload finishing. At MAX_SHOTS the
+ *     shutter locks until you upload.
+ * Extraction only for now — nothing is classified or filed into My Reports
+ * yet, so there's no "added to your reports" outcome here anymore. Progress
+ * and the completion message show on the Rx & Reports progress card (and a
+ * floating pill on other screens) — not tied to this screen staying open.
  */
 export function CaptureScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "RxCapture">>();
   const patientAwpid = route.params?.patientAwpid;
+  const { startUpload } = useUploadTasks();
 
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
   const [mode, setMode] = useState<Mode>("qr");
   const [shots, setShots] = useState<string[]>([]);     // base64 JPEGs, photo mode
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState("");
+  const [capturing, setCapturing] = useState(false);     // guards double-tap while grabbing a frame
   const [error, setError] = useState("");
-  const [result, setResult] = useState<Tally | null>(null);
   const handledQr = useRef(false);
 
-  // ── single upload (one shot, or a QR frame) ──────────────────────────────
-  const sendOne = useCallback(
-    (base64: string, qrToken?: string): Promise<UploadResult> =>
-      uploadDocument({
-        title: qrToken
-          ? `Scanned ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
-          : `Photo ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`,
-        doc_type: "other", // server reads the QR / page text and files it
-        file_name: `capture-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`,
-        mime_type: "image/jpeg",
-        file_data: `data:image/jpeg;base64,${base64}`,
-        ...(qrToken ? { qr_token: qrToken } : {}),
-        ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
-      }),
-    [patientAwpid],
-  );
+  // Leave the camera once an upload is under way: back to Rx & Reports if that's
+  // where we came from, otherwise open it — that's where the progress card lives.
+  const leaveForProgress = useCallback(() => {
+    const routes = navigation.getState().routes;
+    const prev = routes[routes.length - 2]?.name;
+    if (prev === "RxReports") navigation.goBack();
+    else navigation.replace("RxReports", patientAwpid ? { patientAwpid } : undefined);
+  }, [navigation, patientAwpid]);
 
   const grabFrame = useCallback(async (): Promise<string | null> => {
     if (!camRef.current) return null;
@@ -74,75 +80,71 @@ export function CaptureScreen() {
     return shot?.base64 ?? null;
   }, []);
 
-  // ── QR: capture the frame + token and upload immediately ─────────────────
-  const captureQr = useCallback(async (qrToken: string) => {
-    if (busy) return;
-    setBusy(true);
+  // ── QR: capture the frame and hand it to the background extraction task ──
+  const captureQr = useCallback(async (_qrToken: string) => {
+    if (capturing) return;
+    setCapturing(true);
     setError("");
     try {
       const b64 = await grabFrame();
-      if (b64) {
-        await sendOne(b64, qrToken);
-        navigation.goBack();
+      if (!b64) {
+        setError("Couldn't use the camera. Try again.");
+        handledQr.current = false;
+        setCapturing(false);
         return;
       }
-      setError("Couldn't use the camera. Try again.");
+      const outcome = await startUpload([await shotToCandidate(b64, 0)], patientAwpid);
+      if (outcome.status === "rejected" || outcome.status === "busy") {
+        setError(outcome.reason);
+        handledQr.current = false;
+        setCapturing(false);
+        return;
+      }
+      // Started — extraction continues in the background regardless of this
+      // screen; no need to wait here.
+      leaveForProgress();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't upload that. Try again."));
+      setError("Couldn't use the camera. Try again.");
+      handledQr.current = false;
+      setCapturing(false);
     }
-    handledQr.current = false;
-    setBusy(false);
-  }, [busy, grabFrame, sendOne, navigation]);
+  }, [capturing, grabFrame, startUpload, patientAwpid, leaveForProgress]);
 
   const onBarcode = useCallback(({ data }: { data: string }) => {
-    if (handledQr.current || busy || !data) return;
+    if (handledQr.current || capturing || !data) return;
     handledQr.current = true;
     captureQr(data);
-  }, [busy, captureQr]);
+  }, [capturing, captureQr]);
 
   // ── Photo: add to the tray ──────────────────────────────────────────────
   const addShot = useCallback(async () => {
-    if (busy || shots.length >= MAX_SHOTS) return;
+    if (capturing || shots.length >= MAX_SHOTS) return;
+    setCapturing(true);
     try {
       const b64 = await grabFrame();
       if (b64) setShots((s) => (s.length >= MAX_SHOTS ? s : [...s, b64]));
     } catch {
       setError("Couldn't use the camera. Try again.");
     }
-  }, [busy, shots.length, grabFrame]);
+    setCapturing(false);
+  }, [capturing, shots.length, grabFrame]);
 
   const removeShot = (i: number) => setShots((s) => s.filter((_, idx) => idx !== i));
 
   const uploadAll = useCallback(async () => {
-    if (busy || shots.length === 0) return;
-    setBusy(true);
+    if (shots.length === 0) return;
     setError("");
-    const pending = [...shots];
-    const t: Tally = { added: 0, reviewGroups: {}, retake: 0, discarded: 0, duplicate: 0, failed: 0 };
-    const leftover: string[] = [];
-    for (let i = 0; i < pending.length; i++) {
-      setProgress(`Uploading ${i + 1} of ${pending.length}…`);
-      try {
-        const r = await sendOne(pending[i]);
-        if ("skipped" in r && r.skipped) t.discarded++;
-        else if ("duplicate" in r && r.duplicate) t.duplicate++;
-        else if ("unreadable" in r && r.unreadable) t.retake++;     // too blurry / dark
-        else if ("review_state" in r && r.review_state === "filed") t.added++;
-        else {
-          const needs = ("review_needs" in r && r.review_needs) || [];
-          const key = REVIEW_REASON_ORDER.filter((n) => needs.includes(n)).join(",") || "kind";
-          t.reviewGroups[key] = (t.reviewGroups[key] || 0) + 1;
-        }
-      } catch {
-        t.failed++;
-        leftover.push(pending[i]);                         // keep the ones that didn't land
-      }
+    const candidates = await Promise.all(shots.map((b64, i) => shotToCandidate(b64, i)));
+    const outcome = await startUpload(candidates, patientAwpid);
+    if (outcome.status === "rejected" || outcome.status === "busy") {
+      setError(outcome.reason);
+      return;
     }
-    setProgress("");
-    setBusy(false);
-    setShots(leftover);
-    setResult(t);
-  }, [busy, shots, sendOne]);
+    // Started (instant or background batch) — clear the tray and head to Rx &
+    // Reports, where the progress card shows it working.
+    setShots([]);
+    leaveForProgress();
+  }, [shots, startUpload, patientAwpid, leaveForProgress]);
 
   const switchMode = (m: Mode) => {
     if (m === mode) return;
@@ -179,7 +181,7 @@ export function CaptureScreen() {
         style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-        onBarcodeScanned={isQr && !busy ? onBarcode : undefined}
+        onBarcodeScanned={isQr && !capturing ? onBarcode : undefined}
       />
 
       {/* mode toggle */}
@@ -224,7 +226,7 @@ export function CaptureScreen() {
             {shots.map((b64, i) => (
               <View key={i} style={styles.thumbWrap}>
                 <Image source={{ uri: `data:image/jpeg;base64,${b64}` }} style={styles.thumb} />
-                <Pressable style={styles.thumbX} hitSlop={8} onPress={() => removeShot(i)} disabled={busy}>
+                <Pressable style={styles.thumbX} hitSlop={8} onPress={() => removeShot(i)}>
                   <X size={11} color="#fff" strokeWidth={3} />
                 </Pressable>
               </View>
@@ -244,12 +246,12 @@ export function CaptureScreen() {
             <View style={styles.sideSlot}>
               {shots.length > 0 && <Text style={styles.countText}>{shots.length}/{MAX_SHOTS}</Text>}
             </View>
-            <Pressable style={[styles.shutter, atLimit && styles.shutterOff]} disabled={busy || atLimit} onPress={addShot}>
+            <Pressable style={[styles.shutter, atLimit && styles.shutterOff]} disabled={capturing || atLimit} onPress={addShot}>
               <View style={styles.shutterInner} />
             </Pressable>
             <View style={styles.sideSlot}>
               {shots.length > 0 && (
-                <Pressable style={styles.uploadBtn} disabled={busy} onPress={uploadAll}>
+                <Pressable style={styles.uploadBtn} onPress={uploadAll}>
                   <Check size={15} color="#111" strokeWidth={3} />
                   <Text style={styles.uploadBtnText}>Upload {shots.length}</Text>
                 </Pressable>
@@ -259,58 +261,11 @@ export function CaptureScreen() {
         )}
       </View>
 
-      {busy && (
-        <View style={styles.busy} pointerEvents="none">
-          <ActivityIndicator color="#fff" />
-          <Text style={styles.busyText}>{progress || "Uploading…"}</Text>
-        </View>
-      )}
       {!!error && (
         <View style={styles.errBar}>
           <Text style={styles.errText}>{error}</Text>
         </View>
       )}
-
-      {result && (
-        <View style={styles.resultWrap}>
-          <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>
-              {result.added === 0 && Object.keys(result.reviewGroups).length === 0 && result.failed === 0
-                ? "Nothing added"
-                : "Upload complete"}
-            </Text>
-            <View style={{ gap: 8, marginTop: 10 }}>
-              {result.added > 0 && <ResultLine n={result.added} text="added to your reports" />}
-              {Object.entries(result.reviewGroups).map(([key, n]) => (
-                <ResultLine key={key} n={n} text={`${REVIEW_REASON_LABEL[key] || "need a quick check"} — see Review`} />
-              ))}
-              {result.retake > 0 && <ResultLine n={result.retake} text="too blurry or dark — retake in better light" muted />}
-              {result.discarded > 0 && <ResultLine n={result.discarded} text="discarded — not a medical document" muted />}
-              {result.duplicate > 0 && <ResultLine n={result.duplicate} text="already in your reports" muted />}
-              {result.failed > 0 && <ResultLine n={result.failed} text="couldn't upload — still in the tray" warn />}
-            </View>
-            <View style={styles.resultBtnRow}>
-              {result.failed > 0 && (
-                <Pressable style={[styles.resultBtn, styles.resultBtnGhost]} onPress={() => setResult(null)}>
-                  <Text style={styles.resultBtnGhostText}>Keep trying</Text>
-                </Pressable>
-              )}
-              <Pressable style={styles.resultBtn} onPress={() => navigation.goBack()}>
-                <Text style={styles.resultBtnText}>Done</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
-function ResultLine({ n, text, muted, warn }: { n: number; text: string; muted?: boolean; warn?: boolean }) {
-  return (
-    <View style={styles.resultLine}>
-      <Text style={[styles.resultN, warn && { color: "#B91C1C" }]}>{n}</Text>
-      <Text style={[styles.resultText, muted && { color: NEUTRAL.textMuted }, warn && { color: "#B91C1C" }]}>{text}</Text>
     </View>
   );
 }
@@ -357,20 +312,6 @@ const styles = StyleSheet.create({
   uploadBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff", borderRadius: 999, paddingVertical: 9, paddingHorizontal: 14 },
   uploadBtnText: { color: "#111", fontSize: 12.5, fontWeight: "700" },
 
-  busy: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.5)", gap: 10 },
-  busyText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   errBar: { position: "absolute", left: 16, right: 16, bottom: 118, backgroundColor: "rgba(185,28,28,0.95)", borderRadius: 10, padding: 12 },
   errText: { color: "#fff", fontSize: 12.5, textAlign: "center" },
-
-  resultWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)", padding: 24 },
-  resultCard: { width: "100%", maxWidth: 360, backgroundColor: NEUTRAL.surface, borderRadius: 16, padding: 20 },
-  resultTitle: { fontSize: 15.5, fontWeight: "700", color: NEUTRAL.textPrimary },
-  resultLine: { flexDirection: "row", alignItems: "baseline", gap: 8 },
-  resultN: { fontSize: 14, fontWeight: "700", color: NEUTRAL.textPrimary, minWidth: 20, fontVariant: ["tabular-nums"] },
-  resultText: { flex: 1, fontSize: 12.5, color: NEUTRAL.textSecondary, lineHeight: 18 },
-  resultBtnRow: { flexDirection: "row", gap: 10, marginTop: 18 },
-  resultBtn: { flex: 1, backgroundColor: NEUTRAL.textPrimary, borderRadius: 10, paddingVertical: 11, alignItems: "center" },
-  resultBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  resultBtnGhost: { backgroundColor: "transparent", borderWidth: 1, borderColor: NEUTRAL.border },
-  resultBtnGhostText: { color: NEUTRAL.textSecondary, fontSize: 13, fontWeight: "600" },
 });

@@ -1,14 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator } from "react-native";
-import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { SkeletonRow } from "@/components/Skeleton";
 import {
   ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, ShieldCheck,
   ChevronDown, AlertCircle, Lock, Unlock, Clock, Check,
   Eye, Download, Trash2,
 } from "lucide-react-native";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
+import { MessageDialog } from "@/components/MessageDialog";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
@@ -17,14 +22,16 @@ import { SelectField } from "@/components/SelectField";
 import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import { familyAccentFor } from "@/theme/familyColors";
 import type { LucideIcon } from "@/theme/icons";
-import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { apiErrorMessage } from "@/api/client";
 import {
-  getMyDocuments, getDocumentDetail, uploadDocument, deleteDocument, fileReviewDocument,
+  getMyDocuments, getDocumentDetail, deleteDocument, fileReviewDocument,
   getPrescriptions, getLabOrders, choosePrescription, chooseLabOrder,
   getRecordsPrivacy, toggleRecordPrivacy, revealForShare,
 } from "@/api/portal";
+import { useUploadTasks, UploadCandidate } from "@/context/UploadTasksContext";
+import { UploadsEntryRow } from "@/components/UploadProgress";
 
 // Mirrors core/report_types.py's panel catalogue — the review form's category
 // picker when a lab report's panel couldn't be determined.
@@ -202,14 +209,25 @@ export function RxReportsScreen() {
   const route = useRoute<RouteProp<AppStackParamList, "RxReports">>();
   const patientAwpid = route.params?.patientAwpid;
   const patientName = route.params?.patientName;
+  const patientGender = route.params?.patientGender;
+  const patientDob = route.params?.patientDob;
+  // Same identity accent HealthScreen's family switcher and the other
+  // detail screens reached from it (Vaccinations, Growth, Timeline,
+  // Visits) use — this screen just never read the two params for it
+  // before, so its header stayed plain neutral gray regardless of who
+  // Rx & Reports was actually showing.
+  const accent = patientGender ? familyAccentFor({ gender: patientGender, date_of_birth: patientDob ?? null }) : null;
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
 
-  const [docs, setDocs] = useState<PatientDocument[]>([]);
-  const [pendingRx, setPendingRx] = useState<PrescriptionOrder[]>([]);
-  const [pendingLab, setPendingLab] = useState<LabOrder[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+  // Mutation/action failures (privacy toggle, review submit, upload, choosing
+  // a pharmacy/lab option...) — separate from the documents query's own
+  // load error below, same two-banner split this screen already had.
+  const [actionError, setActionError] = useState("");
+  // What happened to the files the patient just picked (some skipped / none could be uploaded). Shown as a
+  // dialog: the error banner's Retry re-loads the reports list, which can never fix an upload.
+  const [uploadNotice, setUploadNotice] = useState<{ title: string; message: string; tone: "success" | "error" } | null>(null);
   // Mirrors `error` for failures that happen while the detail sheet is open —
   // the main ErrorBanner renders behind that modal, so a failed view/download
   // there looked like "nothing happens" with no feedback at all.
@@ -229,7 +247,7 @@ export function RxReportsScreen() {
   // View and Download are two different actions on the same doc id — busyId
   // alone can't tell them apart, so both buttons lit up together no matter
   // which one was actually running.
-  const [busyAction, setBusyAction] = useState<"view" | "download" | "">("");
+  const [busyAction, setBusyAction] = useState<"view" | "download" | "save" | "remove" | "">("");
   const [choosing, setChoosing] = useState<string | null>(null);
 
   // ── review form (unsorted rows) — ask only for what review_needs lists ───
@@ -245,36 +263,37 @@ export function RxReportsScreen() {
 
   // ── shared-records privacy: the per-report lock (self only) ─────────────
   const privEnabled = !patientAwpid;
-  const [privMap, setPrivMap] = useState<Map<number, RecordsPrivacyDoc>>(new Map());
-  const [privSession, setPrivSession] = useState<RecordsPrivacyPayload["active_session"]>(null);
+  // Distinct key from SharedRecordsPrivacyScreen's ["recordsPrivacy", page,
+  // ...] — same endpoint, but called here with no pagination/filter params
+  // for a different shape (the full unfiltered map), so it stays its own
+  // cache entry rather than colliding with that screen's paginated one.
+  const privacyQ = useQuery({
+    queryKey: ["recordsPrivacyDocs"],
+    queryFn: () => getRecordsPrivacy().catch(() => null),
+    enabled: !patientAwpid,
+  });
+  const privMap = useMemo(
+    () => new Map((privacyQ.data?.documents ?? []).map((x) => [x.id, x])),
+    [privacyQ.data]
+  );
+  const privSession = privacyQ.data?.active_session ?? null;
   const [lockSheet, setLockSheet] = useState<{ title: string; message?: string; actions: ChoiceAction[] } | null>(null);
-
-  const loadPrivacy = useCallback(async () => {
-    if (patientAwpid) return;
-    try {
-      const p = await getRecordsPrivacy();
-      setPrivMap(new Map(p.documents.map((x) => [x.id, x])));
-      setPrivSession(p.active_session);
-    } catch {
-      /* privacy is non-blocking on this screen */
-    }
-  }, [patientAwpid]);
 
   async function privToggle(docId: number, makePrivate: boolean) {
     try {
       await toggleRecordPrivacy(docId, makePrivate);
-      loadPrivacy();
+      privacyQ.refetch();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update."));
+      setActionError(apiErrorMessage(err, "Couldn't update."));
     }
   }
   async function privReveal(docId: number, scope: "visit" | "always" | "conceal") {
     if (!privSession) return;
     try {
       await revealForShare(privSession.token, [docId], scope);
-      loadPrivacy();
+      privacyQ.refetch();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update."));
+      setActionError(apiErrorMessage(err, "Couldn't update."));
     }
   }
   function onLock(d: PatientDocument) {
@@ -336,41 +355,74 @@ export function RxReportsScreen() {
     [privMap],
   );
   const [addOpen, setAddOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadReport, setUploadReport] = useState<
-    { filed: number; review: number; notMedical: number; unreadable: number; failed: number; lines: string[] } | null
-  >(null);
+  const { startUpload } = useUploadTasks();
+
+  // Search, the month picker, and the category-panel counts below all work
+  // over the FULL document set — they're client-side, not server-driven —
+  // so this still needs every document eventually, unlike a screen that
+  // can get away with only ever showing what's been explicitly paged in.
+  // What was actually broken wasn't "loads everything," it was "does it
+  // sequentially, one page at a time, and shows nothing until the last one
+  // lands" — with 100 files at 25/page that's 4 blocking round-trips in a
+  // row. The fix keeps "eventually everything" but makes the first page
+  // its own fast query (instant paint, matches what PAGE=15's own "Load
+  // more" button in the list below shows anyway) and fetches whatever
+  // pages remain in PARALLEL, in the background, merging in once they
+  // land — nothing here waits on that second query to render.
+  const docsFirstQ = useQuery({
+    queryKey: ["documents", patientAwpid, "page1"],
+    queryFn: () => getMyDocuments(1, patientAwpid),
+  });
+  const firstPage = docsFirstQ.data;
+  const totalPages = firstPage?.pagination.total_pages ?? 1;
+  const docsRestQ = useQuery({
+    queryKey: ["documents", patientAwpid, "rest"],
+    queryFn: async () => {
+      const pageNums = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+      const pages = await Promise.all(pageNums.map((p) => getMyDocuments(p, patientAwpid)));
+      return pages.flatMap((p) => p.results);
+    },
+    enabled: !!firstPage && totalPages > 1,
+  });
+  const docs = useMemo(
+    () => [...(firstPage?.results ?? []), ...(totalPages > 1 ? docsRestQ.data ?? [] : [])],
+    [firstPage, docsRestQ.data, totalPages]
+  );
+  // "Ready to actually use" — the first page has landed, so there's real
+  // content and search/filter/months already work over what's loaded so
+  // far. Any remaining pages fill in silently afterward (backgroundLoading
+  // below), same as any other query going stale and refreshing quietly.
+  const isInitialLoading = !firstPage;
+  const loadError = (docsFirstQ.error && apiErrorMessage(docsFirstQ.error)) || (docsRestQ.error && apiErrorMessage(docsRestQ.error)) || "";
+  const error = loadError || actionError;
+
+  // Two independent, soft-failing queries — a failure in either never blocks
+  // the documents list, same as the old try/catch(() => [])-per-call.
+  const pendingRxQ = useQuery({
+    queryKey: ["prescriptionOrders", patientAwpid],
+    queryFn: () => getPrescriptions(patientAwpid).catch(() => [] as PrescriptionOrder[]),
+  });
+  const pendingLabQ = useQuery({
+    queryKey: ["labOrders", patientAwpid],
+    queryFn: () => getLabOrders(patientAwpid).catch(() => [] as LabOrder[]),
+  });
+  const pendingRx = (pendingRxQ.data ?? []).filter((r) => r.patient_choice === "pending");
+  const pendingLab = (pendingLabQ.data ?? []).filter((l) => l.patient_choice === "pending");
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      let page = 1;
-      const all: PatientDocument[] = [];
-      for (let i = 0; i < 40; i++) {
-        const { results, pagination } = await getMyDocuments(page, patientAwpid);
-        all.push(...results);
-        if (!pagination?.has_next) break;
-        page += 1;
-      }
-      setDocs(all);
-      try {
-        const [rx, lab] = await Promise.all([
-          getPrescriptions(patientAwpid).catch(() => [] as PrescriptionOrder[]),
-          getLabOrders(patientAwpid).catch(() => [] as LabOrder[]),
-        ]);
-        setPendingRx(rx.filter((r) => r.patient_choice === "pending"));
-        setPendingLab(lab.filter((l) => l.patient_choice === "pending"));
-      } catch { /* non-fatal */ }
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [patientAwpid]);
-
-  useFocusEffect(useCallback(() => { load(); loadPrivacy(); }, [load, loadPrivacy]));
-  useReconnectRefetch(load);
+    await Promise.all([
+      docsFirstQ.refetch(),
+      totalPages > 1 ? docsRestQ.refetch() : Promise.resolve(),
+      pendingRxQ.refetch(),
+      pendingLabQ.refetch(),
+    ]);
+  }, [docsFirstQ.refetch, docsRestQ.refetch, totalPages, pendingRxQ.refetch, pendingLabQ.refetch]);
+  const refetchAll = useCallback(async () => {
+    await Promise.all([load(), privacyQ.refetch()]);
+  }, [load, privacyQ.refetch]);
+  useRefreshOnFocus([docsFirstQ, docsRestQ, pendingRxQ, pendingLabQ, privacyQ]);
+  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
+  const isFetchingAny = docsFirstQ.isFetching || docsRestQ.isFetching || pendingRxQ.isFetching || pendingLabQ.isFetching;
 
   const monthOpts = useMemo(() => monthOptions(docs), [docs]);
 
@@ -500,7 +552,7 @@ export function RxReportsScreen() {
       await openInExternalApp(full.file_name || full.title || "document", src, full.mime_type);
     } catch (err) {
       const msg = apiErrorMessage(err, "Couldn't open the file.");
-      setError(msg);
+      setActionError(msg);
       setSheetError(msg);
     } finally {
       setBusyId(null);
@@ -524,7 +576,7 @@ export function RxReportsScreen() {
       setSheetMessage(outcome === "saved" ? "Downloaded to your device." : "Shared.");
     } catch (err) {
       const msg = apiErrorMessage(err, "Couldn't open the file.");
-      setError(msg);
+      setActionError(msg);
       setSheetError(msg);
     } finally {
       setBusyId(null);
@@ -537,9 +589,11 @@ export function RxReportsScreen() {
     try {
       await deleteDocument(d.id);
       setDetail(null);
-      setDocs((prev) => prev.filter((x) => x.id !== d.id));
+      queryClient.setQueryData<PatientDocument[]>(["documents", patientAwpid], (prev) =>
+        prev?.filter((x) => x.id !== d.id)
+      );
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't remove this."));
+      setActionError(apiErrorMessage(err, "Couldn't remove this."));
     } finally {
       setBusyId(null);
     }
@@ -547,15 +601,17 @@ export function RxReportsScreen() {
 
   async function fileAs(d: PatientDocument, type: string) {
     setBusyId(d.id);
+    setBusyAction(type === "__remove__" ? "remove" : "save");
     try {
       if (type === "__remove__") await deleteDocument(d.id);
       else await fileReviewDocument(d.id, { doc_type: type });
       setDetail(null);
-      await load();
+      queryClient.invalidateQueries({ queryKey: ["documents", patientAwpid] });
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update."));
+      setActionError(apiErrorMessage(err, "Couldn't update."));
     } finally {
       setBusyId(null);
+      setBusyAction("");
     }
   }
 
@@ -571,6 +627,7 @@ export function RxReportsScreen() {
     if (effectiveType === "lab_report" && reviewCat) patch.report_categories = [reviewCat];
     if (needs.includes("date") || reviewDate) patch.document_date = reviewDate;
     setBusyId(d.id);
+    setBusyAction("save");
     try {
       const res = await fileReviewDocument(d.id, patch);
       if (!res.review_needs || res.review_needs.length === 0) {
@@ -581,58 +638,48 @@ export function RxReportsScreen() {
         setDetail({ ...d, doc_type: res.doc_type as PatientDocument["doc_type"], report_categories: res.report_categories,
                     document_date: res.document_date, review_needs: res.review_needs });
       }
-      await load();
+      queryClient.invalidateQueries({ queryKey: ["documents", patientAwpid] });
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update."));
+      setActionError(apiErrorMessage(err, "Couldn't update."));
     } finally {
       setBusyId(null);
+      setBusyAction("");
     }
   }
 
-  // One "Upload" — a single pick of one file or many PDFs/images; the server
-  // reads the QR / page text on each and files it.
+  // One "Upload" — a single pick of one file or many PDFs/images. Handed
+  // straight to the background extraction task (instant or bulk, decided
+  // automatically) — this screen doesn't wait on it; the sheet closes right
+  // away and progress/completion show as a floating banner from anywhere in
+  // the app (see GlobalUploadStatus), not tied to staying on this screen.
   async function pickAndUpload() {
     try {
       const files = await pickDocuments();
       if (!files.length) return;
-      setUploading(true);
-      setUploadReport(null);
-      const rep = { filed: 0, review: 0, notMedical: 0, unreadable: 0, failed: 0, lines: [] as string[] };
-      for (const f of files) {
-        const nm = f.name || "file";
-        try {
-          const d: any = await uploadDocument({
-            title: (f.name || "Document").replace(/\.[a-z0-9]+$/i, ""),
-            doc_type: "other",
-            file_name: f.name || "upload",
-            mime_type: f.mimeType || "application/octet-stream",
-            file_data: await fileToDataUri(f),
-            ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
-          });
-          if (d?.skipped) {
-            rep.notMedical += 1;
-            rep.lines.push(`${nm} — not a medical document, not saved`);
-          } else if (d?.unreadable) {
-            rep.unreadable += 1;
-            rep.lines.push(`${nm} — ${(d.quality_message || "couldn't read it clearly").replace(/\s+/g, " ").trim()}`);
-          } else if (d?.review_state === "unsorted") {
-            rep.review += 1;
-            rep.lines.push(`${nm} — in the Review list, needs a quick check`);
-          } else {
-            rep.filed += 1;
-          }
-        } catch (err) {
-          rep.failed += 1;
-          rep.lines.push(`${nm} — ${apiErrorMessage(err, "upload failed, try again")}`);
-        }
+      const candidates: UploadCandidate[] = files.map((f) => ({
+        name: f.name || "upload",
+        mimeType: f.mimeType || "application/octet-stream",
+        size: f.size || 0,
+        uri: f.uri,
+        toDataUri: () => fileToDataUri(f),
+      }));
+      const outcome = await startUpload(candidates, patientAwpid);
+      if (outcome.status === "rejected" || outcome.status === "busy") {
+        setAddOpen(false);
+        setUploadNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
+        return;
       }
       setAddOpen(false);
-      setUploadReport(rep);
-      await load();
+      if (outcome.skipped.length) {
+        const n = outcome.skipped.length;
+        setUploadNotice({
+          title: `${n} file${n === 1 ? "" : "s"} skipped`,
+          message: `${outcome.skipped.map((s) => `${s.name} — ${s.reason}`).join("\n")}\n\nThe rest ${candidates.length - n === 1 ? "is" : "are"} being uploaded.`,
+          tone: "success",
+        });
+      }
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't upload those files."));
-    } finally {
-      setUploading(false);
+      setActionError(apiErrorMessage(err, "Couldn't upload those files."));
     }
   }
 
@@ -649,9 +696,10 @@ export function RxReportsScreen() {
         const l = item as LabOrder;
         await chooseLabOrder({ tenant_db: l.tenant_db, request_id: l.id, patient_choice: ch });
       }
-      await load();
+      queryClient.invalidateQueries({ queryKey: ["prescriptionOrders", patientAwpid] });
+      queryClient.invalidateQueries({ queryKey: ["labOrders", patientAwpid] });
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't save your choice."));
+      setActionError(apiErrorMessage(err, "Couldn't save your choice."));
     } finally {
       setChoosing(null);
     }
@@ -661,23 +709,30 @@ export function RxReportsScreen() {
   const monthFiltered = !!month && month !== "ALL";
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={pullRefresh} refreshing={pulling} backgroundLoading={isFetchingAny && !pulling}>
       {/* header */}
       <View style={styles.hdr}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={styles.back}>
-          <ArrowLeft size={19} color={NEUTRAL.textPrimary} strokeWidth={2.2} />
+        <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={[styles.back, accent && { backgroundColor: accent.bg }]}>
+          <ArrowLeft size={19} color={accent?.text ?? NEUTRAL.textPrimary} strokeWidth={2.2} />
         </Pressable>
-        <Text style={styles.hdrTitle}>
+        <Text style={[styles.hdrTitle, accent && { color: accent.text }]}>
           {patientName ? `Rx & Reports — ${patientName}` : "Rx & Reports"}
         </Text>
-        <Pressable onPress={() => setAddOpen(true)} hitSlop={10} style={[styles.addBtn, { backgroundColor: theme.fill }]}>
-          <Plus size={15} color={theme.on} strokeWidth={2.8} />
+        <Pressable onPress={() => setAddOpen(true)} hitSlop={10} style={[styles.addBtn, { backgroundColor: accent?.fill ?? theme.fill }]}>
+          <Plus size={15} color={accent?.on ?? theme.on} strokeWidth={2.8} />
         </Pressable>
       </View>
       <Text style={styles.subline}>
         {counts.all} record{counts.all === 1 ? "" : "s"}
         {docs.length ? ` · newest ${fmtShort(docs[0]?.document_date || docs[0]?.created_at)}` : ""}
       </Text>
+
+      {/* one quiet line into the Uploads screen (live progress, or reports waiting to be viewed) */}
+      <UploadsEntryRow
+        patientAwpid={patientAwpid}
+        accent={accent ?? undefined}
+        onOpen={() => navigation.navigate("Uploads", patientAwpid ? { patientAwpid } : undefined)}
+      />
 
       {privEnabled && !!privSession && (
         <View style={styles.privBanner}>
@@ -699,36 +754,6 @@ export function RxReportsScreen() {
       )}
 
       {!!error && <ErrorBanner message={error} onRetry={load} />}
-
-      {uploadReport && (
-        <View style={styles.upRep}>
-          <View style={styles.upRepHead}>
-            <Text style={styles.upRepTitle}>Upload complete</Text>
-            <Pressable onPress={() => setUploadReport(null)} hitSlop={10}>
-              <Text style={styles.upRepDismiss}>Got it</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.upRepSummary}>
-            {[
-              uploadReport.filed && `${uploadReport.filed} filed`,
-              uploadReport.review && `${uploadReport.review} to review`,
-              uploadReport.notMedical && `${uploadReport.notMedical} not medical — not saved`,
-              uploadReport.unreadable && `${uploadReport.unreadable} couldn't read`,
-              uploadReport.failed && `${uploadReport.failed} failed`,
-            ].filter(Boolean).join(" · ") || "Nothing to file."}
-          </Text>
-          {uploadReport.lines.length > 0 && (
-            <View style={styles.upRepList}>
-              {uploadReport.lines.slice(0, 12).map((ln, i) => (
-                <Text key={i} style={styles.upRepLine} numberOfLines={2}>• {ln}</Text>
-              ))}
-              {uploadReport.lines.length > 12 && (
-                <Text style={styles.upRepLine}>…and {uploadReport.lines.length - 12} more</Text>
-              )}
-            </View>
-          )}
-        </View>
-      )}
 
       {/* type chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -827,9 +852,11 @@ export function RxReportsScreen() {
       )}
 
       {/* list */}
-      {loading && docs.length === 0 ? (
-        <View style={{ paddingVertical: 44, alignItems: "center" }}>
-          <ActivityIndicator color={theme.fill} />
+      {isInitialLoading ? (
+        <View>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <SkeletonRow key={i} />
+          ))}
         </View>
       ) : (
         <>
@@ -842,7 +869,7 @@ export function RxReportsScreen() {
                 <Text style={styles.reviewSummary}>{reviewSummary.join(" · ")}</Text>
               )}
               {unsorted.slice(0, 6).map((d) => (
-                <RecRow key={d.id} d={d} review onPress={() => { setSheetError(""); setSheetMessage(""); setDetail(d); }} />
+                <RecRow key={d.id} d={d} review onPress={() => { setSheetError(""); setSheetMessage(""); setReviewType(""); setReviewCat(""); setReviewDate(""); setDetail(d); }} />
               ))}
             </>
           )}
@@ -864,7 +891,7 @@ export function RxReportsScreen() {
                   <RecRow
                     key={d.id}
                     d={d}
-                    onPress={() => { setSheetError(""); setSheetMessage(""); setDetail(d); }}
+                    onPress={() => { setSheetError(""); setSheetMessage(""); setReviewType(""); setReviewCat(""); setReviewDate(""); setDetail(d); }}
                     priv={privEnabled ? privMap.get(d.id) : undefined}
                     onLock={privEnabled ? () => onLock(d) : undefined}
                   />
@@ -892,7 +919,7 @@ export function RxReportsScreen() {
       {/* detail sheet */}
       <DetailSheet
         visible={!!detail}
-        onClose={() => { setDetail(null); setSheetError(""); setSheetMessage(""); }}
+        onClose={() => { setDetail(null); setSheetError(""); setSheetMessage(""); setReviewType(""); setReviewCat(""); setReviewDate(""); }}
         title={
           detail
             ? detail.doc_type === "prescription" && detail.doctor_label
@@ -915,7 +942,7 @@ export function RxReportsScreen() {
                   : needsKind ? "We couldn't tell what this is — file it:"
                   : showCatPicker && showDateField ? "This is a lab report — which panel, and when was it done?"
                   : showCatPicker ? "This is a lab report — which panel is it?"
-                  : "Just needs a date to file it:"}
+                  : `Labelled as ${metaFor(effectiveType).label} — just needs a date:`}
               </Text>
 
               <SecondaryButton
@@ -934,7 +961,7 @@ export function RxReportsScreen() {
                   <SecondaryButton label="It's a scan / imaging" onPress={() => setReviewType("scan")} />
                   <SecondaryButton label="It's a discharge summary" onPress={() => setReviewType("discharge_summary")} />
                   <SecondaryButton label="Something else" onPress={() => setReviewType("other")} />
-                  <SecondaryButton label="Not a medical record — remove" danger loading={busyId === detail.id} onPress={() => fileAs(detail, "__remove__")} />
+                  <SecondaryButton label="Not a medical record — remove" danger loading={busyId === detail.id && busyAction === "remove"} onPress={() => fileAs(detail, "__remove__")} />
                 </View>
               )}
 
@@ -969,8 +996,8 @@ export function RxReportsScreen() {
                     <DateField label="Document date" value={reviewDate} onChange={setReviewDate} maximumDate={new Date()} />
                   )}
                   <View style={{ gap: 8, marginTop: 6 }}>
-                    <PrimaryButton label="Save" disabled={!canSubmit} loading={busyId === detail.id} onPress={() => submitReview(detail)} />
-                    <SecondaryButton label="Not a medical record — remove" danger onPress={() => fileAs(detail, "__remove__")} />
+                    <PrimaryButton label="Save" disabled={!canSubmit} loading={busyId === detail.id && busyAction === "save"} onPress={() => submitReview(detail)} />
+                    <SecondaryButton label="Not a medical record — remove" danger loading={busyId === detail.id && busyAction === "remove"} onPress={() => fileAs(detail, "__remove__")} />
                   </View>
                 </View>
               )}
@@ -1042,30 +1069,23 @@ export function RxReportsScreen() {
       </DetailSheet>
 
       {/* add sheet */}
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => !uploading && setAddOpen(false)}>
-        <Pressable style={styles.mBackdrop} onPress={() => !uploading && setAddOpen(false)}>
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
+        <Pressable style={styles.mBackdrop} onPress={() => setAddOpen(false)}>
           <View style={[styles.mSheet, { paddingBottom: Math.max(22, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
             <View style={styles.handle} />
             <Text style={styles.mTitle}>Add a record</Text>
-            <Text style={styles.mSub}>We read the QR or the page text and file each one for you.</Text>
-            {uploading ? (
-              <View style={{ paddingVertical: 22, alignItems: "center" }}>
-                <ActivityIndicator color={theme.fill} />
-                <Text style={styles.mUp}>Uploading…</Text>
-              </View>
-            ) : (
-              <View style={{ gap: 8, marginTop: 6 }}>
-                <PrimaryButton label="Upload files" onPress={pickAndUpload} />
-                <Text style={styles.mHint}>Select the files you want to upload — one, or several PDFs and photos.</Text>
-                <SecondaryButton
-                  label="Take photo / Scan QR"
-                  onPress={() => { setAddOpen(false); navigation.navigate("RxCapture", patientAwpid ? { patientAwpid } : undefined); }}
-                />
-                <Pressable onPress={() => setAddOpen(false)} style={{ alignItems: "center", paddingVertical: 8 }}>
-                  <Text style={styles.mCancel}>Cancel</Text>
-                </Pressable>
-              </View>
-            )}
+            <Text style={styles.mSub}>We'll extract the text from each one — sorting into your reports is coming soon.</Text>
+            <View style={{ gap: 8, marginTop: 6 }}>
+              <PrimaryButton label="Upload files" onPress={pickAndUpload} />
+              <Text style={styles.mHint}>Select the files you want to upload — one, or several PDFs and photos.</Text>
+              <SecondaryButton
+                label="Take photo / Scan QR"
+                onPress={() => { setAddOpen(false); navigation.navigate("RxCapture", patientAwpid ? { patientAwpid } : undefined); }}
+              />
+              <Pressable onPress={() => setAddOpen(false)} style={{ alignItems: "center", paddingVertical: 8 }}>
+                <Text style={styles.mCancel}>Cancel</Text>
+              </Pressable>
+            </View>
           </View>
         </Pressable>
       </Modal>
@@ -1086,7 +1106,14 @@ export function RxReportsScreen() {
         onClose={() => setShowCatSheet(false)}
         onApply={(next) => setCatF(new Set(next))}
       />
-
+      <MessageDialog
+        visible={!!uploadNotice}
+        title={uploadNotice?.title ?? ""}
+        message={uploadNotice?.message}
+        buttonLabel="OK"
+        tone={uploadNotice?.tone ?? "error"}
+        onDismiss={() => setUploadNotice(null)}
+      />
     </Screen>
   );
 }

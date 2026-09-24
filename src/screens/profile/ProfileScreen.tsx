@@ -2,6 +2,10 @@ import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Image, Modal, Switch } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import * as LocalAuthentication from "expo-local-authentication";
 import { Camera, IdCard, HeartPulse, Users, Building2, Palette, Headphones, Droplet, AlertTriangle, Lock } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
@@ -18,24 +22,20 @@ import { getProfile, getHealthSummary, getFamily, updateProfile } from "@/api/po
 import { apiErrorMessage } from "@/api/client";
 import { pickImage, pickImageFromCamera, fileToDataUri } from "@/utils/fileHelpers";
 import { getBiometricLockEnabled, setBiometricLockEnabled } from "@/utils/storage";
-import { Profile, HealthSummary, FamilyMember } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useAppTheme();
   const { logout } = useAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [summary, setSummary] = useState<HealthSummary | null>(null);
-  const [family, setFamily] = useState<FamilyMember[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
+  const [mutationError, setMutationError] = useState("");
 
   const onSignOut = async () => {
     setSigningOut(true);
@@ -47,30 +47,33 @@ export function ProfileScreen() {
     }
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [p, s, f] = await Promise.all([getProfile(), getHealthSummary(), getFamily()]);
-      setProfile(p);
-      setSummary(s);
-      setFamily(f);
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Shared keys — same cache entries HomeScreen/HealthScreen (profile,
+  // family) and HealthSummaryScreen/LinkedHospitalsScreen (healthSummary,
+  // self-only) read.
+  const profileQ = useQuery({ queryKey: ["profile"], queryFn: getProfile });
+  const summaryQ = useQuery({ queryKey: ["healthSummary"], queryFn: () => getHealthSummary() });
+  const familyQ = useQuery({ queryKey: ["family"], queryFn: getFamily });
+  const profile = profileQ.data ?? null;
+  const summary = summaryQ.data ?? null;
+  const family = familyQ.data ?? [];
+  const error = profileQ.error || summaryQ.error || familyQ.error;
+  const isInitialLoading = !profile;
+  const isFetchingAny = profileQ.isFetching || summaryQ.isFetching || familyQ.isFetching;
+
+  const refetchAll = useCallback(async () => {
+    await Promise.all([profileQ.refetch(), summaryQ.refetch(), familyQ.refetch()]);
+  }, [profileQ.refetch, summaryQ.refetch, familyQ.refetch]);
+  useRefreshOnFocus([profileQ, summaryQ, familyQ]);
+  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
   useFocusEffect(
     useCallback(() => {
-      load();
       getBiometricLockEnabled().then(setBiometricEnabled);
-    }, [load])
+    }, [])
   );
 
   const onToggleBiometric = async (next: boolean) => {
-    setError("");
+    setMutationError("");
     if (!next) {
       setBiometricBusy(true);
       await setBiometricLockEnabled(false);
@@ -83,7 +86,7 @@ export function ProfileScreen() {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
       if (!hasHardware || !isEnrolled) {
-        setError("Your phone doesn't have a fingerprint or face unlock set up yet — add one in your phone's Settings first.");
+        setMutationError("Your phone doesn't have a fingerprint or face unlock set up yet — add one in your phone's Settings first.");
         return;
       }
       await setBiometricLockEnabled(true);
@@ -101,9 +104,9 @@ export function ProfileScreen() {
       setUploadingPhoto(true);
       const dataUri = await fileToDataUri(file);
       const updated = await updateProfile({ photo: dataUri });
-      setProfile(updated);
+      queryClient.setQueryData(["profile"], updated);
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update your photo."));
+      setMutationError(apiErrorMessage(err, "Couldn't update your photo."));
     } finally {
       setUploadingPhoto(false);
     }
@@ -114,9 +117,9 @@ export function ProfileScreen() {
     setUploadingPhoto(true);
     try {
       const updated = await updateProfile({ photo: "" });
-      setProfile(updated);
+      queryClient.setQueryData(["profile"], updated);
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't remove your photo."));
+      setMutationError(apiErrorMessage(err, "Couldn't remove your photo."));
     } finally {
       setUploadingPhoto(false);
     }
@@ -124,8 +127,22 @@ export function ProfileScreen() {
 
   const allergyCount = summary?.active_allergies.length ?? 0;
 
+  if (isInitialLoading) {
+    return (
+      <Screen topColor="#249c57" bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, alignItems: "center", height: 150, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+          <SkeletonBlock width={72} height={72} radius={36} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
+          <SkeletonBlock width={130} height={16} style={{ marginTop: 12, backgroundColor: "rgba(255,255,255,0.25)" }} />
+        </View>
+        {[0, 1, 2, 3].map((i) => (
+          <SkeletonRow key={i} />
+        ))}
+      </Screen>
+    );
+  }
+
   return (
-    <Screen onRefresh={load} refreshing={loading} topColor="#249c57" bottomInset={false}>
+    <Screen onRefresh={pullRefresh} refreshing={pulling} backgroundLoading={isFetchingAny && !pulling} topColor="#249c57" bottomInset={false}>
       {profile && (
         <MetalHero style={styles.hero} curved underStatusBar>
           <View style={styles.heroContent}>
@@ -175,7 +192,8 @@ export function ProfileScreen() {
         </Pressable>
       </Modal>
 
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
+      {!!mutationError && <ErrorBanner message={mutationError} />}
 
       {summary && (
         <View style={styles.statCard}>

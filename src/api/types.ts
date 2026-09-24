@@ -441,3 +441,40 @@ export interface RescheduleResult {
 
 export type Envelope<T> = { success: boolean; message: string; data: T };
 
+
+// PortalHealthInsightSummaryView (POST /portal/health-insights/summary/) — the
+// combined, point-form summary across every changed value at once (drawing
+// on lab values AND any prescriptions started in the same window), distinct
+// from the per-parameter narrative above.
+export interface HealthInsightSummary {
+  points: string[];
+  flagged_count: number;
+  /** Trending parameters that exist but didn't change enough to flag —
+   * always a real count, never inferred client-side. */
+  stable_count: number;
+}
+
+// PortalHealthInsightsView (GET /portal/health-insights/) — powers the
+// Activity page: month-by-month document counts and the report-type
+// breakdown, plus pattern_insights (deterministic, non-LLM sentences
+// already written server-side, e.g. "You've had 3 CBC reports on file").
+export interface HealthActivityMonth {
+  month: string; // "YYYY-MM"
+  count: number;
+}
+export interface HealthActivityPanel {
+  slug: string;
+  label: string;
+  count: number;
+}
+export interface HealthActivity {
+  range: string;
+  total_documents: number;
+  total_reports: number;
+  total_prescriptions: number;
+  most_common_panel: string | null;
+  latest_report_date: string | null;
+  report_distribution: HealthActivityPanel[];
+  upload_activity: HealthActivityMonth[];
+  pattern_insights: string[];
+}

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Text, StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
 import { DateField } from "@/components/DateField";
@@ -24,9 +25,35 @@ export function AddFamilyMemberScreen() {
   const [gender, setGender] = useState(member?.gender || "");
   const [relationship, setRelationship] = useState(member?.relationship || "");
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
-  const onSave = async () => {
+  const save = useMutation({
+    mutationFn: () =>
+      isEdit
+        ? updateFamilyMember(member!.awpid, {
+            full_name: fullName.trim(),
+            date_of_birth: dob,
+            gender: gender || undefined,
+            relationship: relationship || undefined,
+          })
+        : addFamilyMember({
+            full_name: fullName.trim(),
+            date_of_birth: dob,
+            gender: gender || undefined,
+            relationship: relationship || undefined,
+          }),
+    onSuccess: () => {
+      // HealthScreen, ProfileScreen, FamilyMembersScreen and
+      // BookingForScreen all read the shared ["family"] key — invalidating
+      // it here refreshes every one of them, no callback prop needs to
+      // cross the navigation boundary.
+      queryClient.invalidateQueries({ queryKey: ["family"] });
+      navigation.goBack();
+    },
+    onError: (err) => setError(apiErrorMessage(err)),
+  });
+
+  const onSave = () => {
     if (!fullName.trim()) {
       setError("Name is required.");
       return;
@@ -38,32 +65,7 @@ export function AddFamilyMemberScreen() {
       return;
     }
     setError("");
-    setSaving(true);
-    try {
-      if (isEdit) {
-        await updateFamilyMember(member!.awpid, {
-          full_name: fullName.trim(),
-          date_of_birth: dob,
-          gender: gender || undefined,
-          relationship: relationship || undefined,
-        });
-      } else {
-        await addFamilyMember({
-          full_name: fullName.trim(),
-          date_of_birth: dob,
-          gender: gender || undefined,
-          relationship: relationship || undefined,
-        });
-      }
-      // HealthScreen, ProfileScreen and FamilyMembersScreen all reload their
-      // family list on useFocusEffect, so returning here refreshes them —
-      // no callback prop needs to cross the navigation boundary.
-      navigation.goBack();
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
+    save.mutate();
   };
 
   return (
@@ -82,7 +84,7 @@ export function AddFamilyMemberScreen() {
       <PrimaryButton
         label={isEdit ? "Save changes" : "Save family member"}
         onPress={onSave}
-        loading={saving}
+        loading={save.isPending}
         style={{ marginTop: 8 }}
       />
     </Screen>

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Text, View, StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
 import { DateField } from "@/components/DateField";
@@ -28,9 +29,28 @@ export function ReportVaccinationScreen() {
   const [date, setDate] = useState("");
   const [picked, setPicked] = useState<PickedFile | null>(null);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
 
-  const onSave = async () => {
+  const save = useMutation({
+    mutationFn: async () => {
+      const fileFields = picked ? { file_data: await fileToDataUri(picked), file_name: picked.name, mime_type: picked.mimeType } : {};
+      return uploadVaccinationRecord({
+        vaccine_name: vaccineName.trim(),
+        administered_date: date,
+        patient_awpid: patientAwpid,
+        ...fileFields,
+      });
+    },
+    onSuccess: () => {
+      // Same key shape VaccinationsScreen queries with — invalidating it
+      // refreshes that list the moment this screen navigates back.
+      queryClient.invalidateQueries({ queryKey: ["vaccinations", patientAwpid] });
+      navigation.goBack();
+    },
+    onError: (err) => setError(apiErrorMessage(err, "Couldn't submit this record.")),
+  });
+
+  const onSave = () => {
     if (!vaccineName.trim()) {
       setError("Enter the vaccine name.");
       return;
@@ -40,23 +60,7 @@ export function ReportVaccinationScreen() {
       return;
     }
     setError("");
-    setSaving(true);
-    try {
-      const fileFields = picked ? { file_data: await fileToDataUri(picked), file_name: picked.name, mime_type: picked.mimeType } : {};
-      await uploadVaccinationRecord({
-        vaccine_name: vaccineName.trim(),
-        administered_date: date,
-        patient_awpid: patientAwpid,
-        ...fileFields,
-      });
-      // VaccinationsScreen reloads on useFocusEffect, so returning here is
-      // enough to refresh its list — same contract as AddFamilyMemberScreen.
-      navigation.goBack();
-    } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't submit this record."));
-    } finally {
-      setSaving(false);
-    }
+    save.mutate();
   };
 
   return (
@@ -95,7 +99,7 @@ export function ReportVaccinationScreen() {
 
       <Text style={styles.pendingNote}>This will show as "Pending review" until a clinic confirms it.</Text>
 
-      <PrimaryButton label="Submit" onPress={onSave} loading={saving} style={{ marginTop: 16 }} />
+      <PrimaryButton label="Submit" onPress={onSave} loading={save.isPending} style={{ marginTop: 16 }} />
     </Screen>
   );
 }

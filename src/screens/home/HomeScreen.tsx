@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { SkeletonBlock, SkeletonGadgetCard } from "@/components/Skeleton";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -12,6 +16,7 @@ import { Pill, statusTone } from "@/components/Pill";
 import { LogoPill } from "@/components/Logo";
 import { MetalHero } from "@/components/MetalHero";
 import { IconBadge } from "@/components/IconBadge";
+import { UploadRing } from "@/components/UploadProgress";
 import { GadgetCard, DASHBOARD_TINTS, GadgetTint } from "@/components/GadgetCard";
 import type { LucideIcon } from "@/theme/icons";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
@@ -19,11 +24,9 @@ import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getStats, getMyBookings, getNotifications, getProfile } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { Booking } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { AppTabsParamList } from "@/navigation/types";
 import { useExitOnDoubleBack } from "@/utils/useExitOnDoubleBack";
-import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
 import { getHomeChecklistDismissed, setHomeChecklistDismissed } from "@/utils/storage";
 
 const GET_STARTED_ITEMS: { key: string; label: string; icon: LucideIcon }[] = [
@@ -65,12 +68,6 @@ export function HomeScreen() {
   useExitOnDoubleBack();
   const navigation = useNavigation<Nav>();
   const { theme } = useAppTheme();
-  const [stats, setStats] = useState<{ hospitals: number; doctors: number } | null>(null);
-  const [upcoming, setUpcoming] = useState<Booking[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [firstName, setFirstName] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [checklistDismissed, setChecklistDismissed] = useState(true);
   // Recomputed every minute so "Good morning"/the date roll over on their
   // own while the app is sitting open, not just on the next full reload.
@@ -81,35 +78,34 @@ export function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [s, bookingsPage, notifs, profile] = await Promise.all([
-        getStats(),
-        getMyBookings(),
-        getNotifications().catch(() => null),
-        getProfile().catch(() => null),
-      ]);
-      setStats(s);
-      setUpcoming(bookingsPage.results.filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status)));
-      setUnreadCount(notifs?.unread_count ?? 0);
-      setFirstName(profile?.full_name?.split(" ")[0] || "");
-    } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't load your dashboard."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // 4 independent queries instead of one merged load() — each gets its own
+  // cache entry, so e.g. ["profile"] here is the exact same cache entry
+  // ProfileScreen/HealthScreen read, and a soft-failing one (notifications,
+  // profile — same .catch(() => null) as before) doesn't block the others.
+  const statsQ = useQuery({ queryKey: ["stats"], queryFn: getStats });
+  const bookingsQ = useQuery({ queryKey: ["bookings", 1], queryFn: () => getMyBookings() });
+  const notifsQ = useQuery({ queryKey: ["notifications"], queryFn: () => getNotifications().catch(() => null) });
+  const profileQ = useQuery({ queryKey: ["profile"], queryFn: () => getProfile().catch(() => null) });
+
+  const refetchAll = useCallback(async () => {
+    await Promise.all([statsQ.refetch(), bookingsQ.refetch(), notifsQ.refetch(), profileQ.refetch()]);
+  }, [statsQ.refetch, bookingsQ.refetch, notifsQ.refetch, profileQ.refetch]);
+  useRefreshOnFocus([statsQ, bookingsQ, notifsQ, profileQ]);
+  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
   useFocusEffect(
     useCallback(() => {
-      load();
       getHomeChecklistDismissed().then(setChecklistDismissed);
-    }, [load])
+    }, [])
   );
 
-  useReconnectRefetch(load);
+  const stats = statsQ.data ?? null;
+  const upcoming = (bookingsQ.data?.results ?? []).filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status));
+  const unreadCount = notifsQ.data?.unread_count ?? 0;
+  const firstName = profileQ.data?.full_name?.split(" ")[0] || "";
+  const error = statsQ.error || bookingsQ.error;
+  const isInitialLoading = !statsQ.data && !bookingsQ.data;
+  const isFetchingAny = statsQ.isFetching || bookingsQ.isFetching || notifsQ.isFetching || profileQ.isFetching;
 
   const onQuickAction = (key: string) => {
     if (key === "appointments") navigation.navigate("Tabs" as any, { screen: "Appointments" } as any);
@@ -135,19 +131,50 @@ export function HomeScreen() {
   const todayIso = new Date().toISOString().slice(0, 10);
   const todayBookings = upcoming.filter((b) => b.date === todayIso);
 
+  if (isInitialLoading) {
+    return (
+      <Screen topColor="#249c57" bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, height: 150, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+          <View style={styles.heroTop}>
+            <LogoPill size={40} />
+          </View>
+          <SkeletonBlock width={170} height={18} style={{ marginTop: 14, backgroundColor: "rgba(255,255,255,0.25)" }} />
+          <SkeletonBlock width={130} height={11} style={{ marginTop: 8, backgroundColor: "rgba(255,255,255,0.25)" }} />
+        </View>
+        <SkeletonBlock height={62} radius={14} style={{ marginBottom: 12 }} />
+        <SkeletonBlock height={70} radius={18} style={{ marginBottom: 18 }} />
+        <Text style={styles.sectionTitle}>Quick access</Text>
+        <View style={styles.grid}>
+          <SkeletonGadgetCard style={styles.qa} />
+          <SkeletonGadgetCard style={styles.qa} />
+          <SkeletonGadgetCard style={styles.qa} />
+        </View>
+      </Screen>
+    );
+  }
+
   return (
-    <Screen onRefresh={load} refreshing={loading} topColor="#249c57" bottomInset={false}>
+    <Screen
+      onRefresh={pullRefresh}
+      refreshing={pulling}
+      backgroundLoading={isFetchingAny && !pulling}
+      topColor="#249c57"
+      bottomInset={false}
+    >
       <MetalHero compact curved underStatusBar style={styles.hero}>
         <View style={styles.heroTop}>
           <LogoPill size={40} />
-          <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
-            <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
-            {unreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
-              </View>
-            )}
-          </Pressable>
+          <View style={styles.heroActions}>
+            <UploadRing onOpen={() => navigation.navigate("Uploads")} />
+            <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
+              <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
         </View>
         <Text style={styles.greeting}>
           {greetingForHour(now.getHours())}
@@ -159,7 +186,7 @@ export function HomeScreen() {
         </Text>
       </MetalHero>
 
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error, "Couldn't load your dashboard.")} onRetry={refetchAll} />}
 
       <Pressable
         onPress={() => navigation.navigate("Tabs" as any, { screen: "Appointments" } as any)}
@@ -209,7 +236,7 @@ export function HomeScreen() {
         </View>
       </Pressable>
 
-      {!checklistDismissed && !loading && upcoming.length === 0 && (
+      {!checklistDismissed && !!bookingsQ.data && upcoming.length === 0 && (
         <Card style={styles.checklistCard}>
           <View style={styles.checklistHeader}>
             <Text style={styles.checklistTitle}>Get started</Text>
@@ -302,6 +329,7 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   hero: { marginBottom: 16 },
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  heroActions: { flexDirection: "row", alignItems: "center", gap: 10 },
   bellBtn: { position: "relative", padding: 4 },
   badge: { position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: "#B23A3A", alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
   badgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },

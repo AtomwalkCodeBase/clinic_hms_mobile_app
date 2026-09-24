@@ -11,6 +11,7 @@ import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScree
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
 import { RxReportsScreen } from "@/screens/records/RxReportsScreen";
 import { CaptureScreen } from "@/screens/records/CaptureScreen";
+import { UploadsScreen } from "@/screens/records/UploadsScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
 import { VaccinationsScreen } from "@/screens/health/VaccinationsScreen";
@@ -59,6 +60,7 @@ export function AppStack() {
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       <Stack.Screen name="RxReports" component={RxReportsScreen} />
       <Stack.Screen name="RxCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
+      <Stack.Screen name="Uploads" component={UploadsScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
       <Stack.Screen name="Vaccinations" component={VaccinationsScreen} />

@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import {
   Clock, Lock, Search, FlaskConical, Pill as PillIcon, FileText,
   ChevronDown, ChevronLeft, ChevronRight,
@@ -73,10 +75,7 @@ export function SharedRecordsPrivacyScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useAppTheme();
 
-  const [data, setData] = useState<RecordsPrivacyPayload | null>(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const [sheet, setSheet] = useState<Sheet>(null);
   const [catSheet, setCatSheet] = useState(false);
 
@@ -95,22 +94,24 @@ export function SharedRecordsPrivacyScreen() {
     setPage(1);
   }, [qDebounced]);
 
-  const load = useCallback(async () => {
-    try {
+  const catKey = useMemo(() => [...catF].sort().join(","), [catF]);
+  const { data, error: queryError, refetch, isPending: loading, isStale } = useQuery({
+    queryKey: ["recordsPrivacy", page, typeF, catKey, qDebounced],
+    queryFn: () => {
       const query: RecordsPrivacyQuery = { page };
       const kind = KIND_PARAM[typeF];
       if (kind) query.kind = kind;
       if (catF.size) query.category = [...catF].join(",");
       if (qDebounced.trim()) query.q = qDebounced.trim();
-      setData(await getRecordsPrivacy(query));
-      setError("");
-    } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't load your privacy settings."));
-    } finally {
-      setLoading(false);
-    }
-  }, [page, typeF, catF, qDebounced]);
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+      return getRecordsPrivacy(query);
+    },
+    // Changing a filter/page keeps showing the previous page's data instead
+    // of flashing empty while the new one loads.
+    placeholderData: keepPreviousData,
+  });
+  useRefreshOnFocus({ isStale, refetch });
+  const error = queryError ? apiErrorMessage(queryError, "Couldn't load your privacy settings.") : "";
+  const load = refetch;
 
   const docs = data?.documents ?? [];               // one page
   const summary = data?.summary;
@@ -146,13 +147,15 @@ export function SharedRecordsPrivacyScreen() {
   }, [docs]);
 
   // ── mutations ────────────────────────────────────────────────────────────
+  const [mutationError, setMutationError] = useState("");
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
+    setMutationError("");
     try {
       await fn();
       await load();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't update."));
+      setMutationError(apiErrorMessage(err, "Couldn't update."));
     } finally {
       setBusy(false);
     }
@@ -251,6 +254,7 @@ export function SharedRecordsPrivacyScreen() {
         <ErrorBanner message={error} onRetry={load} />
       ) : data ? (
         <View style={styles.pad}>
+          {!!mutationError && <ErrorBanner message={mutationError} />}
           <Text style={styles.intro}>
             Choose what a doctor sees when you share your records. Nothing here is hidden from you, and nothing is deleted.
           </Text>

@@ -37,9 +37,16 @@ export const DASHBOARD_TINTS = {
   gold: { bg: ["#FDF6E3", "#F9E7B8", "#F3D687"] as const, icon: ["#DDB13A", "#A67C1B", "#6B4E0F"] as const, shadow: "#3E2C08", border: "#F1DC9E" },
 };
 
-export type GadgetTint =
-  | (typeof GADGET_TINTS)[keyof typeof GADGET_TINTS]
-  | (typeof DASHBOARD_TINTS)[keyof typeof DASHBOARD_TINTS];
+// A structural shape, not a closed union of the two named sets above — lets
+// other tint sources (e.g. theme/familyColors.ts's age/gender-derived
+// per-person tints) satisfy it too, without every future tint set having to
+// be named and added to a union here.
+export interface GadgetTint {
+  bg: readonly [string, string, string];
+  icon: readonly [string, string, string];
+  shadow: string;
+  border: string;
+}
 
 const SHEEN = ["rgba(255,255,255,0.55)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0)"] as const;
 

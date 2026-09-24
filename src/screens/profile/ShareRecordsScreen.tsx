@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, TextInput, Share } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Clock, Check, ShieldCheck, ShieldAlert, ScanLine, X, Download, Link2 } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
@@ -65,7 +67,6 @@ export function ShareRecordsScreen() {
   const [shareScope, setShareScope] = useState<RecordsShareScope>("default");
   const [grantedUntil, setGrantedUntil] = useState<string | null>(null);
 
-  const [grants, setGrants] = useState<RecordsShareGrant[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -75,14 +76,16 @@ export function ShareRecordsScreen() {
     return () => clearInterval(id);
   }, []);
 
-  const loadGrants = useCallback(async () => {
-    try { setGrants(await getRecordsShareMine()); } catch { /* non-fatal */ }
-  }, []);
-  useFocusEffect(useCallback(() => {
-    loadGrants();
-    const id = setInterval(loadGrants, 5000);
-    return () => clearInterval(id);
-  }, [loadGrants]));
+  // refetchInterval replaces the old manual setInterval(loadGrants, 5000) —
+  // same 5s live polling, no interval/cleanup code to hand-manage.
+  const grantsQ = useQuery({
+    queryKey: ["recordsShareMine"],
+    queryFn: () => getRecordsShareMine().catch(() => [] as RecordsShareGrant[]),
+    refetchInterval: 5000,
+  });
+  useRefreshOnFocus(grantsQ);
+  const grants = grantsQ.data ?? [];
+  const loadGrants = grantsQ.refetch;
 
   async function createLink() {
     setBusy(true); setError("");

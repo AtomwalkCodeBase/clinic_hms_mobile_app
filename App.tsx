@@ -1,8 +1,11 @@
 import React from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/api/queryClient";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { NetworkProvider } from "@/context/NetworkContext";
+import { UploadTasksProvider } from "@/context/UploadTasksContext";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { RootNavigator } from "@/navigation/RootNavigator";
 
@@ -25,8 +28,12 @@ export default function App() {
       <ThemeProvider>
         <NetworkProvider>
           <AuthProvider>
-            <RootNavigator />
-            <OfflineBanner />
+            <QueryClientProvider client={queryClient}>
+              <UploadTasksProvider>
+                <RootNavigator />
+                <OfflineBanner />
+              </UploadTasksProvider>
+            </QueryClientProvider>
           </AuthProvider>
         </NetworkProvider>
       </ThemeProvider>

@@ -1,8 +1,12 @@
 import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { useFocusEffect, useNavigation, CompositeNavigationProp } from "@react-navigation/native";
+import { useNavigation, CompositeNavigationProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import { Screen, EmptyState, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { Pill, statusTone, toneColor } from "@/components/Pill";
@@ -14,8 +18,7 @@ import { useAppTheme } from "@/context/ThemeContext";
 import { getMyBookings, getMyRecords, cancelBooking } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { useNetwork } from "@/context/NetworkContext";
-import { useReconnectRefetch } from "@/hooks/useReconnectRefetch";
-import { Booking, MedicalRecord, Pagination } from "@/api/types";
+import { Booking, MedicalRecord } from "@/api/types";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
 import { MetalHero } from "@/components/MetalHero";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -50,58 +53,47 @@ export function AppointmentsScreen() {
   const navigation = useNavigation<Nav>();
   const { theme } = useAppTheme();
   const { isOffline } = useNetwork();
+  const queryClient = useQueryClient();
   const [segment, setSegment] = useState<"upcoming" | "past">("upcoming");
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<Booking | null>(null);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [bookingsPage, r] = await Promise.all([getMyBookings(1), getMyRecords()]);
-      setBookings(bookingsPage.results);
-      setPagination(bookingsPage.pagination);
-      setRecords(r);
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
-
-  useReconnectRefetch(load);
-
-  // Bookings are ordered newest-first server-side, so with more than a
-  // page of history this is really "see older past visits" — upcoming
+  // Bookings are ordered newest-first server-side, so with more than a page
+  // of history this is really "see older past visits" — upcoming
   // appointments (future dates) sort ahead of any past ones and land on
-  // page 1 regardless, same assumption the web patient portal already
-  // makes about this same endpoint.
-  const loadMore = async () => {
-    if (!pagination?.has_next || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const nextPage = await getMyBookings(pagination.page + 1);
-      setBookings((prev) => [...prev, ...nextPage.results]);
-      setPagination(nextPage.pagination);
-    } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't load more appointments."));
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  // page 1 regardless, same assumption the web patient portal already makes
+  // about this same endpoint.
+  const bookingsQ = useInfiniteQuery({
+    queryKey: ["bookings"],
+    queryFn: ({ pageParam }) => getMyBookings(pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.pagination.has_next ? last.pagination.page + 1 : undefined),
+  });
+  // Same key shape HealthVisitsScreen uses for `["visits", patientAwpid]`
+  // with an undefined patientAwpid (self) — shares that cache entry.
+  const recordsQ = useQuery({ queryKey: ["visits", undefined], queryFn: () => getMyRecords() });
+
+  const refetchAll = useCallback(async () => {
+    await Promise.all([bookingsQ.refetch(), recordsQ.refetch()]);
+  }, [bookingsQ.refetch, recordsQ.refetch]);
+  useRefreshOnFocus([bookingsQ, recordsQ]);
+  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
+
+  const bookings = bookingsQ.data?.pages.flatMap((p) => p.results) ?? [];
+  const records: MedicalRecord[] = recordsQ.data ?? [];
+  const error = bookingsQ.error || recordsQ.error;
+  const isInitialLoading = !bookingsQ.data && !recordsQ.data;
+  const isFetchingAny = (bookingsQ.isFetching && !bookingsQ.isFetchingNextPage) || recordsQ.isFetching;
+
+  const cancelMutation = useMutation({
+    mutationFn: cancelBooking,
+    onSuccess: () => {
+      setConfirmTarget(null);
+      // Prefix match — also invalidates HomeScreen's ["bookings", 1] snapshot.
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+    onError: () => setConfirmTarget(null),
+  });
 
   const upcoming = bookings.filter((b) => UPCOMING_STATUSES.includes(b.status));
   const past = bookings.filter((b) => !UPCOMING_STATUSES.includes(b.status));
@@ -114,32 +106,44 @@ export function AppointmentsScreen() {
   const findPrescription = (booking: Booking): MedicalRecord | undefined =>
     records.find((r) => r.signed && r.prescription.length > 0 && r.hospital === booking.hospital && r.date === booking.date);
 
+  const [offlineMsg, setOfflineMsg] = useState("");
+
   const onCancel = (booking: Booking) => setConfirmTarget(booking);
 
-  const confirmCancel = async () => {
+  const confirmCancel = () => {
     if (!confirmTarget) return;
-    const booking = confirmTarget;
     if (isOffline) {
       setConfirmTarget(null);
-      setError("You're offline. Connect to the internet and try cancelling again.");
+      setOfflineMsg("You're offline. Connect to the internet and try cancelling again.");
       return;
     }
-    setCancellingId(booking.id);
-    setError("");
-    try {
-      await cancelBooking(booking.id);
-      setConfirmTarget(null);
-      await load();
-    } catch (err) {
-      setConfirmTarget(null);
-      setError(apiErrorMessage(err, "Couldn't cancel this appointment."));
-    } finally {
-      setCancellingId(null);
-    }
+    setOfflineMsg("");
+    cancelMutation.mutate(confirmTarget.id);
   };
 
+  if (isInitialLoading) {
+    return (
+      <Screen topColor="#249c57" bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, height: 118, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+          <SkeletonBlock width={180} height={16} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
+          <SkeletonBlock width={220} height={11} style={{ marginTop: 8, backgroundColor: "rgba(255,255,255,0.25)" }} />
+        </View>
+        <SkeletonBlock height={34} radius={18} style={{ marginBottom: 14 }} />
+        {[0, 1, 2, 3].map((i) => (
+          <SkeletonRow key={i} />
+        ))}
+      </Screen>
+    );
+  }
+
   return (
-    <Screen onRefresh={load} refreshing={loading} topColor="#249c57" bottomInset={false}>
+    <Screen
+      onRefresh={pullRefresh}
+      refreshing={pulling}
+      backgroundLoading={isFetchingAny && !pulling}
+      topColor="#249c57"
+      bottomInset={false}
+    >
       <MetalHero compact curved underStatusBar style={styles.hero}>
         <Text style={styles.bannerTitle}>Find a doctor instantly</Text>
         <Text style={styles.bannerSub}>Book across every hospital on the platform</Text>
@@ -148,7 +152,9 @@ export function AppointmentsScreen() {
         </Pressable>
       </MetalHero>
 
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
+      {!!offlineMsg && <ErrorBanner message={offlineMsg} />}
+      {!!cancelMutation.error && <ErrorBanner message={apiErrorMessage(cancelMutation.error, "Couldn't cancel this appointment.")} />}
 
       <SegmentedControl
         options={[
@@ -251,7 +257,7 @@ export function AppointmentsScreen() {
                       />
                     )}
                     {CANCELLABLE_STATUSES.includes(b.status) && (
-                      <SecondaryButton label="Cancel" danger compact onPress={() => onCancel(b)} loading={cancellingId === b.id} />
+                      <SecondaryButton label="Cancel" danger compact onPress={() => onCancel(b)} loading={cancelMutation.isPending && cancelMutation.variables === b.id} />
                     )}
                   </View>
                 )}
@@ -261,11 +267,11 @@ export function AppointmentsScreen() {
         })
       )}
 
-      {pagination?.has_next && (
+      {bookingsQ.hasNextPage && (
         <SecondaryButton
-          label={loadingMore ? "Loading…" : "Load more"}
-          onPress={loadMore}
-          loading={loadingMore}
+          label={bookingsQ.isFetchingNextPage ? "Loading…" : "Load more"}
+          onPress={() => bookingsQ.fetchNextPage()}
+          loading={bookingsQ.isFetchingNextPage}
           style={styles.loadMoreBtn}
         />
       )}
@@ -281,7 +287,7 @@ export function AppointmentsScreen() {
         }
         confirmLabel="Cancel appointment"
         cancelLabel="Keep it"
-        loading={!!confirmTarget && cancellingId === confirmTarget.id}
+        loading={cancelMutation.isPending}
         onConfirm={confirmCancel}
         onCancel={() => setConfirmTarget(null)}
       />

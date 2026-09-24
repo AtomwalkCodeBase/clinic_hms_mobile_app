@@ -4,6 +4,12 @@ dist/
 web-build/
 *.log
 .env
+.claude/settings.local.json
+
+# Native projects — regenerated on demand via `npx expo prebuild` /
+# `npx expo run:android`, not committed (managed-workflow CNG convention).
+android/
+ios/
 
 # AI Trends — kept locally for ongoing work, deliberately held out of the
 # repo/Play Store build until it's finished (see AppStack.tsx / RxReportsScreen.tsx,

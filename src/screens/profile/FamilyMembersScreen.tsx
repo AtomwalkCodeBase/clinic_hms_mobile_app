@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { SecondaryButton } from "@/components/Buttons";
@@ -15,49 +17,26 @@ import { AppStackParamList } from "@/navigation/types";
 
 export function FamilyMembersScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const [family, setFamily] = useState<FamilyMember[]>([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [removeTarget, setRemoveTarget] = useState<FamilyMember | null>(null);
-  const [removingAwpid, setRemovingAwpid] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setFamily(await getFamily());
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: family = [], error, refetch, isFetching, isStale } = useQuery({ queryKey: ["family"], queryFn: getFamily });
+  useRefreshOnFocus({ isStale, refetch });
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
-
-  const confirmRemove = async () => {
-    if (!removeTarget) return;
-    const target = removeTarget;
-    setRemovingAwpid(target.awpid);
-    setError("");
-    try {
-      await removeFamilyMember(target.awpid);
+  // Shared ["family"] key — HealthScreen's family switcher and
+  // BookingForScreen's "+ Add a family member" flow pick this up too,
+  // without either needing its own manual reload.
+  const removeMember = useMutation({
+    mutationFn: removeFamilyMember,
+    onSuccess: () => {
       setRemoveTarget(null);
-      await load();
-    } catch (err) {
-      setRemoveTarget(null);
-      setError(apiErrorMessage(err, "Couldn't remove this family member."));
-    } finally {
-      setRemovingAwpid(null);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ["family"] });
+    },
+    onError: () => setRemoveTarget(null),
+  });
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={refetch} refreshing={isFetching}>
       <View style={styles.headerRow}>
         <BackHeader title="Family members" onBack={() => navigation.goBack()} />
         <Pressable onPress={() => navigation.navigate("AddFamilyMember")} hitSlop={8}>
@@ -65,7 +44,8 @@ export function FamilyMembersScreen() {
         </Pressable>
       </View>
 
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
+      {!!removeMember.error && <ErrorBanner message={apiErrorMessage(removeMember.error, "Couldn't remove this family member.")} />}
 
       {family.length === 0 ? (
         <Card>
@@ -89,7 +69,7 @@ export function FamilyMembersScreen() {
                 label="Remove"
                 danger
                 compact
-                loading={removingAwpid === f.awpid}
+                loading={removeMember.isPending && removeMember.variables === f.awpid}
                 onPress={() => setRemoveTarget(f)}
               />
             </View>
@@ -108,8 +88,8 @@ export function FamilyMembersScreen() {
         }
         confirmLabel="Remove"
         cancelLabel="Keep"
-        loading={!!removeTarget && removingAwpid === removeTarget.awpid}
-        onConfirm={confirmRemove}
+        loading={removeMember.isPending}
+        onConfirm={() => removeTarget && removeMember.mutate(removeTarget.awpid)}
         onCancel={() => setRemoveTarget(null)}
       />
     </Screen>

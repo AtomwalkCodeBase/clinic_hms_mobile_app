@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner, SectionTitle, EmptyState } from "@/components/Layout";
 import { PrimaryButton } from "@/components/Buttons";
@@ -32,42 +33,20 @@ export function DoctorDetailScreen() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [availableOnly, setAvailableOnly] = useState(false);
 
-  const [doctor, setDoctor] = useState<DoctorDetail | null>(null);
-  const [slots, setSlots] = useState<SlotEntry[]>([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const { data: doctor, error, refetch: loadDoctor, isPending: loading } = useQuery({
+    queryKey: ["doctorDetail", tenantId, doctorId],
+    queryFn: () => getDoctorDetail(tenantId, doctorId),
+  });
 
-  const loadDoctor = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setDoctor(await getDoctorDetail(tenantId, doctorId));
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, doctorId]);
-
-  useEffect(() => {
-    loadDoctor();
-  }, [loadDoctor]);
-
-  useEffect(() => {
-    setSelectedTime(null);
-    setSlots([]);
-    setSlotsLoading(true);
-    getSlots(tenantId, doctorId, selectedDate)
-      .then(setSlots)
-      .catch((err) => setError(apiErrorMessage(err)))
-      .finally(() => setSlotsLoading(false));
-  }, [tenantId, doctorId, selectedDate]);
+  const { data: slots = [], isFetching: slotsLoading } = useQuery({
+    queryKey: ["slots", tenantId, doctorId, selectedDate],
+    queryFn: () => getSlots(tenantId, doctorId, selectedDate),
+  });
 
   return (
     <Screen>
       <BackHeader title="Doctor profile" onBack={() => navigation.goBack()} />
-      {!!error && <ErrorBanner message={error} onRetry={loadDoctor} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={loadDoctor} />}
       {loading ? (
         <Text style={styles.loading}>Loading…</Text>
       ) : !doctor ? null : (
@@ -92,7 +71,11 @@ export function DoctorDetailScreen() {
           <View style={{ alignSelf: "stretch" }}>
             <SectionTitle>Choose a date</SectionTitle>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <SegmentedControl options={dateOptions} value={selectedDate} onChange={setSelectedDate} />
+              <SegmentedControl
+                options={dateOptions}
+                value={selectedDate}
+                onChange={(d) => { setSelectedDate(d); setSelectedTime(null); }}
+              />
             </ScrollView>
           </View>
 

@@ -1,43 +1,27 @@
-import React, { useCallback, useState } from "react";
+import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { NEUTRAL } from "@/theme/themes";
 import { getHealthSummary } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { HealthSummary } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 export function HealthSummaryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const [summary, setSummary] = useState<HealthSummary | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setSummary(await getHealthSummary());
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  // Same query key LinkedHospitalsScreen uses for the identical call — they
+  // now share one cache entry instead of each fetching it independently.
+  const { data: summary, error, refetch, isFetching, isStale } = useQuery({ queryKey: ["healthSummary"], queryFn: () => getHealthSummary() });
+  useRefreshOnFocus({ isStale, refetch });
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={refetch} refreshing={isFetching}>
       <BackHeader title="Health summary" onBack={() => navigation.goBack()} />
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       {summary && (
         <>

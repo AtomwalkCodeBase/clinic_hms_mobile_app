@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { api } from "./client";
 import type {
   Booking,
@@ -10,6 +11,8 @@ import type {
   Envelope,
   FamilyMember,
   GrowthPoint,
+  HealthActivity,
+  HealthInsightSummary,
   HealthSummary,
   Hospital,
   LabOrder,
@@ -492,6 +495,43 @@ export async function getDocumentDetail(id: number, opts?: { download?: boolean 
 }
 
 /**
+ * The combined, point-form summary across every changed value at once —
+ * POST for the same reason as the narrative above (the one call on this
+ * screen that hits an LLM). `points` comes back empty (not null) when
+ * nothing changed enough to flag; the caller falls back to a plain
+ * "nothing out of the ordinary" state rather than an error either way.
+ */
+export async function getHealthInsightSummary(opts?: {
+  range?: "3m" | "6m" | "12m" | "all";
+  patientAwpid?: string;
+}) {
+  const res = await api.post<Envelope<HealthInsightSummary>>("/portal/health-insights/summary/", {
+    range: opts?.range || "12m",
+    ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
+  });
+  return res.data.data;
+}
+
+/**
+ * Visits & reports activity — month-by-month document counts, the
+ * report-type breakdown, and pattern_insights (deterministic, non-LLM
+ * sentences already written server-side). No LLM call, so this is a plain
+ * GET unlike the two above.
+ */
+export async function getHealthActivity(opts?: {
+  range?: "3m" | "6m" | "12m" | "all";
+  patientAwpid?: string;
+}) {
+  const res = await api.get<Envelope<HealthActivity>>("/portal/health-insights/", {
+    params: {
+      range: opts?.range || "12m",
+      ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
+    },
+  });
+  return res.data.data;
+}
+
+/**
  * Re-file an unsorted / patient-uploaded document. Verified hospital docs 409.
  * Send only the field(s) the review flow is asking for right now — the
  * server recomputes `review_needs` from what's still missing afterward, so a
@@ -541,8 +581,155 @@ export async function uploadDocument(payload: {
   qr_token?: string;
   patient_awpid?: string;
 }): Promise<UploadResult> {
-  const res = await api.post<UploadResult>("/portal/documents/", payload);
+  // The server reads the page (quality check -> OCR -> text/vision model) before
+  // it answers, which routinely outlasts the app-wide 15s limit — the phone then
+  // gave up and left the photo "uploading" while the server was still working.
+  const res = await api.post<UploadResult>("/portal/documents/", payload, { timeout: 120000 });
   return res.data;
+}
+
+// ── Upload-and-extract (mobile-only, extraction phase — no classification/filing yet) ──
+
+export type ExtractSyncFileResult = {
+  file_name: string;
+  status: "done" | "failed";
+  text: string;
+  confidence: number | null;
+  reason: string;
+};
+
+/** <=2 files, processed inline — same request/response shape family as uploadDocument. */
+export async function extractSync(
+  files: { file_name: string; mime_type: string; file_data: string }[],
+  patient_awpid?: string,
+  /** Bytes sent so far — lets the UI tell "sending" apart from "reading" inside this one request. */
+  onUpload?: (loaded: number, total: number) => void
+): Promise<ExtractSyncFileResult[]> {
+  const res = await api.post<Envelope<{ results: ExtractSyncFileResult[] }>>(
+    "/portal/documents/extract/sync/",
+    { files, patient_awpid },
+    { timeout: 120000, onUploadProgress: (e) => onUpload?.(e.loaded, e.total ?? 0) }
+  );
+  return res.data.data.results;
+}
+
+export type ExtractBulkCreateResult = {
+  batch_id: string;
+  items: { index?: number; item_id: string; filename: string; put_url: string; content_type: string }[];
+  /** Files the server left out (unsupported type / over the size cap). */
+  skipped?: { index: number; name: string; reason: string }[];
+};
+
+/** 3-50 files — returns presigned S3 PUT urls; caller PUTs each file, then calls extractBulkStart. */
+export async function extractBulkCreate(
+  files: { name: string; size: number; mime_type: string }[],
+  patient_awpid?: string
+): Promise<ExtractBulkCreateResult> {
+  const res = await api.post<Envelope<ExtractBulkCreateResult>>("/portal/documents/extract/bulk/", {
+    files,
+    patient_awpid,
+  });
+  return res.data.data;
+}
+
+export async function extractBulkStart(batchId: string): Promise<{ batch_id: string; status: string }> {
+  // The server checks every uploaded file in S3 before queueing, which takes a few
+  // seconds for a big batch — well past the app-wide 15s default's comfort zone on a slow link.
+  const res = await api.post<Envelope<{ batch_id: string; status: string }>>(
+    `/portal/documents/extract/bulk/${batchId}/start/`,
+    undefined,
+    { timeout: 60000 }
+  );
+  return res.data.data;
+}
+
+export type ExtractBatchStatus = {
+  batch: {
+    id: string;
+    status: "pending" | "queued" | "processing" | "done" | "partial" | "failed" | "cancelled";
+    processed?: number;
+    progress_percent?: number;
+    counts?: { uploading: number; queued: number; processing: number; done: number; failed: number };
+    total_files: number;
+    completed: number;
+    failed: number;
+    created_at: string;
+    started_at?: string | null;
+    finished_at: string | null;
+  };
+  items: { id: string; original_filename: string; status: string; reason: string }[];
+};
+
+export async function extractBulkStatus(batchId: string): Promise<ExtractBatchStatus> {
+  const res = await api.get<Envelope<ExtractBatchStatus>>(`/portal/documents/extract/bulk/${batchId}/status/`);
+  return res.data.data;
+}
+
+export type ExtractedItem = {
+  id: string;
+  name: string;
+  status: "done" | "failed";
+  mime_type: string;
+  /** False when the file was rejected (never kept) — nothing to open. */
+  has_file: boolean;
+  reason: string;
+  snippet: string;
+  created_at: string;
+};
+export type ExtractedGroup = {
+  id: string;
+  kind: "batch" | "instant";
+  created_at: string;
+  /** Stable number of files in this upload (items only counts the ones still showing). */
+  total?: number;
+  items: ExtractedItem[];
+};
+export type ExtractedItems = { counts: { ready: number; failed: number }; groups: ExtractedGroup[] };
+
+/** Finished extractions the patient hasn't dismissed yet, grouped per upload. */
+export async function getExtractedItems(patientAwpid?: string): Promise<ExtractedItems> {
+  const res = await api.get<Envelope<ExtractedItems>>("/portal/documents/extract/items/", {
+    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
+  });
+  return res.data.data;
+}
+
+/** A short-lived link to the kept original, to open it the same way any other report opens. */
+export async function getExtractedItemFile(id: string, patientAwpid?: string) {
+  const res = await api.get<Envelope<{ id: string; name: string; status: string; reason: string; mime_type: string; file_url: string }>>(
+    `/portal/documents/extract/items/${id}/`,
+    { params: patientAwpid ? { patient_awpid: patientAwpid } : {} }
+  );
+  return res.data.data;
+}
+
+/** Hides finished items from the list (nothing is deleted server-side). */
+export async function dismissExtractedItems(target: { itemIds: string[] } | { all: true }, patientAwpid?: string) {
+  const body = "all" in target ? { all: true } : { item_ids: target.itemIds };
+  const res = await api.post<Envelope<{ dismissed: number }>>("/portal/documents/extract/items/dismiss/", {
+    ...body,
+    ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
+  });
+  return res.data.data;
+}
+
+/** Registers this device's Expo push token with the server, against the logged-in account. */
+export async function registerPushToken(token: string, platform: string): Promise<void> {
+  await api.post("/portal/push-token/", { token, platform });
+}
+
+/** Raw PUT straight to S3 — headers must match what presigned_put_url() signed. */
+export async function putToS3(putUrl: string, mimeType: string, fileUri: string): Promise<void> {
+  // Native upload straight from disk. fetch(uri).blob() would copy the whole file
+  // through base64 in JS (slow, and the body it produced never reached S3).
+  const res = await FileSystem.uploadAsync(putUrl, fileUri, {
+    httpMethod: "PUT",
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    headers: { "Content-Type": mimeType, "x-amz-server-side-encryption": "AES256" },
+  });
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`Upload to storage failed (${res.status}): ${String(res.body).slice(0, 200)}`);
+  }
 }
 
 /** PortalLabOrderListView returns a raw object, not the {success,data} envelope. */

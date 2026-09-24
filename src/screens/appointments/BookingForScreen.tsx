@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { User, Users } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner, EmptyState } from "@/components/Layout";
 import { Card } from "@/components/Card";
@@ -27,30 +29,12 @@ export function BookingForScreen() {
   const { theme } = useAppTheme();
 
   const [showFamily, setShowFamily] = useState(false);
-  const [family, setFamily] = useState<FamilyMember[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const loadFamily = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setFamily(await getFamily());
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Refreshes every time this screen regains focus — including on the way
-  // back from "+ Add a family member", so a member added mid-flow shows up
-  // without the patient having to back out and re-enter.
-  useFocusEffect(
-    useCallback(() => {
-      loadFamily();
-    }, [loadFamily])
-  );
+  // Shared ["family"] key — refreshes via cache invalidation the moment
+  // AddFamilyMemberScreen's save succeeds, including on the way back from
+  // "+ Add a family member" mid-flow, without a manual reload here.
+  const { data: family = [], error, refetch, isFetching: loading, isStale } = useQuery({ queryKey: ["family"], queryFn: getFamily });
+  useRefreshOnFocus({ isStale, refetch });
 
   function proceed(patientAwpid: string | undefined, patientName: string) {
     navigation.navigate("FindDoctors", {
@@ -65,7 +49,7 @@ export function BookingForScreen() {
       <BackHeader title="Who is this for?" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>Choose who you're booking this appointment for.</Text>
 
-      {!!error && <ErrorBanner message={error} onRetry={loadFamily} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       <Pressable onPress={() => proceed(undefined, "You")}>
         <Card style={styles.optionRow}>

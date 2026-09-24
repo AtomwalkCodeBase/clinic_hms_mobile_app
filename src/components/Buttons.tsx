@@ -48,9 +48,9 @@ export function PrimaryButton({ label, onPress, loading, disabled, style, compac
   );
 }
 
-export function SecondaryButton({ label, onPress, loading, disabled, style, danger, compact }: ButtonProps & { danger?: boolean }) {
+export function SecondaryButton({ label, onPress, loading, disabled, style, danger, compact, color: colorOverride }: ButtonProps & { danger?: boolean; color?: string }) {
   const { theme, neutral } = useAppTheme();
-  const color = danger ? neutral.danger : theme.text;
+  const color = danger ? neutral.danger : colorOverride || theme.text;
   return (
     <Pressable
       onPress={onPress}

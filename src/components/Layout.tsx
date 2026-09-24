@@ -7,6 +7,7 @@ import * as SystemUI from "expo-system-ui";
 import { ArrowLeft } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import { TopProgressBar } from "@/components/TopProgressBar";
 
 export function Screen({
   children,
@@ -15,10 +16,16 @@ export function Screen({
   refreshing,
   topColor,
   bottomInset = true,
+  accentColor,
+  backgroundLoading = false,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   onRefresh?: () => void;
+  /** Only true while a MANUAL pull gesture is in flight — see
+   * usePullToRefresh. Drives the native RefreshControl spinner alone;
+   * a silent background refetch must never set this, or it shows the
+   * exact same spinner over content the user never asked to reload. */
   refreshing?: boolean;
   /** Extends this color into the status-bar safe-area inset instead of the
    * default page background — for screens whose first element is a
@@ -36,9 +43,22 @@ export function Screen({
    * this Screen's own plain background, exactly insets.bottom tall,
    * appears between the content and the tab bar. */
   bottomInset?: boolean;
+  /** Tint for the pull-to-refresh spinner and the background-refresh pill —
+   * defaults to the signed-in user's chosen accent theme. Pass a
+   * dependent's family-accent color on a screen that's currently showing
+   * their data instead of the account owner's own. */
+  accentColor?: string;
+  /** True while a query refetches in the background with data already on
+   * screen (i.e. `isFetching` while NOT also the manual-pull case above) —
+   * shows the small "Updating" pill instead of the native spinner, so a
+   * routine refresh never covers or blanks real content. See
+   * useRefreshOnFocus and TopProgressBar. */
+  backgroundLoading?: boolean;
 }) {
   const Body = scroll ? ScrollView : View;
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const tint = accentColor || theme.fill;
   const edges = (topColor ? ["bottom"] : ["top", "bottom"]).filter(
     (e) => bottomInset || e !== "bottom",
   ) as ("top" | "bottom")[];
@@ -75,10 +95,21 @@ export function Screen({
       {!!topColor && <View style={{ height: insets.top, backgroundColor: topColor }} />}
       <SafeAreaView style={styles.safeInner} edges={edges}>
         <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
+          <TopProgressBar visible={backgroundLoading} color={tint} />
           <Body
             style={styles.body}
             contentContainerStyle={scroll ? styles.scrollContent : undefined}
-            refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
+            refreshControl={
+              onRefresh ? (
+                <RefreshControl
+                  refreshing={!!refreshing}
+                  onRefresh={onRefresh}
+                  colors={[tint]}
+                  tintColor={tint}
+                  progressBackgroundColor={NEUTRAL.surface}
+                />
+              ) : undefined
+            }
           >
             {children}
           </Body>
@@ -88,13 +119,30 @@ export function Screen({
   );
 }
 
-export function BackHeader({ title, onBack }: { title: string; onBack: () => void }) {
+export function BackHeader({
+  title,
+  onBack,
+  tint,
+}: {
+  title: string;
+  onBack: () => void;
+  /** A dependent's family-accent colors (familyAccentFor), when this screen
+   * is currently showing their data instead of the account owner's own —
+   * so a detail screen reached from a colored family member card doesn't
+   * suddenly go back to plain neutral gray, the one place in the header
+   * chain that used to stay untinted regardless of who's selected. */
+  tint?: { bg: string; text: string };
+}) {
   return (
     <View style={styles.backRow}>
-      <Pressable onPress={onBack} hitSlop={8} style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}>
-        <ArrowLeft size={19} color={NEUTRAL.textPrimary} strokeWidth={2.3} />
+      <Pressable
+        onPress={onBack}
+        hitSlop={8}
+        style={({ pressed }) => [styles.backBtn, tint && { backgroundColor: tint.bg }, pressed && styles.backBtnPressed]}
+      >
+        <ArrowLeft size={19} color={tint?.text ?? NEUTRAL.textPrimary} strokeWidth={2.3} />
       </Pressable>
-      <Text style={styles.backTitle}>{title}</Text>
+      <Text style={[styles.backTitle, tint && { color: tint.text }]}>{title}</Text>
     </View>
   );
 }

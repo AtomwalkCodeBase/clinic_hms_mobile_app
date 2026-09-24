@@ -1,45 +1,29 @@
-import React, { useCallback, useState } from "react";
+import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { NEUTRAL } from "@/theme/themes";
 import { getHealthSummary } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { HealthSummary } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 export function LinkedHospitalsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const [summary, setSummary] = useState<HealthSummary | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setSummary(await getHealthSummary());
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  // Same query key HealthSummaryScreen uses for the identical call — they
+  // now share one cache entry instead of each fetching it independently.
+  const { data: summary, error, refetch, isFetching, isStale } = useQuery({ queryKey: ["healthSummary"], queryFn: () => getHealthSummary() });
+  useRefreshOnFocus({ isStale, refetch });
 
   const hospitals = summary?.linked_hospitals || [];
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={refetch} refreshing={isFetching}>
       <BackHeader title="Linked hospitals" onBack={() => navigation.goBack()} />
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       {hospitals.length === 0 ? (
         <Card>

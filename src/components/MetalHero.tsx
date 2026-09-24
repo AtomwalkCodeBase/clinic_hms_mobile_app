@@ -56,10 +56,18 @@ export function MetalHero({
   curved,
   underStatusBar,
   onBack,
+  overrideColor,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
   compact?: boolean;
+  /** Replaces the fixed brand-green gradient with a flat fill of this color
+   * (sheen kept, for the same glossy texture) — an explicit, opt-in
+   * exception to the brand-consistency rule above, for the one place that
+   * needs to break it on purpose: the Health tab's family-member switcher,
+   * where the hero recoloring per selected person IS the point. Every other
+   * caller leaves this unset and keeps the fixed green untouched. */
+  overrideColor?: string;
   /** Adds the soft background-circle texture — opt-in for auth screens. */
   decorative?: boolean;
   /** Rounds the bottom edge instead of cutting off square — opt-in so the
@@ -98,13 +106,17 @@ export function MetalHero({
         style,
       ]}
     >
-      <LinearGradient
-        colors={METAL_STOPS}
-        locations={METAL_LOCATIONS}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      {overrideColor ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: overrideColor }]} />
+      ) : (
+        <LinearGradient
+          colors={METAL_STOPS}
+          locations={METAL_LOCATIONS}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       <LinearGradient
         colors={SHEEN_STOPS}
         locations={SHEEN_LOCATIONS}

@@ -1,19 +1,24 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Screen, BackHeader, EmptyState, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { ListRow } from "@/components/ListRow";
+import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { DownloadButton } from "@/components/DownloadButton";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import { familyAccentFor, familyGadgetPaletteFor } from "@/theme/familyColors";
 import { getVaccinations, getVaccinationFile } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { downloadDataUri } from "@/utils/fileHelpers";
-import { VaccinationSummary, VaccinationRoadmapItem } from "@/api/types";
+import { VaccinationRoadmapItem } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { Syringe } from "lucide-react-native";
 
@@ -100,33 +105,32 @@ function vaxStatusColor(status: string): string | undefined {
 export function VaccinationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "Vaccinations">>();
-  const { patientAwpid, patientName } = route.params;
+  const { patientAwpid, patientName, patientGender, patientDob } = route.params;
   const { theme } = useAppTheme();
+  // A dependent's age/gender-derived color (HealthScreen's family switcher),
+  // when one applies — falls back to the personal accent theme for Self,
+  // same as before this existed.
+  const accent = patientGender ? familyAccentFor({ gender: patientGender, date_of_birth: patientDob ?? null }) : null;
+  const accentText = accent?.text ?? theme.text;
+  // The same tint this person's Vaccinations gadget card uses on the Health
+  // tab — reused here so the icon badges, filter pills, and the "report a
+  // vaccination" button match it exactly, instead of staying default green
+  // regardless of who's being viewed. Status pills (Completed/Due/etc.) are
+  // untouched below — those carry real clinical meaning, not identity.
+  const vaxTint = patientGender ? familyGadgetPaletteFor({ gender: patientGender, date_of_birth: patientDob ?? null })?.vaccinations : null;
+  const vaxColor = vaxTint?.icon[1];
+  const filterOptionColor = vaxColor ? { fill: vaxColor, on: "#FFFFFF" } : undefined;
 
-  const [vax, setVax] = useState<VaccinationSummary | null>(null);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [viewMode, setViewMode] = useState<"age" | "date">("age");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<VaccinationRoadmapItem | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setVax(await getVaccinations(patientAwpid));
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [patientAwpid]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  const { data: vax, error, refetch, isFetching, isStale } = useQuery({
+    queryKey: ["vaccinations", patientAwpid],
+    queryFn: () => getVaccinations(patientAwpid),
+  });
+  useRefreshOnFocus({ isStale, refetch });
+  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetch);
 
   const roadmap = vax?.roadmap || [];
 
@@ -146,15 +150,32 @@ export function VaccinationsScreen() {
     await downloadDataUri(file.file_name || `${item.vaccine_name}.pdf`, file.file_data);
   };
 
-  return (
-    <Screen onRefresh={load} refreshing={loading}>
-      <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} />
+  if (!vax) {
+    return (
+      <Screen>
+        <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
+        <View style={styles.statsRow}>
+          <SkeletonBlock width="30%" height={44} radius={12} />
+          <SkeletonBlock width="30%" height={44} radius={12} />
+          <SkeletonBlock width="30%" height={44} radius={12} />
+        </View>
+        <SkeletonBlock height={34} radius={18} style={{ marginBottom: 14 }} />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <SkeletonRow key={i} />
+        ))}
+      </Screen>
+    );
+  }
 
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+  return (
+    <Screen onRefresh={pullRefresh} refreshing={pulling} backgroundLoading={isFetching && !pulling} accentColor={vaxColor}>
+      <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
+
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       {vax && (
         <View style={styles.statsRow}>
-          <StatTile value={String(vax.completed_count)} label="Completed" color={theme.text} />
+          <StatTile value={String(vax.completed_count)} label="Completed" color={accentText} />
           <StatTile value={vax.next_recommended?.vaccine_name || "—"} label="Next due" color={NEUTRAL.warning} />
           <StatTile value={String(roadmap.filter((r) => r.status === "pending_review").length)} label="Pending review" color={NEUTRAL.textPrimary} />
         </View>
@@ -162,9 +183,9 @@ export function VaccinationsScreen() {
 
       <SegmentedControl
         options={[
-          { key: "all", label: "All" },
-          { key: "completed", label: "Completed" },
-          { key: "not_completed", label: "Not completed" },
+          { key: "all", label: "All", color: filterOptionColor },
+          { key: "completed", label: "Completed", color: filterOptionColor },
+          { key: "not_completed", label: "Not completed", color: filterOptionColor },
         ]}
         value={filter}
         onChange={setFilter}
@@ -186,6 +207,7 @@ export function VaccinationsScreen() {
         label="+ Report a vaccination from outside"
         onPress={() => navigation.navigate("ReportVaccination", { patientAwpid, patientName })}
         style={{ marginBottom: 12 }}
+        color={vaxColor}
       />
 
       {shown.length === 0 ? (
@@ -198,6 +220,7 @@ export function VaccinationsScreen() {
               <ListRow
                 key={i}
                 icon={Syringe}
+                iconColors={vaxTint?.icon}
                 title={r.vaccine_name}
                 subtitle={r.administered_date ? `Given ${r.administered_date}` : r.scheduled_label}
                 pillLabel={vaxStatusLabel(r.status)}
@@ -212,6 +235,7 @@ export function VaccinationsScreen() {
           <ListRow
             key={i}
             icon={Syringe}
+            iconColors={vaxTint?.icon}
             title={r.vaccine_name}
             subtitle={r.administered_date ? `Given ${r.administered_date}` : r.scheduled_label}
             pillLabel={vaxStatusLabel(r.status)}

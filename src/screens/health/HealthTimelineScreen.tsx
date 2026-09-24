@@ -1,10 +1,13 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import React, { useMemo, useState } from "react";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { Screen, BackHeader, EmptyState, ErrorBanner } from "@/components/Layout";
 import { ListRow } from "@/components/ListRow";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { SelectField } from "@/components/SelectField";
+import { familyAccentFor, familyGadgetPaletteFor } from "@/theme/familyColors";
 import { getTimeline } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { TimelineEntry } from "@/api/types";
@@ -33,34 +36,21 @@ function monthLabel(key: string): string {
 export function HealthTimelineScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "HealthTimeline">>();
-  const { patientAwpid, patientName } = route.params;
+  const { patientAwpid, patientName, patientGender, patientDob } = route.params;
+  const palette = patientGender ? familyGadgetPaletteFor({ gender: patientGender, date_of_birth: patientDob ?? null }) : null;
+  const accent = patientGender ? familyAccentFor({ gender: patientGender, date_of_birth: patientDob ?? null }) : null;
 
-  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [month, setMonth] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<TimelineEntry | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      // A dedicated full-page timeline (not a cramped tab anymore) — pull
-      // enough history for the month picker below to have real data to
-      // browse, not just the last handful of entries.
-      setTimeline(await getTimeline(patientAwpid, 200));
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [patientAwpid]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  // A dedicated full-page timeline (not a cramped tab anymore) — pull
+  // enough history for the month picker below to have real data to browse,
+  // not just the last handful of entries.
+  const { data: timeline = [], error, refetch, isFetching, isStale } = useQuery({
+    queryKey: ["timeline", patientAwpid],
+    queryFn: () => getTimeline(patientAwpid, 200),
+  });
+  useRefreshOnFocus({ isStale, refetch });
 
   // One deliberate dropdown pick — "All" plus every plain month that
   // actually has entries, most recent first. No auto-scrolling chip strip
@@ -73,9 +63,9 @@ export function HealthTimelineScreen() {
   const shown = month ? timeline.filter((e) => monthKey(e.date) === month) : timeline;
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
-      <BackHeader title={`Health timeline — ${patientName}`} onBack={() => navigation.goBack()} />
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+    <Screen onRefresh={refetch} refreshing={isFetching}>
+      <BackHeader title={`Health timeline — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       {timeline.length > 0 && (
         <SelectField label="Filter by month" value={month} onChange={setMonth} options={monthOptions} placeholder="All months" clearLabel="All months" />
@@ -88,6 +78,7 @@ export function HealthTimelineScreen() {
           <ListRow
             key={i}
             icon={TIMELINE_ICON[entry.type] || Circle}
+            iconColors={palette?.timeline.icon}
             title={entry.title}
             subtitle={entry.subtitle || entry.date}
             onPress={() => setDetail(entry)}

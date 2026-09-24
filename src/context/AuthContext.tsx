@@ -3,6 +3,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens, getBiometricLockEnabled } from "@/utils/storage";
 import { loginPatient, logout as apiLogout } from "@/api/auth";
 import { setSessionExpiredHandler } from "@/api/client";
+import { registerForPushNotifications } from "@/utils/pushNotifications";
 
 interface AuthContextValue {
   isLoading: boolean; // true only during the initial "do we have a saved session" check
@@ -66,6 +67,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setNeedsUnlock(false);
     });
   }, []);
+
+  // Once there's a real, unlocked session, register this device for push
+  // (bulk-upload-complete notifications). Only prompts for OS permission the
+  // very first time — later launches just re-register the same token, which
+  // the server upserts. Never blocks or errors the rest of the app.
+  useEffect(() => {
+    if (isAuthenticated && !needsUnlock) {
+      registerForPushNotifications();
+    }
+  }, [isAuthenticated, needsUnlock]);
 
   const login = useCallback(async (mobile: string, password: string) => {
     const tokens = await loginPatient(mobile, password);

@@ -12,6 +12,8 @@ export interface PickedFile {
   uri: string;
   name: string;
   mimeType: string;
+  /** Bytes, when the picker reports it (DocumentPicker does; not always populated by every source). */
+  size?: number;
 }
 
 /** Opens the system file picker restricted to PDFs. Returns null if the user cancels. */
@@ -41,6 +43,7 @@ export async function pickDocuments(): Promise<PickedFile[]> {
       uri: a.uri,
       name: a.name || "document",
       mimeType: a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
+      size: a.size ?? 0,
     }));
   });
 }

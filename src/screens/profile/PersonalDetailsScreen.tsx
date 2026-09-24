@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import { Text, StyleSheet, View } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { TextField } from "@/components/TextField";
@@ -18,31 +20,14 @@ import { AppStackParamList } from "@/navigation/types";
 
 export function PersonalDetailsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setProfile(await getProfile());
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  const { data: profile, error, refetch, isFetching, isStale } = useQuery({ queryKey: ["profile"], queryFn: getProfile });
+  useRefreshOnFocus({ isStale, refetch });
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={refetch} refreshing={isFetching}>
       <View style={styles.headerRow}>
         <BackHeader title="Personal details" onBack={() => navigation.goBack()} />
         {profile && !editing && (
@@ -52,7 +37,7 @@ export function PersonalDetailsScreen() {
         )}
       </View>
 
-      {!!error && <ErrorBanner message={error} onRetry={load} />}
+      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       {profile && !editing && (
         <>
@@ -81,7 +66,7 @@ export function PersonalDetailsScreen() {
         <EditProfileForm
           profile={profile}
           onSaved={(updated) => {
-            setProfile(updated);
+            queryClient.setQueryData(["profile"], updated);
             setEditing(false);
           }}
           onCancel={() => setEditing(false)}
