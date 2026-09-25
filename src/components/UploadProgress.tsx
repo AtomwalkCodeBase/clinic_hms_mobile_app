@@ -1,22 +1,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { Check, ChevronRight, CircleAlert, CircleCheckBig, CloudUpload, FileSearch, Bell, Info } from "lucide-react-native";
+import { Check, ChevronRight, CircleAlert, CircleCheckBig, CloudUpload, FileSearch, Bell, Info, Sparkles } from "lucide-react-native";
 import { useUploadTasks } from "@/context/UploadTasksContext";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useExtractedItems } from "@/hooks/useExtractedItems";
+import { AiProgress } from "@/hooks/useAiProgress";
 import { NEUTRAL } from "@/theme/themes";
 
 /**
- * The patient's journey for an upload, as a list of steps. Today the app itself does two:
- *   1. Upload  2. Read (text extraction)
- * Later steps (3. Sort into folders, 4. the patient's own Review) are added by appending to the
- * step list built in useUploadModels — the stepper, the entry row and the Home ring all draw
- * whatever steps they are given, so nothing else changes.
+ * The patient's journey for an upload, as a list of steps:
+ *   1. Upload  2. Read (text extraction)  3. AI check (the keyword rules + the AI queue on the server)
+ * A later step (the patient's own Review) is added by appending to the step list built in
+ * useUploadModels — the stepper, the entry row and the Home ring all draw whatever steps they are
+ * given, so nothing else changes.
  */
 export type StepState = "done" | "current" | "todo" | "warn";
 export type UploadStep = {
-  key: "upload" | "read";
+  key: "upload" | "read" | "ai";
   label: string;
   state: StepState;
   /** Small text under the step's circle: "20 files", "15 of 20", "Next". */
@@ -72,35 +73,83 @@ const NOTE_LEAVE = "Runs in the background. You can leave this screen. We'll not
 const NOTE_STAY = "Keep the app open until the upload finishes. After that you can leave.";
 
 const step = (key: UploadStep["key"], state: StepState, caption: string, frac: number): UploadStep => ({
-  key, label: key === "upload" ? "Upload" : "Read", state, caption, frac,
+  key, label: key === "upload" ? "Upload" : key === "read" ? "Read" : "AI check", state, caption, frac,
 });
 
 const BASE: Omit<UploadModel, "key" | "kind" | "title" | "steps"> = {
   pct: 0, indeterminate: false, showBar: false, barCount: "", barUnit: "", eta: "", note: "", noteIcon: "info", waiting: 0,
 };
 
+const NOTE_AI = "The AI check runs on our server, one report at a time. You can leave this screen.";
+
+/** The third step, from how far the AI check has got. `readOk` = how many files were read (nothing to check if none). */
+function aiStep(ai: AiProgress | null, readOk: number): UploadStep {
+  if (!readOk || !ai || ai.total === 0) return step("ai", "todo", "Later", 0);
+  if (ai.pending > 0) {
+    return step("ai", "current", ai.running > 0 || ai.checked > 0 ? `${ai.checked} of ${ai.total}` : "Queued", ai.checked / ai.total);
+  }
+  // Settled — or we stopped waiting because the AI server has been busy/offline for a long time.
+  if (ai.queued + ai.running > 0) return step("ai", "todo", "Still queued", 0);
+  if (ai.failed > 0) return step("ai", "warn", `${ai.failed} unchecked`, 1);
+  return step("ai", "done", `${ai.total} of ${ai.total}`, 1);
+}
+
+/**
+ * Reading has finished: `ok` of `total` files were read, `failedN` were not. While the AI check is still
+ * queued or running the card stays a "run" card with the third step current; once it settles it turns green
+ * (amber if some files couldn't be read).
+ */
+function afterRead(key: "instant" | "bulk", total: number, ok: number, failedN: number, firstFail: string, ai: AiProgress | null): UploadModel {
+  const a = aiStep(ai, ok);
+  const steps = [
+    step("upload", "done", files(total), 1),
+    failedN ? step("read", "warn", `${ok} of ${total}`, 1) : step("read", "done", `${total} of ${total}`, 1),
+    a,
+  ];
+  const failTail = failedN ? `${failedN} couldn't be read${firstFail ? " — " + firstFail : ""}` : "";
+  if (ai && ai.pending > 0 && ok > 0) {
+    const queuedOnly = ai.running === 0 && ai.checked === 0;
+    return {
+      ...BASE, key, kind: "run", title: queuedOnly ? "AI check queued" : "Running the AI check", steps,
+      pct: Math.round(a.frac * 100), showBar: true, barCount: `${ai.checked} of ${ai.total}`,
+      barUnit: "checked" + (failTail ? ` · ${failTail}` : ""), note: NOTE_AI, noteIcon: "bell",
+    };
+  }
+  if (failedN) {
+    return {
+      ...BASE, key, kind: "warn", title: "Finished", steps,
+      barCount: `${ok} read`, barUnit: `· ${failTail}`,
+    };
+  }
+  return {
+    ...BASE, key, kind: "done", title: a.state === "todo" ? "Finished reading" : "All done", steps,
+    barCount: `${ok} of ${total}`,
+    barUnit: a.state === "warn" ? "read · the AI check couldn't run for some" : a.state === "todo" ? "read · the AI check is still queued" : "read · checked · ready to view",
+  };
+}
+
 /** Turns the upload context (instant + bulk tasks) into what the UI draws. */
 export function useUploadModels(): UploadModel[] {
   const {
-    instantBusy, lastInstantResult, instantFileCount, instantPhase, instantUploadPct,
-    bulkStarting, bulkStartError, bulkStatus, bulkUploadProgress,
+    instantBusy, lastInstantResult, instantFileCount, instantPhase, instantUploadPct, instantAi,
+    bulkStarting, bulkStartError, bulkStatus, bulkUploadProgress, bulkAi,
   } = useUploadTasks();
   const models: UploadModel[] = [];
 
-  // ── instant (1–2 files, one request: first sent, then read) ──
+  // ── instant (a small upload, one request: first sent, then read, then the AI check) ──
   if (instantBusy) {
     const n = instantFileCount;
     if (instantPhase === "upload") {
       models.push({
         ...BASE, key: "instant", kind: "run", title: n > 1 ? "Sending your files" : "Sending your file",
-        steps: [step("upload", "current", "Sending", instantUploadPct / 100), step("read", "todo", "Next", 0)],
+        steps: [step("upload", "current", "Sending", instantUploadPct / 100), step("read", "todo", "Next", 0), step("ai", "todo", "Later", 0)],
         pct: instantUploadPct, indeterminate: instantUploadPct === 0, showBar: true,
         barCount: instantUploadPct ? `${instantUploadPct}%` : "", barUnit: "sent", note: NOTE_STAY, noteIcon: "info",
       });
     } else {
       models.push({
         ...BASE, key: "instant", kind: "run", title: n > 1 ? `Reading ${n} reports` : "Reading your report",
-        steps: [step("upload", "done", files(n), 1), step("read", "current", "Reading", 0)],
+        steps: [step("upload", "done", files(n), 1), step("read", "current", "Reading", 0), step("ai", "todo", "Later", 0)],
         indeterminate: true, showBar: true, barCount: "", barUnit: "Usually takes a few seconds", note: NOTE_STAY, noteIcon: "info",
       });
     }
@@ -108,25 +157,21 @@ export function useUploadModels(): UploadModel[] {
     const { extracted, failed, lines } = lastInstantResult;
     const n = extracted + failed;
     models.push(
-      failed
+      extracted === 0
         ? {
-            ...BASE, key: "instant", kind: "warn", title: extracted ? "Finished reading" : "Couldn't read your report",
-            steps: [step("upload", "done", files(n), 1), step("read", "warn", `${extracted} of ${n}`, 1)],
-            barCount: extracted ? `${extracted} read` : "", barUnit: `${extracted ? "· " : ""}${failed} failed${lines[0] ? " — " + lines[0] : ""}`,
+            ...BASE, key: "instant", kind: "warn", title: "Couldn't read your report",
+            steps: [step("upload", "done", files(n), 1), step("read", "warn", `0 of ${n}`, 1), step("ai", "todo", "Later", 0)],
+            barCount: "", barUnit: `${failed} failed${lines[0] ? " — " + lines[0] : ""}`,
           }
-        : {
-            ...BASE, key: "instant", kind: "done", title: "Finished reading",
-            steps: [step("upload", "done", files(n), 1), step("read", "done", `${n} of ${n}`, 1)],
-            barCount: `${extracted} of ${extracted}`, barUnit: "read · ready to view",
-          }
+        : afterRead("instant", n, extracted, failed, lines[0] ?? "", instantAi)
     );
   }
 
-  // ── bulk (3–50 files: uploaded to storage, then read in the background) ──
+  // ── bulk (a bigger upload: sent to storage, read in the background, then the AI check) ──
   if (bulkStartError && !bulkStatus) {
     models.push({
       ...BASE, key: "bulk", kind: "warn", title: "Upload didn't start",
-      steps: [step("upload", "warn", "Didn't start", 0), step("read", "todo", "Next", 0)],
+      steps: [step("upload", "warn", "Didn't start", 0), step("read", "todo", "Next", 0), step("ai", "todo", "Later", 0)],
       barUnit: bulkStartError,
     });
   } else if (bulkStatus) {
@@ -139,7 +184,7 @@ export function useUploadModels(): UploadModel[] {
       const frac = total ? processed / total : 0;
       models.push({
         ...BASE, key: "bulk", kind: "run", title: started ? "Reading your reports" : "Waiting to start",
-        steps: [step("upload", "done", files(total), 1), step("read", "current", started ? `${processed} of ${total}` : "Waiting", frac)],
+        steps: [step("upload", "done", files(total), 1), step("read", "current", started ? `${processed} of ${total}` : "Waiting", frac), step("ai", "todo", "Later", 0)],
         pct: Math.round(frac * 100), showBar: true, waiting,
         barCount: `${processed} of ${total}`, barUnit: "read",
         eta: started ? etaText(waiting, processed, bulkStatus.started_at) : "",
@@ -147,23 +192,13 @@ export function useUploadModels(): UploadModel[] {
       });
     } else {
       const { completed, failed, status } = bulkStatus;
-      if (status === "done") {
-        models.push({
-          ...BASE, key: "bulk", kind: "done", title: "Finished reading",
-          steps: [step("upload", "done", files(total), 1), step("read", "done", `${total} of ${total}`, 1)],
-          barCount: `${completed} of ${total}`, barUnit: "read · ready to view",
-        });
-      } else if (status === "partial") {
-        models.push({
-          ...BASE, key: "bulk", kind: "warn", title: "Finished reading",
-          steps: [step("upload", "done", files(total), 1), step("read", "warn", `${completed} of ${total}`, 1)],
-          barCount: `${completed} read`, barUnit: `· ${failed} failed`,
-        });
+      if (status === "done" || status === "partial") {
+        models.push(afterRead("bulk", total, completed, failed, "", bulkAi));
       } else {
         models.push({
           ...BASE, key: "bulk", kind: "warn",
           title: status === "cancelled" ? "Upload was cancelled" : "None of your files could be read",
-          steps: [step("upload", "done", files(total), 1), step("read", "warn", "0 read", 0)],
+          steps: [step("upload", "done", files(total), 1), step("read", "warn", "0 read", 0), step("ai", "todo", "Later", 0)],
           barUnit: "Please try uploading again.",
         });
       }
@@ -173,7 +208,7 @@ export function useUploadModels(): UploadModel[] {
     const frac = total ? done / total : 0;
     models.push({
       ...BASE, key: "bulk", kind: "run", title: total ? "Uploading your files" : "Preparing upload…",
-      steps: [step("upload", "current", total ? `${done} of ${total}` : "Preparing", frac), step("read", "todo", "Next", 0)],
+      steps: [step("upload", "current", total ? `${done} of ${total}` : "Preparing", frac), step("read", "todo", "Next", 0), step("ai", "todo", "Later", 0)],
       pct: Math.round(frac * 100), indeterminate: !total, showBar: true, waiting: total,
       barCount: total ? `${done} of ${total}` : "", barUnit: total ? "uploaded" : "", note: NOTE_STAY, noteIcon: "info",
     });
@@ -259,7 +294,7 @@ function Half({ done, hidden }: { done: boolean; hidden: boolean }) {
   return <View style={{ flex: 1, marginHorizontal: 4 }}>{done ? <View style={styles.solid} /> : <Dotted />}</View>;
 }
 
-function Node({ s, accent }: { s: UploadStep; accent: Accent }) {
+function Node({ s, accent, n }: { s: UploadStep; accent: Accent; n: number }) {
   const base = { width: NODE, height: NODE, borderRadius: NODE / 2, alignItems: "center" as const, justifyContent: "center" as const };
   if (s.state === "done") return <View style={[base, { backgroundColor: accent.fill }]}><Check size={15} color="#FFFFFF" strokeWidth={3} /></View>;
   if (s.state === "warn") return <View style={[base, { backgroundColor: "#FFFFFF", borderWidth: 2, borderColor: WARN }]}><Text style={styles.bang}>!</Text></View>;
@@ -272,7 +307,7 @@ function Node({ s, accent }: { s: UploadStep; accent: Accent }) {
       </View>
     );
   }
-  return <View style={[base, { backgroundColor: "#FFFFFF", borderWidth: 2, borderColor: "#CDD6DC" }]}><Text style={styles.todoN}>{s.key === "upload" ? 1 : 2}</Text></View>;
+  return <View style={[base, { backgroundColor: "#FFFFFF", borderWidth: 2, borderColor: "#CDD6DC" }]}><Text style={styles.todoN}>{n}</Text></View>;
 }
 
 export function Stepper({ steps, accent }: { steps: UploadStep[]; accent: Accent }) {
@@ -285,7 +320,7 @@ export function Stepper({ steps, accent }: { steps: UploadStep[]; accent: Accent
           <View key={s.key} style={{ flex: 1, alignItems: "center" }}>
             <View style={{ flexDirection: "row", alignItems: "center", height: NODE }}>
               <Half done={prevDone} hidden={i === 0} />
-              <Node s={s} accent={accent} />
+              <Node s={s} accent={accent} n={i + 1} />
               <Half done={thisDone} hidden={i === steps.length - 1} />
             </View>
             <Text style={[styles.stepLabel, s.state === "todo" && { color: NEUTRAL.textMuted, fontWeight: "400" }]}>{s.label}</Text>
@@ -357,7 +392,7 @@ function SegBar({ steps, accent, kind }: { steps: UploadStep[]; accent: Accent; 
 
 /**
  * One quiet line under the Rx & Reports header that opens the Uploads screen.
- * "Step 2 of 2 · Reading" with one tiny bar per step while something runs, otherwise how
+ * "Step 2 of 3 · Reading" with one tiny bar per step while something runs, otherwise how
  * many reports are waiting to be viewed. Renders nothing when there's nothing to show.
  */
 export function UploadsEntryRow({ patientAwpid, accent, onOpen }: { patientAwpid?: string; accent?: Accent; onOpen: () => void }) {
@@ -378,12 +413,13 @@ export function UploadsEntryRow({ patientAwpid, accent, onOpen }: { patientAwpid
     kind = m.kind;
     const i = currentIndex(m);
     if (m.kind === "run") {
-      const verb = m.steps[i].key === "upload" ? "Uploading" : "Reading";
+      const k = m.steps[i].key;
+      const verb = k === "upload" ? "Uploading" : k === "read" ? "Reading" : "AI check";
       title = `Step ${i + 1} of ${m.steps.length} · ${verb}`;
       const progress = m.barCount ? `${m.barCount} ${m.barUnit}`.trim() : m.barUnit;
       sub = counts.ready ? `${counts.ready} ready to view${m.eta ? " · " + m.eta : ""}` : [progress, m.eta].filter(Boolean).join(" · ");
       steps = m.steps;
-      Icon = m.steps[i].key === "upload" ? CloudUpload : FileSearch;
+      Icon = k === "upload" ? CloudUpload : k === "read" ? FileSearch : Sparkles;
     } else {
       title = m.title;
       sub = m.barUnit;
@@ -488,9 +524,14 @@ export function UploadRing({ onOpen }: { onOpen: () => void }) {
       </View>
       {running ? (
         <Animated.View style={indeterminate ? { transform: [{ rotate }] } : undefined}>
-          {running.steps[currentIndex(running)].key === "upload"
-            ? <CloudUpload size={13} color="#FFFFFF" strokeWidth={2.4} />
-            : <FileSearch size={13} color="#FFFFFF" strokeWidth={2.4} />}
+          {(() => {
+            const k = running.steps[currentIndex(running)].key;
+            return k === "upload"
+              ? <CloudUpload size={13} color="#FFFFFF" strokeWidth={2.4} />
+              : k === "read"
+                ? <FileSearch size={13} color="#FFFFFF" strokeWidth={2.4} />
+                : <Sparkles size={13} color="#FFFFFF" strokeWidth={2.4} />;
+          })()}
         </Animated.View>
       ) : (
         <Text style={styles.ringT}>{warnOnly ? "!" : count > 99 ? "99+" : count}</Text>

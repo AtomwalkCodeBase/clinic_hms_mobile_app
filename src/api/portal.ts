@@ -590,7 +590,17 @@ export async function uploadDocument(payload: {
 
 // ── Upload-and-extract (mobile-only, extraction phase — no classification/filing yet) ──
 
+/** The second status, shown after "Read": the keyword rules + AI check on the linked My Reports row. */
+export type ExtractAi = {
+  /** queued/running = the AI check is pending; done = finished; skipped = it wasn't needed; failed = it couldn't run; none = no My Reports row. */
+  status: "none" | "skipped" | "queued" | "running" | "done" | "failed";
+  /** The type it was sorted as ("Lab Report"), empty when not sure. */
+  label: string;
+  needs_review: boolean;
+};
+
 export type ExtractSyncFileResult = {
+  item_id: string;
   file_name: string;
   status: "done" | "failed";
   text: string;
@@ -598,7 +608,7 @@ export type ExtractSyncFileResult = {
   reason: string;
 };
 
-/** <=2 files, processed inline — same request/response shape family as uploadDocument. */
+/** Up to instant_max_files files (see getExtractConfig), processed inline — same request/response shape family as uploadDocument. */
 export async function extractSync(
   files: { file_name: string; mime_type: string; file_data: string }[],
   patient_awpid?: string,
@@ -613,6 +623,14 @@ export async function extractSync(
   return res.data.data.results;
 }
 
+export type ExtractConfig = { instant_max_files: number; bulk_max_files: number; batch_max_bytes: number };
+
+/** The limits the server enforces — read BEFORE choosing instant or bulk (instant_max_files is an admin setting). */
+export async function getExtractConfig(): Promise<ExtractConfig> {
+  const res = await api.get<Envelope<ExtractConfig>>("/portal/documents/extract/config/");
+  return res.data.data;
+}
+
 export type ExtractBulkCreateResult = {
   batch_id: string;
   items: { index?: number; item_id: string; filename: string; put_url: string; content_type: string }[];
@@ -620,7 +638,7 @@ export type ExtractBulkCreateResult = {
   skipped?: { index: number; name: string; reason: string }[];
 };
 
-/** 3-50 files — returns presigned S3 PUT urls; caller PUTs each file, then calls extractBulkStart. */
+/** Bigger uploads (up to 50 files) — returns presigned S3 PUT urls; caller PUTs each file, then calls extractBulkStart. */
 export async function extractBulkCreate(
   files: { name: string; size: number; mime_type: string }[],
   patient_awpid?: string
@@ -675,6 +693,7 @@ export type ExtractedItem = {
   reason: string;
   snippet: string;
   created_at: string;
+  ai: ExtractAi;
 };
 export type ExtractedGroup = {
   id: string;
@@ -684,7 +703,7 @@ export type ExtractedGroup = {
   total?: number;
   items: ExtractedItem[];
 };
-export type ExtractedItems = { counts: { ready: number; failed: number }; groups: ExtractedGroup[] };
+export type ExtractedItems = { counts: { ready: number; failed: number; ai_pending?: number }; groups: ExtractedGroup[] };
 
 /** Finished extractions the patient hasn't dismissed yet, grouped per upload. */
 export async function getExtractedItems(patientAwpid?: string): Promise<ExtractedItems> {

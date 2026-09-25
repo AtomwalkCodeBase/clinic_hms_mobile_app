@@ -3,11 +3,18 @@ import { dismissExtractedItems, getExtractedItems, ExtractedItems } from "@/api/
 
 export const extractedItemsKey = (patientAwpid?: string) => ["extractedItems", patientAwpid ?? "self"] as const;
 
-/** Finished extractions the patient hasn't dismissed. Refreshed by UploadTasksContext when an upload finishes. */
-export function useExtractedItems(patientAwpid?: string) {
+const AI_POLL_MS = 4000;
+
+/** Finished extractions the patient hasn't dismissed. Refreshed by UploadTasksContext when an upload finishes, and every few seconds while any AI check is still queued or running. */
+export function useExtractedItems(patientAwpid?: string, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: extractedItemsKey(patientAwpid),
     queryFn: () => getExtractedItems(patientAwpid),
+    enabled: opts?.enabled ?? true,
+    refetchInterval: (query) => {
+      const data = query.state.data as ExtractedItems | undefined;
+      return (data?.counts.ai_pending ?? 0) > 0 ? AI_POLL_MS : false;
+    },
   });
 }
 
@@ -17,8 +24,15 @@ function without(data: ExtractedItems, ids: Set<string> | "all"): ExtractedItems
     .filter((g) => g.items.length);
   let ready = 0;
   let failed = 0;
-  groups.forEach((g) => g.items.forEach((i) => (i.status === "done" ? ready++ : failed++)));
-  return { counts: { ready, failed }, groups };
+  let aiPending = 0;
+  groups.forEach((g) =>
+    g.items.forEach((i) => {
+      if (i.status === "done") ready++;
+      else failed++;
+      if (i.ai?.status === "queued" || i.ai?.status === "running") aiPending++;
+    })
+  );
+  return { counts: { ready, failed, ai_pending: aiPending }, groups };
 }
 
 /** Dismiss with an instant local update, rolled back if the server call fails. */

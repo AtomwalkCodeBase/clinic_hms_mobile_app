@@ -10,7 +10,7 @@ import { UploadStatusCard, useUploadModels } from "@/components/UploadProgress";
 import { useAppTheme } from "@/context/ThemeContext";
 import { NEUTRAL } from "@/theme/themes";
 import { AppStackParamList } from "@/navigation/types";
-import { ExtractedGroup, ExtractedItem, getExtractedItemFile } from "@/api/portal";
+import { ExtractAi, ExtractedGroup, ExtractedItem, getExtractedItemFile } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { useExtractedItems, useDismissExtracted } from "@/hooks/useExtractedItems";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -27,6 +27,25 @@ function groupLabel(iso: string, count: number) {
   const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const day = days === 0 ? "Today" : days === 1 ? "Yesterday" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   return `${day}, ${time} · ${count} file${count === 1 ? "" : "s"}`;
+}
+
+/** The small line under a finished file: where its AI check has got to (queued / running / what it was sorted as). */
+function aiChip(ai?: ExtractAi): { text: string; color: string } | null {
+  switch (ai?.status) {
+    case "queued":
+      return { text: "AI check queued", color: NEUTRAL.textSecondary };
+    case "running":
+      return { text: "AI check running…", color: NEUTRAL.textSecondary };
+    case "done":
+    case "skipped": {
+      const t = ai.label || "Type not sure";
+      return ai.needs_review ? { text: `${t} · needs your review`, color: NEUTRAL.warning } : { text: t, color: NEUTRAL.success };
+    }
+    case "failed":
+      return { text: "AI check didn't run", color: NEUTRAL.warning };
+    default:
+      return null;
+  }
 }
 
 /**
@@ -93,6 +112,7 @@ export function UploadsScreen() {
 
   const renderRow = (it: ExtractedItem) => {
     const bad = it.status === "failed";
+    const chip = bad ? null : aiChip(it.ai);
     return (
       <Pressable key={it.id} onPress={() => view(it)} style={({ pressed }) => [styles.item, pressed && { opacity: 0.85 }]}>
         <View style={[styles.tile, { backgroundColor: bad ? NEUTRAL.warningBg : theme.bg }]}>
@@ -107,6 +127,7 @@ export function UploadsScreen() {
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.name} numberOfLines={1}>{it.name}</Text>
           <Text style={styles.snip} numberOfLines={1}>{bad ? it.reason || "Couldn't be read" : it.snippet || "Tap to view"}</Text>
+          {chip && <Text style={[styles.chip, { color: chip.color }]} numberOfLines={1}>{chip.text}</Text>}
         </View>
         <Pressable onPress={() => dismiss.mutate({ itemIds: [it.id] })} hitSlop={10} style={styles.x} accessibilityLabel="Dismiss">
           <X size={16} color={NEUTRAL.textMuted} strokeWidth={2.4} />
@@ -234,6 +255,7 @@ const styles = StyleSheet.create({
   tile: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   name: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
   snip: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 2 },
+  chip: { fontSize: 11, fontWeight: "600", marginTop: 2 },
   x: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   more: { fontSize: 12.5, fontWeight: "700", textAlign: "center" },
   emptyWrap: { alignItems: "center", marginTop: 50, paddingHorizontal: 24 },

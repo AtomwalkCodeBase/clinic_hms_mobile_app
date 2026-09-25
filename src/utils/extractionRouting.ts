@@ -11,8 +11,13 @@
  * on that ground surfaces as a normal per-file error same as any other.
  */
 
-const SYNC_MAX_FILES = 2;
-const BULK_MIN_FILES = 3;
+/**
+ * How many files may be read inside the request ("instant"). The server owns this number — it is the
+ * "Sort instantly up to" setting on Background Jobs, shared with the My Reports pipeline — and the app
+ * reads it from GET /portal/documents/extract/config/. This default only applies if that call fails; it
+ * equals the server default.
+ */
+export const DEFAULT_INSTANT_MAX = 3;
 const BULK_MAX_FILES = 50;
 const TYPE_MAX_BYTES: Record<string, number> = {
   "application/pdf": 5 * 1024 * 1024,
@@ -51,7 +56,7 @@ export type RouteResult =
   | { route: "bulk" }
   | { route: "reject"; reason: string };
 
-export function routeExtraction(files: RoutableFile[]): RouteResult {
+export function routeExtraction(files: RoutableFile[], instantMax: number = DEFAULT_INSTANT_MAX): RouteResult {
   if (files.length === 0) {
     return { route: "reject", reason: "No files selected." };
   }
@@ -67,14 +72,11 @@ export function routeExtraction(files: RoutableFile[]): RouteResult {
     return { route: "reject", reason: `One of the files is over the ${capMb}MB limit.` };
   }
 
-  if (files.length <= SYNC_MAX_FILES) {
+  if (files.length <= instantMax) {
     return { route: "sync" };
   }
   if (files.length > BULK_MAX_FILES) {
     return { route: "reject", reason: `Upload at most ${BULK_MAX_FILES} files at a time.` };
   }
-  if (files.length >= BULK_MIN_FILES) {
-    return { route: "bulk" };
-  }
-  return { route: "sync" };
+  return { route: "bulk" };
 }

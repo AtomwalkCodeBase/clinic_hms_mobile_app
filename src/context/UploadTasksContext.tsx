@@ -1,12 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
-  extractSync, extractBulkCreate, extractBulkStart, putToS3,
+  extractSync, extractBulkCreate, extractBulkStart, putToS3, getExtractConfig,
   ExtractSyncFileResult, ExtractBatchStatus,
 } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { routeExtraction, partitionExtractable, SkippedFile } from "@/utils/extractionRouting";
+import { routeExtraction, partitionExtractable, SkippedFile, DEFAULT_INSTANT_MAX } from "@/utils/extractionRouting";
 import { useExtractionBatchStatus } from "@/hooks/useExtractionBatchStatus";
+import { useAiProgress, AiProgress } from "@/hooks/useAiProgress";
 
 /** One file to upload — `uri` (file:// or data:) is used directly for a bulk
  *  S3 PUT; `toDataUri()` is only called for the sync path, so a large bulk
@@ -44,6 +45,9 @@ interface UploadTasksContextValue {
   /** Inside the one instant request: still sending the file, or the server is now reading it. */
   instantPhase: "upload" | "read";
   instantUploadPct: number;
+  /** The AI check (the step after "Read") for the last instant upload / the current bulk batch; null when nothing is tracked. */
+  instantAi: AiProgress | null;
+  bulkAi: AiProgress | null;
   startUpload: (files: UploadCandidate[], patientAwpid?: string) => Promise<StartUploadOutcome>;
 }
 
@@ -83,11 +87,17 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
   const [instantFileCount, setInstantFileCount] = useState(0);
   const [instantPhase, setInstantPhase] = useState<"upload" | "read">("upload");
   const [instantUploadPct, setInstantUploadPct] = useState(0);
+  // Which files the AI-check step follows (their ids), and whose list they are in (a family member's or the patient's own).
+  const [instantIds, setInstantIds] = useState<string[]>([]);
+  const [instantPatient, setInstantPatient] = useState<string | undefined>(undefined);
+  const [bulkPatient, setBulkPatient] = useState<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
   const bulkStatusQ = useExtractionBatchStatus(bulkBatchId);
   const bulkStatus = bulkStatusQ.data?.batch;
   const bulkItems = bulkStatusQ.data?.items ?? [];
+  const bulkAi = useAiProgress(bulkItems.filter((i) => i.status === "done").map((i) => i.id), bulkPatient);
+  const instantAi = useAiProgress(instantIds, instantPatient);
   const bulkActiveRef = useRef(false);
   bulkActiveRef.current = !!bulkStatus && ACTIVE_BULK_STATUSES.has(bulkStatus.status);
   // setState is async — two quick taps on "Upload" could both read a stale
@@ -96,17 +106,23 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
   const instantBusyRef = useRef(false);
   const bulkStartingRef = useRef(false);
 
-  // Auto-clear a finished bulk batch a few seconds after it settles, so the
-  // pill and the "in progress" flag both go away without the patient having
-  // to dismiss anything.
-  // Any non-active state is final: done / partial / failed / cancelled.
+  // Any non-active state is final: done / partial / failed / cancelled. Refresh the Uploads list once,
+  // so the AI-check status of each finished file is there.
   useEffect(() => {
     if (bulkStatus && !ACTIVE_BULK_STATUSES.has(bulkStatus.status)) {
       queryClient.invalidateQueries({ queryKey: ["extractedItems"] });
+    }
+  }, [bulkStatus?.status]);
+
+  // Auto-clear a finished bulk batch a few seconds after it settles — reading AND the AI check — so
+  // the progress card and the "in progress" flag go away without the patient having to dismiss anything.
+  const bulkAiPending = bulkAi?.pending ?? 0;
+  useEffect(() => {
+    if (bulkStatus && !ACTIVE_BULK_STATUSES.has(bulkStatus.status) && !bulkAiPending) {
       const t = setTimeout(() => setBulkBatchId(null), 4000);
       return () => clearTimeout(t);
     }
-  }, [bulkStatus?.status]);
+  }, [bulkStatus?.status, bulkAiPending, bulkStatusQ.isFetching]);
 
   // Keep the upload chips on screen until the server's own status takes over,
   // so there's no blank gap between "uploaded" and the first poll answering.
@@ -121,15 +137,23 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
 
   const clearInstantResult = useCallback(() => setLastInstantResult(null), []);
 
-  // Auto-dismiss the "extracted/failed" toast a few seconds after it lands —
-  // same pattern as the bulk pill, so nobody has to tap anything to clear it.
+  // When an instant result lands, refresh the Uploads list so each file's AI-check status is there.
   useEffect(() => {
-    if (lastInstantResult) {
-      queryClient.invalidateQueries({ queryKey: ["extractedItems"] });
-      const t = setTimeout(() => setLastInstantResult(null), 5000);
+    if (lastInstantResult) queryClient.invalidateQueries({ queryKey: ["extractedItems"] });
+  }, [lastInstantResult]);
+
+  // Auto-dismiss the "extracted/failed" card a few seconds after it settles — reading AND the AI
+  // check — same pattern as the bulk card, so nobody has to tap anything to clear it.
+  const instantAiPending = instantAi?.pending ?? 0;
+  useEffect(() => {
+    if (lastInstantResult && !instantAiPending) {
+      const t = setTimeout(() => {
+        setLastInstantResult(null);
+        setInstantIds([]);
+      }, 5000);
       return () => clearTimeout(t);
     }
-  }, [lastInstantResult]);
+  }, [lastInstantResult, instantAiPending]);
 
   // Same auto-dismiss treatment for a bulk-start failure (e.g. presigned S3
   // PUT failed partway through) — shown as a toast, doesn't need a tap.
@@ -153,7 +177,13 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
             : `None of these files can be uploaded.\n\n${skipped.map((s) => `${s.name} — ${s.reason}`).join("\n")}`,
         };
       }
-      const routed = routeExtraction(files.map((f) => ({ size: f.size, mimeType: f.mimeType })));
+      // The instant/bulk threshold is a server setting (shared with the My Reports pipeline). Cached for a
+      // couple of minutes; if the call fails we fall back to the server default and the server re-checks anyway.
+      const instantMax = await queryClient
+        .fetchQuery({ queryKey: ["extractConfig"], queryFn: getExtractConfig, staleTime: 2 * 60 * 1000 })
+        .then((c) => c.instant_max_files)
+        .catch(() => DEFAULT_INSTANT_MAX);
+      const routed = routeExtraction(files.map((f) => ({ size: f.size, mimeType: f.mimeType })), instantMax);
       if (routed.route === "reject") return { status: "rejected", reason: routed.reason };
 
       if (routed.route === "sync") {
@@ -164,11 +194,14 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
         setInstantPhase("upload");
         setInstantUploadPct(0);
         setLastInstantResult(null);
+        setInstantIds([]);
+        setInstantPatient(patientAwpid);
         // Deliberately NOT awaited by the caller — this keeps running (and
         // will update context state on completion) even if the screen that
         // triggered it navigates away or unmounts in the meantime.
         (async () => {
           const result: InstantResult = { extracted: 0, failed: 0, lines: [] };
+          const doneIds: string[] = [];
           try {
             const payload = await Promise.all(
               files.map(async (f) => ({ file_name: f.name, mime_type: f.mimeType, file_data: await f.toDataUri() }))
@@ -179,8 +212,10 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
               if (loaded >= total) setInstantPhase("read"); // everything is on the server; now it is being read
             });
             results.forEach((r, i) => {
-              if (r.status === "done") result.extracted += 1;
-              else {
+              if (r.status === "done") {
+                result.extracted += 1;
+                if (r.item_id) doneIds.push(r.item_id);
+              } else {
                 result.failed += 1;
                 result.lines.push(`${files[i].name} — ${r.reason || "couldn't process, try again"}`);
               }
@@ -189,6 +224,7 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
             result.failed = files.length;
             result.lines = [apiErrorMessage(err, "upload failed, try again")];
           }
+          setInstantIds(doneIds);
           setLastInstantResult(result);
           instantBusyRef.current = false;
           setInstantBusy(false);
@@ -203,6 +239,7 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
       bulkStartingRef.current = true;
       setBulkStarting(true);
       setBulkStartError(null);
+      setBulkPatient(patientAwpid);
       setBulkUploadProgress({ done: 0, total: files.length, names: files.map((f) => f.name) });
       // Also detached — the S3 PUTs and the start call can take a real
       // moment for a big batch, and the whole point is the patient isn't
@@ -244,7 +281,7 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
     <UploadTasksContext.Provider
       value={{
         instantBusy, lastInstantResult, clearInstantResult, bulkStarting, bulkStartError, bulkStatus, bulkItems,
-        bulkUploadProgress, instantFileCount, instantPhase, instantUploadPct, startUpload,
+        bulkUploadProgress, instantFileCount, instantPhase, instantUploadPct, instantAi, bulkAi, startUpload,
       }}
     >
       {children}
