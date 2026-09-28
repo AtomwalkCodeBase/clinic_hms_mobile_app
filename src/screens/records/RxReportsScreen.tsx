@@ -1,15 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonRow } from "@/components/Skeleton";
 import {
-  ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, ShieldCheck,
-  ChevronDown, AlertCircle, Lock, Unlock, Clock, Check,
+  ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText,
+  ChevronDown, AlertCircle, Lock, Unlock, Clock,
   Eye, Download, Trash2,
 } from "lucide-react-native";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
@@ -17,37 +17,21 @@ import { MessageDialog } from "@/components/MessageDialog";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
-import { DateField } from "@/components/DateField";
 import { SelectField } from "@/components/SelectField";
-import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { familyAccentFor } from "@/theme/familyColors";
 import type { LucideIcon } from "@/theme/icons";
 import { apiErrorMessage } from "@/api/client";
 import {
-  getMyDocuments, getDocumentDetail, deleteDocument, fileReviewDocument,
+  getMyDocuments, getDocumentDetail, deleteDocument,
   getPrescriptions, getLabOrders, choosePrescription, chooseLabOrder,
   getRecordsPrivacy, toggleRecordPrivacy, revealForShare,
 } from "@/api/portal";
 import { useUploadTasks, UploadCandidate } from "@/context/UploadTasksContext";
 import { UploadsEntryRow } from "@/components/UploadProgress";
-
-// Mirrors core/report_types.py's panel catalogue — the review form's category
-// picker when a lab report's panel couldn't be determined.
-const REVIEW_CATEGORY_LABELS: Record<string, string> = {
-  cbc: "Complete Blood Count", lipid: "Lipid Profile", lft: "Liver Function Test",
-  kft: "Kidney Function Test", thyroid: "Thyroid Profile", diabetes: "Blood Sugar & HbA1c",
-  urine: "Urine Routine", electrolytes: "Serum Electrolytes", vitamin: "Vitamin & Mineral",
-  inflammation: "Inflammatory Markers", cardiac: "Cardiac Markers", coagulation: "Coagulation Profile",
-  hormone: "Hormone Panel", infection: "Infection Serology", culture: "Culture & Sensitivity",
-};
-// A row uploaded before `review_needs` existed has none stored — fall back to
-// the old assumption (type unknown) so it still renders something sensible.
-const needsOf = (d: PatientDocument): string[] =>
-  d.review_needs && d.review_needs.length ? d.review_needs : ["kind"];
-import { pickDocuments, fileToDataUri, downloadDataUri, openInExternalApp } from "@/utils/fileHelpers";
-import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc, RecordsPrivacyPayload } from "@/api/types";
+import { pickDocuments, downloadDataUri, openInExternalApp } from "@/utils/fileHelpers";
+import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 const PAGE = 15;
@@ -81,7 +65,6 @@ const fmtLong = (iso?: string | null) => {
 // Continuous list of months from the newest record (or now) back to the oldest.
 function monthOptions(docs: PatientDocument[]) {
   const keys = docs
-    .filter((d) => d.review_state !== "unsorted")
     .map((d) => ymKey(d.document_date || d.created_at))
     .filter(Boolean);
   const nowK = ymKey(new Date().toISOString());
@@ -101,7 +84,6 @@ function monthOptions(docs: PatientDocument[]) {
   return out;
 }
 
-type TypeKey = "prescription" | "lab_report" | "scan" | "discharge_summary" | "consult_note" | "other";
 const TYPE_META: Record<string, { tag: string; label: string; Icon: any; tint: string; ink: string }> = {
   prescription:      { tag: "RX",   label: "Prescription",      Icon: PillIcon,      tint: "#EAE7FB", ink: "#4A3FB0" },
   lab_report:        { tag: "LAB",  label: "Lab report",        Icon: FlaskConical, tint: "#F8EAC8", ink: "#8A5A12" },
@@ -111,12 +93,15 @@ const TYPE_META: Record<string, { tag: string; label: string; Icon: any; tint: s
 };
 const metaFor = (t: string) => TYPE_META[t] || TYPE_META.other;
 
+/** apps/records/models.py::SharedDocument.IN_PROGRESS — what to show instead of a type tag while a
+ *  document is still being read/classified, or if it failed. */
+const statusLabel = (s: string) => (s === "queued" ? "Waiting" : s === "ocr" ? "Reading…" : s === "classifying" ? "Classifying…" : "Couldn't be read");
+
 // ── one row ────────────────────────────────────────────────────────────────
 function RecRow({
-  d, review, onPress, priv, onLock,
+  d, onPress, priv, onLock,
 }: {
   d: PatientDocument;
-  review?: boolean;
   onPress: () => void;
   priv?: RecordsPrivacyDoc;
   onLock?: () => void;
@@ -125,7 +110,8 @@ function RecRow({
   const Icon = meta.Icon;
   const title = d.doc_type === "prescription" && d.doctor_label ? `Prescription · ${d.doctor_label}` : d.title;
   const sub = d.hospital_label || (d.uploaded_by === "staff" ? "Issued by your hospital" : "Uploaded by you");
-  const verified = d.verification_status === "verified";
+  const inProgress = d.processing_status !== "completed" && d.processing_status !== "failed";
+  const failed = d.processing_status === "failed";
   const pState = priv ? (priv.revealed_for_visit ? "visit" : priv.private ? "private" : "shared") : null;
   const LockIcon = pState === "shared" ? Unlock : Lock;
   return (
@@ -145,18 +131,13 @@ function RecRow({
         )}
       </View>
       <View style={{ alignItems: "flex-end", gap: 4 }}>
-        {review ? (
-          <Text style={styles.reviewTag}>REVIEW</Text>
-        ) : verified ? (
-          <View style={styles.vf}>
-            <ShieldCheck size={11} color={NEUTRAL.success} strokeWidth={2.4} />
-            <Text style={styles.vfT}>Verified</Text>
-          </View>
+        {inProgress || failed ? (
+          <Text style={[styles.tag, failed && { color: NEUTRAL.warning, borderColor: NEUTRAL.warning }]}>{statusLabel(d.processing_status)}</Text>
         ) : (
           <Text style={styles.tag}>{meta.tag}</Text>
         )}
         <Text style={styles.recDt}>{fmtShort(d.document_date || d.created_at)}</Text>
-        {!review && priv && onLock && (
+        {!inProgress && !failed && priv && onLock && (
           <Pressable
             onPress={onLock}
             hitSlop={8}
@@ -237,8 +218,6 @@ export function RxReportsScreen() {
   const [tab, setTab] = useState<"all" | "prescription" | "lab_report" | "other">("all");
   const [q, setQ] = useState("");
   const [month, setMonth] = useState<string>(""); // "" until resolved, "ALL", or "YYYY-MM"
-  const [catF, setCatF] = useState<Set<string>>(new Set()); // lab panel filter — only meaningful in catMode
-  const [showCatSheet, setShowCatSheet] = useState(false);
   const [visible, setVisible] = useState(PAGE);
   const [showPending, setShowPending] = useState(false);
 
@@ -249,17 +228,6 @@ export function RxReportsScreen() {
   // which one was actually running.
   const [busyAction, setBusyAction] = useState<"view" | "download" | "save" | "remove" | "">("");
   const [choosing, setChoosing] = useState<string | null>(null);
-
-  // ── review form (unsorted rows) — ask only for what review_needs lists ───
-  const [reviewType, setReviewType] = useState<string>("");
-  const [reviewCat, setReviewCat] = useState<string>("");
-  const [reviewDate, setReviewDate] = useState<string>("");
-  useEffect(() => {
-    if (!detail) return;
-    setReviewType(needsOf(detail).includes("kind") ? "" : detail.doc_type);
-    setReviewCat((detail.report_categories || [])[0] || "");
-    setReviewDate((detail.document_date || "").slice(0, 10));
-  }, [detail?.id]);
 
   // ── shared-records privacy: the per-report lock (self only) ─────────────
   const privEnabled = !patientAwpid;
@@ -438,12 +406,11 @@ export function RxReportsScreen() {
     setMonth(pick ? pick.key : "ALL");
   }, [monthOpts, month]);
 
-  useEffect(() => { setVisible(PAGE); }, [tab, q, month, catF]);
+  useEffect(() => { setVisible(PAGE); }, [tab, q, month]);
 
   const counts = useMemo(() => {
     const c = { all: 0, prescription: 0, lab_report: 0, other: 0 };
     docs.forEach((d) => {
-      if (d.review_state === "unsorted") return;
       c.all++;
       if (d.doc_type === "prescription") c.prescription++;
       else if (d.doc_type === "lab_report") c.lab_report++;
@@ -452,49 +419,9 @@ export function RxReportsScreen() {
     return c;
   }, [docs]);
 
-  // Panel filter only makes sense while looking at lab reports (or "all",
-  // which includes them) — prescriptions/documents have no panel.
-  const catMode = tab === "all" || tab === "lab_report";
-  const catOptions = useMemo(() => {
-    const c = new Map<string, number>();
-    docs.forEach((d) => {
-      if (d.review_state === "unsorted" || d.doc_type !== "lab_report") return;
-      (d.report_categories || []).forEach((slug) => c.set(slug, (c.get(slug) || 0) + 1));
-    });
-    return Object.keys(REVIEW_CATEGORY_LABELS)
-      .filter((slug) => c.has(slug))
-      .map((slug) => ({ value: slug, label: REVIEW_CATEGORY_LABELS[slug], count: c.get(slug)! }));
-  }, [docs]);
-
-  const unsorted = useMemo(() => docs.filter((d) => d.review_state === "unsorted"), [docs]);
-
-  // Full transparency: group the "needs review" pile by the EXACT combination
-  // of missing fields, instead of one flat count — could-not-classify and
-  // just-needs-a-date read as different problems because they are.
-  const reviewSummary = useMemo(() => {
-    const REASON_LABEL: Record<string, string> = {
-      "file": "too blurry to read",
-      "kind": "couldn't be classified",
-      "kind,date": "couldn't be classified, and the date's unclear too",
-      "category": "are lab reports missing their panel",
-      "category,date": "are lab reports missing their panel and date",
-      "date": "just need a date confirmed",
-    };
-    const ORDER = ["kind", "category", "date"];
-    const groups = new Map<string, number>();
-    unsorted.forEach((d) => {
-      const needs = needsOf(d);
-      const key = needs.includes("file") ? "file"
-        : ORDER.filter((n) => needs.includes(n)).join(",");
-      groups.set(key, (groups.get(key) || 0) + 1);
-    });
-    return [...groups.entries()].map(([key, n]) => `${n} ${REASON_LABEL[key] || "need a quick check"}`);
-  }, [unsorted]);
-
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return docs
-      .filter((d) => d.review_state !== "unsorted")
       .filter((d) =>
         tab === "all" ? true
         : tab === "other" ? d.doc_type !== "prescription" && d.doc_type !== "lab_report"
@@ -504,9 +431,8 @@ export function RxReportsScreen() {
         [d.title, d.hospital_label, d.doctor_label, d.public_document_id]
           .filter(Boolean).join(" ").toLowerCase().includes(needle))
       .filter((d) => (!month || month === "ALL" ? true : ymKey(d.document_date || d.created_at) === month))
-      .filter((d) => !catMode || !catF.size || (d.report_categories || []).some((c) => catF.has(c)))
       .sort((a, b) => (b.document_date || b.created_at).localeCompare(a.document_date || a.created_at));
-  }, [docs, tab, q, month, catF, catMode]);
+  }, [docs, tab, q, month]);
 
   const shown = filtered.slice(0, visible);
 
@@ -599,59 +525,9 @@ export function RxReportsScreen() {
     }
   }
 
-  async function fileAs(d: PatientDocument, type: string) {
-    setBusyId(d.id);
-    setBusyAction(type === "__remove__" ? "remove" : "save");
-    try {
-      if (type === "__remove__") await deleteDocument(d.id);
-      else await fileReviewDocument(d.id, { doc_type: type });
-      setDetail(null);
-      queryClient.invalidateQueries({ queryKey: ["documents", patientAwpid] });
-    } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't update."));
-    } finally {
-      setBusyId(null);
-      setBusyAction("");
-    }
-  }
-
-  // Submit exactly what the review form is asking for — only the field(s)
-  // review_needs listed. The server tells us back what (if anything) is
-  // still open, so a lab report that only had its type fixed correctly
-  // re-opens asking for the panel next, rather than the row vanishing half-done.
-  async function submitReview(d: PatientDocument) {
-    const needs = needsOf(d);
-    const patch: { doc_type?: string; report_categories?: string[]; document_date?: string } = {};
-    if (needs.includes("kind") || needs.includes("file")) patch.doc_type = reviewType;
-    const effectiveType = reviewType || d.doc_type;
-    if (effectiveType === "lab_report" && reviewCat) patch.report_categories = [reviewCat];
-    if (needs.includes("date") || reviewDate) patch.document_date = reviewDate;
-    setBusyId(d.id);
-    setBusyAction("save");
-    try {
-      const res = await fileReviewDocument(d.id, patch);
-      if (!res.review_needs || res.review_needs.length === 0) {
-        setDetail(null);
-      } else {
-        // still missing something (e.g. picked "lab report" but no panel yet)
-        // — keep the sheet open, now asking for what's left.
-        setDetail({ ...d, doc_type: res.doc_type as PatientDocument["doc_type"], report_categories: res.report_categories,
-                    document_date: res.document_date, review_needs: res.review_needs });
-      }
-      queryClient.invalidateQueries({ queryKey: ["documents", patientAwpid] });
-    } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't update."));
-    } finally {
-      setBusyId(null);
-      setBusyAction("");
-    }
-  }
-
-  // One "Upload" — a single pick of one file or many PDFs/images. Handed
-  // straight to the background extraction task (instant or bulk, decided
-  // automatically) — this screen doesn't wait on it; the sheet closes right
-  // away and progress/completion show as a floating banner from anywhere in
-  // the app (see GlobalUploadStatus), not tied to staying on this screen.
+  // One "Upload" — a single pick of one file or many PDFs/images. Handed straight to the
+  // background upload+extract+classify pipeline (apps/records) — this screen doesn't wait on it;
+  // the sheet closes right away and progress shows on the entry row above the list.
   async function pickAndUpload() {
     try {
       const files = await pickDocuments();
@@ -661,7 +537,6 @@ export function RxReportsScreen() {
         mimeType: f.mimeType || "application/octet-stream",
         size: f.size || 0,
         uri: f.uri,
-        toDataUri: () => fileToDataUri(f),
       }));
       const outcome = await startUpload(candidates, patientAwpid);
       if (outcome.status === "rejected" || outcome.status === "busy") {
@@ -796,19 +671,6 @@ export function RxReportsScreen() {
         clearLabel="All months"
       />
 
-      {/* lab panel filter — only while looking at lab reports */}
-      {catMode && catOptions.length > 0 && (
-        <Pressable
-          onPress={() => setShowCatSheet(true)}
-          style={[styles.catTrigger, catF.size > 0 && { borderColor: theme.fill }]}
-        >
-          <Text style={[styles.catTriggerText, catF.size > 0 && { color: theme.text, fontWeight: "700" }]} numberOfLines={1}>
-            {catF.size === 0 ? "All categories" : catF.size === 1 ? REVIEW_CATEGORY_LABELS[[...catF][0]] : `${catF.size} categories`}
-          </Text>
-          <ChevronDown size={13} color={catF.size > 0 ? theme.text : NEUTRAL.textMuted} />
-        </Pressable>
-      )}
-
       {/* pending pharmacy / lab choices */}
       {pendingCount > 0 && (
         <View style={styles.pend}>
@@ -860,20 +722,6 @@ export function RxReportsScreen() {
         </View>
       ) : (
         <>
-          {unsorted.length > 0 && (
-            <>
-              <Text style={styles.grpLabel}>
-                {unsorted.length} need{unsorted.length > 1 ? "" : "s"} your review
-              </Text>
-              {reviewSummary.length > 0 && (
-                <Text style={styles.reviewSummary}>{reviewSummary.join(" · ")}</Text>
-              )}
-              {unsorted.slice(0, 6).map((d) => (
-                <RecRow key={d.id} d={d} review onPress={() => { setSheetError(""); setSheetMessage(""); setReviewType(""); setReviewCat(""); setReviewDate(""); setDetail(d); }} />
-              ))}
-            </>
-          )}
-
           {filtered.length === 0 ? (
             <EmptyState
               text={
@@ -891,7 +739,7 @@ export function RxReportsScreen() {
                   <RecRow
                     key={d.id}
                     d={d}
-                    onPress={() => { setSheetError(""); setSheetMessage(""); setReviewType(""); setReviewCat(""); setReviewDate(""); setDetail(d); }}
+                    onPress={() => { setSheetError(""); setSheetMessage(""); setDetail(d); }}
                     priv={privEnabled ? privMap.get(d.id) : undefined}
                     onLock={privEnabled ? () => onLock(d) : undefined}
                   />
@@ -919,7 +767,7 @@ export function RxReportsScreen() {
       {/* detail sheet */}
       <DetailSheet
         visible={!!detail}
-        onClose={() => { setDetail(null); setSheetError(""); setSheetMessage(""); setReviewType(""); setReviewCat(""); setReviewDate(""); }}
+        onClose={() => { setDetail(null); setSheetError(""); setSheetMessage(""); }}
         title={
           detail
             ? detail.doc_type === "prescription" && detail.doctor_label
@@ -928,82 +776,7 @@ export function RxReportsScreen() {
             : ""
         }
       >
-        {detail && (detail.review_state === "unsorted" ? (() => {
-          const needs = needsOf(detail);
-          const needsKind = needs.includes("kind") || needs.includes("file");
-          const effectiveType = reviewType || (needsKind ? "" : detail.doc_type);
-          const showCatPicker = effectiveType === "lab_report";
-          const showDateField = needs.includes("date");
-          const canSubmit = (!needsKind || !!effectiveType) && (!showCatPicker || !!reviewCat) && (!showDateField || !!reviewDate);
-          return (
-            <>
-              <Text style={styles.sheetHint}>
-                {needs.includes("file") ? "This photo was too blurry to read — file it anyway, or retake it:"
-                  : needsKind ? "We couldn't tell what this is — file it:"
-                  : showCatPicker && showDateField ? "This is a lab report — which panel, and when was it done?"
-                  : showCatPicker ? "This is a lab report — which panel is it?"
-                  : `Labelled as ${metaFor(effectiveType).label} — just needs a date:`}
-              </Text>
-
-              <SecondaryButton
-                label="View the file"
-                loading={busyId === detail.id && busyAction === "view"}
-                onPress={() => viewFile(detail.id)}
-                style={{ marginTop: 10 }}
-              />
-              {!!sheetError && <Text style={styles.sheetErrorText}>{sheetError}</Text>}
-              {!!sheetMessage && <Text style={styles.sheetSuccessText}>{sheetMessage}</Text>}
-
-              {needsKind && !reviewType && (
-                <View style={{ gap: 8, marginTop: 12 }}>
-                  <PrimaryButton label="It's a prescription" onPress={() => setReviewType("prescription")} />
-                  <SecondaryButton label="It's a lab report" onPress={() => setReviewType("lab_report")} />
-                  <SecondaryButton label="It's a scan / imaging" onPress={() => setReviewType("scan")} />
-                  <SecondaryButton label="It's a discharge summary" onPress={() => setReviewType("discharge_summary")} />
-                  <SecondaryButton label="Something else" onPress={() => setReviewType("other")} />
-                  <SecondaryButton label="Not a medical record — remove" danger loading={busyId === detail.id && busyAction === "remove"} onPress={() => fileAs(detail, "__remove__")} />
-                </View>
-              )}
-
-              {(!needsKind || !!reviewType) && (showCatPicker || showDateField) && (
-                <View style={{ marginTop: 14 }}>
-                  {needsKind && (
-                    <Pressable onPress={() => setReviewType("")} hitSlop={8} style={{ marginBottom: 10 }}>
-                      <Text style={styles.reviewChange}>{metaFor(effectiveType).label} · change</Text>
-                    </Pressable>
-                  )}
-                  {showCatPicker && (
-                    <>
-                      <Text style={styles.reviewFieldLabel}>PANEL</Text>
-                      <View style={styles.reviewCatWrap}>
-                        {Object.entries(REVIEW_CATEGORY_LABELS).map(([slug, label]) => {
-                          const on = reviewCat === slug;
-                          return (
-                            <Pressable
-                              key={slug}
-                              onPress={() => setReviewCat(slug)}
-                              style={[styles.reviewChip, on && { borderColor: theme.fill, backgroundColor: NEUTRAL.successBg }]}
-                            >
-                              {on && <Check size={11} color={theme.fill} strokeWidth={3} />}
-                              <Text style={[styles.reviewChipText, on && { color: theme.text, fontWeight: "700" }]}>{label}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </>
-                  )}
-                  {showDateField && (
-                    <DateField label="Document date" value={reviewDate} onChange={setReviewDate} maximumDate={new Date()} />
-                  )}
-                  <View style={{ gap: 8, marginTop: 6 }}>
-                    <PrimaryButton label="Save" disabled={!canSubmit} loading={busyId === detail.id && busyAction === "save"} onPress={() => submitReview(detail)} />
-                    <SecondaryButton label="Not a medical record — remove" danger loading={busyId === detail.id && busyAction === "remove"} onPress={() => fileAs(detail, "__remove__")} />
-                  </View>
-                </View>
-              )}
-            </>
-          );
-        })() : (
+        {detail && (
           <>
             <DetailRow label="Type" value={metaFor(detail.doc_type).label} />
             <DetailRow label="Date" value={fmtLong(detail.document_date || detail.created_at)} />
@@ -1013,11 +786,13 @@ export function RxReportsScreen() {
               value={detail.hospital_label || (detail.uploaded_by === "staff" ? "Your hospital" : "Uploaded by you")}
             />
             {!!detail.public_document_id && <DetailRow label="Document ID" value={detail.public_document_id} />}
-            <DetailRow
-              label="Status"
-              value={detail.verification_status === "verified" ? "Verified · QR authenticated" : "Not verified"}
-              valueColor={detail.verification_status === "verified" ? NEUTRAL.success : undefined}
-            />
+            {detail.processing_status !== "completed" && (
+              <DetailRow
+                label="Status"
+                value={detail.processing_status === "failed" ? (detail.error || "Couldn't be processed") : statusLabel(detail.processing_status)}
+                valueColor={detail.processing_status === "failed" ? NEUTRAL.warning : undefined}
+              />
+            )}
             <View style={{ marginTop: 14 }}>
               <View style={styles.actionRow}>
                 <FileAction
@@ -1065,7 +840,7 @@ export function RxReportsScreen() {
               </Text>
             )}
           </>
-        ))}
+        )}
       </DetailSheet>
 
       {/* add sheet */}
@@ -1074,7 +849,7 @@ export function RxReportsScreen() {
           <View style={[styles.mSheet, { paddingBottom: Math.max(22, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
             <View style={styles.handle} />
             <Text style={styles.mTitle}>Add a record</Text>
-            <Text style={styles.mSub}>We'll extract the text from each one — sorting into your reports is coming soon.</Text>
+            <Text style={styles.mSub}>We'll read each one and sort it into your reports automatically.</Text>
             <View style={{ gap: 8, marginTop: 6 }}>
               <PrimaryButton label="Upload files" onPress={pickAndUpload} />
               <Text style={styles.mHint}>Select the files you want to upload — one, or several PDFs and photos.</Text>
@@ -1098,14 +873,6 @@ export function RxReportsScreen() {
         onClose={() => setLockSheet(null)}
       />
 
-      <CategoryFilterSheet
-        visible={showCatSheet}
-        options={catOptions}
-        selected={[...catF]}
-        accent={theme.fill}
-        onClose={() => setShowCatSheet(false)}
-        onApply={(next) => setCatF(new Set(next))}
-      />
       <MessageDialog
         visible={!!uploadNotice}
         title={uploadNotice?.title ?? ""}
@@ -1119,21 +886,6 @@ export function RxReportsScreen() {
 }
 
 const styles = StyleSheet.create({
-  catTrigger: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6,
-    borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, backgroundColor: NEUTRAL.surface,
-  },
-  catTriggerText: { fontSize: 13, color: NEUTRAL.textPrimary, flex: 1 },
-
-  upRep: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 12 },
-  upRepHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  upRepTitle: { fontSize: 13.5, fontWeight: "800", color: NEUTRAL.textPrimary },
-  upRepDismiss: { fontSize: 12, fontWeight: "700", color: NEUTRAL.textSecondary },
-  upRepSummary: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 4 },
-  upRepList: { marginTop: 8, gap: 4 },
-  upRepLine: { fontSize: 11.5, color: NEUTRAL.textMuted, lineHeight: 16 },
-
   hdr: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 4 },
   back: { width: 30, height: 30, borderRadius: 15, backgroundColor: NEUTRAL.surfaceAlt, alignItems: "center", justifyContent: "center" },
   hdrTitle: { flex: 1, fontSize: 17, fontWeight: "800", color: NEUTRAL.textPrimary },
@@ -1170,12 +922,6 @@ const styles = StyleSheet.create({
   pendBtns: { flexDirection: "row", gap: 6 },
 
   grpLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: NEUTRAL.textMuted, marginTop: 6, marginBottom: 8 },
-  reviewSummary: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: -4, marginBottom: 8, lineHeight: 16 },
-  reviewChange: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, textDecorationLine: "underline" },
-  reviewFieldLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: NEUTRAL.textMuted, marginBottom: 8 },
-  reviewCatWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
-  reviewChip: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13, backgroundColor: NEUTRAL.surface },
-  reviewChipText: { fontSize: 11.5, color: NEUTRAL.textSecondary },
 
   rec: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 13, padding: 11, marginBottom: 8 },
   bdg: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
@@ -1183,13 +929,9 @@ const styles = StyleSheet.create({
   recS: { fontSize: 10.5, color: NEUTRAL.textMuted, marginTop: 2 },
   recDt: { fontSize: 10, color: NEUTRAL.textMuted },
   tag: { fontSize: 8.5, fontWeight: "700", letterSpacing: 0.4, color: NEUTRAL.textSecondary, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
-  reviewTag: { fontSize: 8.5, fontWeight: "700", letterSpacing: 0.4, color: NEUTRAL.warning, borderWidth: 0.5, borderColor: NEUTRAL.warning, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
-  vf: { flexDirection: "row", alignItems: "center", gap: 2 },
-  vfT: { fontSize: 9, fontWeight: "700", color: NEUTRAL.success },
 
   count: { textAlign: "center", fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 4 },
 
-  sheetHint: { fontSize: 12, color: NEUTRAL.textSecondary, lineHeight: 17 },
   sheetNote: { fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, lineHeight: 14 },
   sheetErrorText: { fontSize: 12, color: NEUTRAL.danger, marginTop: 8, lineHeight: 16 },
   sheetSuccessText: { fontSize: 12, color: NEUTRAL.success, marginTop: 8, lineHeight: 16 },
@@ -1209,7 +951,6 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: NEUTRAL.border, alignSelf: "center", marginBottom: 12 },
   mTitle: { fontSize: 14.5, fontWeight: "700", color: NEUTRAL.textPrimary },
   mSub: { fontSize: 11.5, color: NEUTRAL.textMuted, marginTop: 4, marginBottom: 8 },
-  mUp: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 8 },
   mHint: { fontSize: 10.5, color: NEUTRAL.textMuted, textAlign: "center", marginTop: -2, marginBottom: 2, paddingHorizontal: 8 },
   mCancel: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textSecondary },
 });

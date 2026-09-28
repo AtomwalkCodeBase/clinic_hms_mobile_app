@@ -1,173 +1,130 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import {
-  extractSync, extractBulkCreate, extractBulkStart, putToS3, getExtractConfig,
-  ExtractSyncFileResult, ExtractBatchStatus,
-} from "@/api/portal";
+import { uploadDocuments, getMyDocuments, UploadResultDoc } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { routeExtraction, partitionExtractable, SkippedFile, DEFAULT_INSTANT_MAX } from "@/utils/extractionRouting";
-import { useExtractionBatchStatus } from "@/hooks/useExtractionBatchStatus";
-import { useAiProgress, AiProgress } from "@/hooks/useAiProgress";
+import { PatientDocument } from "@/api/types";
 
-/** One file to upload — `uri` (file:// or data:) is used directly for a bulk
- *  S3 PUT; `toDataUri()` is only called for the sync path, so a large bulk
- *  batch never pays for a base64 conversion it doesn't need. */
+/** One file to upload — built straight from a picked file or a camera shot, already on disk. */
 export type UploadCandidate = {
   name: string;
   mimeType: string;
   size: number;
   uri: string;
-  toDataUri: () => Promise<string>;
 };
 
-export type InstantResult = { extracted: number; failed: number; lines: string[] };
+const MAX_FILE_BYTES = 12 * 1024 * 1024;      // core/file_validation.py + apps/records/serializers.py
+const MAX_TOTAL_BYTES = 200 * 1024 * 1024;
+const ALLOWED_MIME = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
-export type StartUploadOutcome =
+export type SkippedFile = { name: string; reason: string };
+
+/**
+ * Same caps the server enforces (apps/records/serializers.py::UploadSerializer) applied
+ * BEFORE the request, so an obviously bad file gets an instant, specific message instead of
+ * a doomed round-trip. The server re-validates everything regardless.
+ */
+function partitionUploadable(files: UploadCandidate[]): { valid: UploadCandidate[]; skipped: SkippedFile[] } {
+  const valid: UploadCandidate[] = [];
+  const skipped: SkippedFile[] = [];
+  let totalSoFar = 0;
+  for (const f of files) {
+    if (!ALLOWED_MIME.has(f.mimeType)) {
+      skipped.push({ name: f.name, reason: "Only PDF, JPG and PNG files are supported." });
+    } else if (f.size > MAX_FILE_BYTES) {
+      skipped.push({ name: f.name, reason: `${f.name} is over 12 MB.` });
+    } else if (totalSoFar + f.size > MAX_TOTAL_BYTES) {
+      skipped.push({ name: f.name, reason: "The upload is over 200 MB in total." });
+    } else {
+      totalSoFar += f.size;
+      valid.push(f);
+    }
+  }
+  return { valid, skipped };
+}
+
+/** A tracked document from the last upload — refreshed from the normal My Reports list. */
+export type TrackedDoc = Pick<
+  PatientDocument,
+  "id" | "file_name" | "processing_status" | "doc_type" | "score" | "method" | "error"
+>;
+
+const IN_PROGRESS = new Set(["queued", "ocr", "classifying"]);
+
+type StartUploadOutcome =
   | { status: "rejected"; reason: string }
   | { status: "busy"; reason: string }
-  // `skipped`: files left out because they can't be uploaded (wrong type / over the size cap); the rest went ahead.
-  | { status: "started-sync"; skipped: SkippedFile[] }
-  | { status: "started-bulk"; skipped: SkippedFile[] };
+  | { status: "started"; skipped: SkippedFile[] };
 
 interface UploadTasksContextValue {
-  instantBusy: boolean;
-  lastInstantResult: InstantResult | null;
-  clearInstantResult: () => void;
-  bulkStarting: boolean;
-  bulkStartError: string | null;
-  bulkStatus: ExtractBatchStatus["batch"] | undefined;
-  /** Per-file status from the server once the batch exists. */
-  bulkItems: ExtractBatchStatus["items"];
-  /** Files sent to storage so far, while the phone is still uploading (before the server has a status). */
-  bulkUploadProgress: { done: number; total: number; names: string[] } | null;
-  /** How many files the in-flight instant (inline) extraction covers. */
-  instantFileCount: number;
-  /** Inside the one instant request: still sending the file, or the server is now reading it. */
-  instantPhase: "upload" | "read";
-  instantUploadPct: number;
-  /** The AI check (the step after "Read") for the last instant upload / the current bulk batch; null when nothing is tracked. */
-  instantAi: AiProgress | null;
-  bulkAi: AiProgress | null;
+  uploading: boolean;
+  /** 0..100 while the multipart request is in flight (byte progress of the whole batch). */
+  uploadPct: number;
+  /** How many files the current/last upload covers. */
+  fileCount: number;
+  /** The files from the last upload, refreshed from the server until every one settles. */
+  trackedDocs: TrackedDoc[];
+  /** True once every tracked doc is completed or failed and the settle delay has passed — the
+   *  card can go away. Reset to false as soon as a new upload starts. */
+  settled: boolean;
+  clearTracked: () => void;
   startUpload: (files: UploadCandidate[], patientAwpid?: string) => Promise<StartUploadOutcome>;
 }
 
 const UploadTasksContext = createContext<UploadTasksContextValue | null>(null);
 
-const ACTIVE_BULK_STATUSES = new Set(["pending", "queued", "processing"]);
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * Start is idempotent on the server, so retrying it is always safe. Retries only
- * what can plausibly recover — the queue being briefly unavailable (503) or no
- * answer at all — and gives up immediately on a real answer like "nothing
- * arrived" (400). The uploaded files stay in S3 between attempts.
- */
-async function startWithRetry(batchId: string) {
-  const waits = [3000, 8000];
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await extractBulkStart(batchId);
-    } catch (err: any) {
-      const code = err?.response?.status;
-      const retryable = code === 503 || !err?.response;
-      if (!retryable || attempt >= waits.length) throw err;
-      await sleep(waits[attempt]);
-    }
-  }
-}
-
 export function UploadTasksProvider({ children }: { children: React.ReactNode }) {
-  const [instantBusy, setInstantBusy] = useState(false);
-  const [lastInstantResult, setLastInstantResult] = useState<InstantResult | null>(null);
-  const [bulkBatchId, setBulkBatchId] = useState<string | null>(null);
-  const [bulkStarting, setBulkStarting] = useState(false);
-  const [bulkStartError, setBulkStartError] = useState<string | null>(null);
-  const [bulkUploadProgress, setBulkUploadProgress] = useState<{ done: number; total: number; names: string[] } | null>(null);
-  const [instantFileCount, setInstantFileCount] = useState(0);
-  const [instantPhase, setInstantPhase] = useState<"upload" | "read">("upload");
-  const [instantUploadPct, setInstantUploadPct] = useState(0);
-  // Which files the AI-check step follows (their ids), and whose list they are in (a family member's or the patient's own).
-  const [instantIds, setInstantIds] = useState<string[]>([]);
-  const [instantPatient, setInstantPatient] = useState<string | undefined>(undefined);
-  const [bulkPatient, setBulkPatient] = useState<string | undefined>(undefined);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [fileCount, setFileCount] = useState(0);
+  const [trackedIds, setTrackedIds] = useState<number[]>([]);
+  const [trackedPatient, setTrackedPatient] = useState<string | undefined>(undefined);
+  const [settled, setSettled] = useState(true);
   const queryClient = useQueryClient();
+  // setState is async — two quick taps could both read a stale "not busy" and start two uploads.
+  const busyRef = useRef(false);
 
-  const bulkStatusQ = useExtractionBatchStatus(bulkBatchId);
-  const bulkStatus = bulkStatusQ.data?.batch;
-  const bulkItems = bulkStatusQ.data?.items ?? [];
-  const bulkAi = useAiProgress(bulkItems.filter((i) => i.status === "done").map((i) => i.id), bulkPatient);
-  const instantAi = useAiProgress(instantIds, instantPatient);
-  const bulkActiveRef = useRef(false);
-  bulkActiveRef.current = !!bulkStatus && ACTIVE_BULK_STATUSES.has(bulkStatus.status);
-  // setState is async — two quick taps on "Upload" could both read a stale
-  // `false` from state and start two tasks. These refs flip synchronously,
-  // so the second tap is refused even before the first one re-renders.
-  const instantBusyRef = useRef(false);
-  const bulkStartingRef = useRef(false);
+  // Poll the normal documents list (a handful of just-uploaded rows always sort to the top,
+  // newest first) while any tracked id is still queued/ocr/classifying.
+  const statusQ = useQuery({
+    queryKey: ["uploadTracking", trackedIds],
+    queryFn: () => getMyDocuments(1, trackedPatient, { pageSize: Math.max(20, trackedIds.length) }),
+    enabled: trackedIds.length > 0,
+    refetchInterval: (query) => {
+      const rows = query.state.data?.results ?? [];
+      const byId = new Map(rows.map((d) => [d.id, d]));
+      const stillGoing = trackedIds.some((id) => IN_PROGRESS.has(byId.get(id)?.processing_status ?? "queued"));
+      return stillGoing ? 3000 : false;
+    },
+  });
 
-  // Any non-active state is final: done / partial / failed / cancelled. Refresh the Uploads list once,
-  // so the AI-check status of each finished file is there.
+  const trackedDocs: TrackedDoc[] = trackedIds.map((id) => {
+    const row = statusQ.data?.results.find((d) => d.id === id);
+    return row ?? { id, file_name: "", processing_status: "queued", doc_type: "other" };
+  });
+
+  const allDone = trackedIds.length > 0 && trackedDocs.every((d) => !IN_PROGRESS.has(d.processing_status));
+
+  // Once every tracked doc is completed/failed, refresh My Reports (the new rows are already
+  // filed there) and clear the tracking card a few seconds later.
   useEffect(() => {
-    if (bulkStatus && !ACTIVE_BULK_STATUSES.has(bulkStatus.status)) {
-      queryClient.invalidateQueries({ queryKey: ["extractedItems"] });
-    }
-  }, [bulkStatus?.status]);
+    if (!allDone) return;
+    setSettled(false);
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    const t = setTimeout(() => {
+      setSettled(true);
+      setTrackedIds([]);
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [allDone]);
 
-  // Auto-clear a finished bulk batch a few seconds after it settles — reading AND the AI check — so
-  // the progress card and the "in progress" flag go away without the patient having to dismiss anything.
-  const bulkAiPending = bulkAi?.pending ?? 0;
-  useEffect(() => {
-    if (bulkStatus && !ACTIVE_BULK_STATUSES.has(bulkStatus.status) && !bulkAiPending) {
-      const t = setTimeout(() => setBulkBatchId(null), 4000);
-      return () => clearTimeout(t);
-    }
-  }, [bulkStatus?.status, bulkAiPending, bulkStatusQ.isFetching]);
-
-  // Keep the upload chips on screen until the server's own status takes over,
-  // so there's no blank gap between "uploaded" and the first poll answering.
-  useEffect(() => {
-    if (bulkStatus || bulkStatusQ.isError) setBulkUploadProgress(null);
-  }, [bulkStatus, bulkStatusQ.isError]);
-
-  // Each finished file becomes viewable straight away, so refresh the list as the count moves.
-  useEffect(() => {
-    if (bulkStatus?.processed) queryClient.invalidateQueries({ queryKey: ["extractedItems"] });
-  }, [bulkStatus?.processed]);
-
-  const clearInstantResult = useCallback(() => setLastInstantResult(null), []);
-
-  // When an instant result lands, refresh the Uploads list so each file's AI-check status is there.
-  useEffect(() => {
-    if (lastInstantResult) queryClient.invalidateQueries({ queryKey: ["extractedItems"] });
-  }, [lastInstantResult]);
-
-  // Auto-dismiss the "extracted/failed" card a few seconds after it settles — reading AND the AI
-  // check — same pattern as the bulk card, so nobody has to tap anything to clear it.
-  const instantAiPending = instantAi?.pending ?? 0;
-  useEffect(() => {
-    if (lastInstantResult && !instantAiPending) {
-      const t = setTimeout(() => {
-        setLastInstantResult(null);
-        setInstantIds([]);
-      }, 5000);
-      return () => clearTimeout(t);
-    }
-  }, [lastInstantResult, instantAiPending]);
-
-  // Same auto-dismiss treatment for a bulk-start failure (e.g. presigned S3
-  // PUT failed partway through) — shown as a toast, doesn't need a tap.
-  useEffect(() => {
-    if (bulkStartError) {
-      const t = setTimeout(() => setBulkStartError(null), 6000);
-      return () => clearTimeout(t);
-    }
-  }, [bulkStartError]);
+  const clearTracked = useCallback(() => {
+    setTrackedIds([]);
+    setSettled(true);
+  }, []);
 
   const startUpload = useCallback(
     async (allFiles: UploadCandidate[], patientAwpid?: string): Promise<StartUploadOutcome> => {
-      // Each file is judged on its own: one that can't be uploaded is skipped, the others go ahead.
-      const { valid: files, skipped } = partitionExtractable(allFiles);
+      const { valid: files, skipped } = partitionUploadable(allFiles);
       if (files.length === 0) {
         if (allFiles.length === 0) return { status: "rejected", reason: "No files selected." };
         return {
@@ -177,112 +134,42 @@ export function UploadTasksProvider({ children }: { children: React.ReactNode })
             : `None of these files can be uploaded.\n\n${skipped.map((s) => `${s.name} — ${s.reason}`).join("\n")}`,
         };
       }
-      // The instant/bulk threshold is a server setting (shared with the My Reports pipeline). Cached for a
-      // couple of minutes; if the call fails we fall back to the server default and the server re-checks anyway.
-      const instantMax = await queryClient
-        .fetchQuery({ queryKey: ["extractConfig"], queryFn: getExtractConfig, staleTime: 2 * 60 * 1000 })
-        .then((c) => c.instant_max_files)
-        .catch(() => DEFAULT_INSTANT_MAX);
-      const routed = routeExtraction(files.map((f) => ({ size: f.size, mimeType: f.mimeType })), instantMax);
-      if (routed.route === "reject") return { status: "rejected", reason: routed.reason };
-
-      if (routed.route === "sync") {
-        if (instantBusyRef.current) return { status: "busy", reason: "Still processing your last upload — wait a moment." };
-        instantBusyRef.current = true;
-        setInstantBusy(true);
-        setInstantFileCount(files.length);
-        setInstantPhase("upload");
-        setInstantUploadPct(0);
-        setLastInstantResult(null);
-        setInstantIds([]);
-        setInstantPatient(patientAwpid);
-        // Deliberately NOT awaited by the caller — this keeps running (and
-        // will update context state on completion) even if the screen that
-        // triggered it navigates away or unmounts in the meantime.
-        (async () => {
-          const result: InstantResult = { extracted: 0, failed: 0, lines: [] };
-          const doneIds: string[] = [];
-          try {
-            const payload = await Promise.all(
-              files.map(async (f) => ({ file_name: f.name, mime_type: f.mimeType, file_data: await f.toDataUri() }))
-            );
-            const results: ExtractSyncFileResult[] = await extractSync(payload, patientAwpid, (loaded, total) => {
-              if (total <= 0) return;
-              setInstantUploadPct(Math.min(100, Math.round((loaded / total) * 100)));
-              if (loaded >= total) setInstantPhase("read"); // everything is on the server; now it is being read
-            });
-            results.forEach((r, i) => {
-              if (r.status === "done") {
-                result.extracted += 1;
-                if (r.item_id) doneIds.push(r.item_id);
-              } else {
-                result.failed += 1;
-                result.lines.push(`${files[i].name} — ${r.reason || "couldn't process, try again"}`);
-              }
-            });
-          } catch (err) {
-            result.failed = files.length;
-            result.lines = [apiErrorMessage(err, "upload failed, try again")];
-          }
-          setInstantIds(doneIds);
-          setLastInstantResult(result);
-          instantBusyRef.current = false;
-          setInstantBusy(false);
-        })();
-        return { status: "started-sync", skipped };
+      if (busyRef.current) {
+        return { status: "busy", reason: "Still uploading your last batch — wait a moment." };
       }
-
-      // bulk
-      if (bulkStartingRef.current || (bulkBatchId && bulkActiveRef.current)) {
-        return { status: "busy", reason: "You already have an upload in progress. Please wait for it to finish." };
+      busyRef.current = true;
+      setUploading(true);
+      setUploadPct(0);
+      setFileCount(files.length);
+      setTrackedPatient(patientAwpid);
+      setSettled(true);
+      setTrackedIds([]);
+      try {
+        const result = await uploadDocuments(
+          files.map((f) => ({ uri: f.uri, name: f.name, mimeType: f.mimeType })),
+          patientAwpid,
+          (loaded, total) => {
+            if (total > 0) setUploadPct(Math.min(100, Math.round((loaded / total) * 100)));
+          },
+        );
+        setTrackedIds(result.documents.map((d: UploadResultDoc) => d.id));
+        setSettled(false);
+        queryClient.invalidateQueries({ queryKey: ["documents"] });
+      } catch (err) {
+        busyRef.current = false;
+        setUploading(false);
+        return { status: "rejected", reason: apiErrorMessage(err, "Upload failed, try again.") };
       }
-      bulkStartingRef.current = true;
-      setBulkStarting(true);
-      setBulkStartError(null);
-      setBulkPatient(patientAwpid);
-      setBulkUploadProgress({ done: 0, total: files.length, names: files.map((f) => f.name) });
-      // Also detached — the S3 PUTs and the start call can take a real
-      // moment for a big batch, and the whole point is the patient isn't
-      // stuck waiting on that either.
-      (async () => {
-        try {
-          const manifest = files.map((f) => ({ name: f.name, size: f.size, mime_type: f.mimeType }));
-          const created = await extractBulkCreate(manifest, patientAwpid);
-          // The server may leave out files it can't accept, so match each upload link to its file by
-          // the position it reports, not by order.
-          const sendList = created.items.map((it, i) => files[it.index ?? i]);
-          setBulkUploadProgress({ done: 0, total: sendList.length, names: sendList.map((f) => f.name) });
-          for (let i = 0; i < created.items.length; i++) {
-            try {
-              await putToS3(created.items[i].put_url, created.items[i].content_type, sendList[i].uri);
-            } catch (e) {
-              // One failed upload must not sink the whole batch: keep going, then
-              // call Start anyway — the server checks what actually reached S3,
-              // fails the missing files, and processes the rest.
-              console.warn(`S3 upload failed for ${sendList[i].name}:`, e);
-            }
-            setBulkUploadProgress({ done: i + 1, total: sendList.length, names: sendList.map((f) => f.name) });
-          }
-          await startWithRetry(created.batch_id);
-          setBulkBatchId(created.batch_id);
-        } catch (err) {
-          setBulkStartError(apiErrorMessage(err, "Couldn't start the upload. Try again."));
-          setBulkUploadProgress(null);
-        }
-        bulkStartingRef.current = false;
-        setBulkStarting(false);
-      })();
-      return { status: "started-bulk", skipped };
+      busyRef.current = false;
+      setUploading(false);
+      return { status: "started", skipped };
     },
-    [bulkBatchId]
+    [queryClient],
   );
 
   return (
     <UploadTasksContext.Provider
-      value={{
-        instantBusy, lastInstantResult, clearInstantResult, bulkStarting, bulkStartError, bulkStatus, bulkItems,
-        bulkUploadProgress, instantFileCount, instantPhase, instantUploadPct, instantAi, bulkAi, startUpload,
-      }}
+      value={{ uploading, uploadPct, fileCount, trackedDocs, settled, clearTracked, startUpload }}
     >
       {children}
     </UploadTasksContext.Provider>

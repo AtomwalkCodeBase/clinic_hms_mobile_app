@@ -1,4 +1,3 @@
-import * as FileSystem from "expo-file-system/legacy";
 import { api } from "./client";
 import type {
   Booking,
@@ -6,8 +5,6 @@ import type {
   ConsentRequired,
   DoctorCard,
   DoctorDetail,
-  EmergencyConsentPrompt,
-  EmergencyTokenResult,
   Envelope,
   FamilyMember,
   GrowthPoint,
@@ -28,7 +25,6 @@ import type {
   RecordsShareDecision,
   RecordsShareGrant,
   RecordsShareScope,
-  RecordsShareStatus,
   RescheduleResult,
   SlotEntry,
   Specialty,
@@ -71,14 +67,6 @@ export async function getDoctorDetail(tenantId: number, doctorId: number) {
   return res.data;
 }
 
-export async function getNextToken(tenantId: number, doctorId: number, date?: string) {
-  const res = await api.get<{ date: string; next_token: number }>(
-    `/portal/hospitals/${tenantId}/doctors/${doctorId}/next-token/`,
-    { params: date ? { date } : {} }
-  );
-  return res.data;
-}
-
 export async function getSlots(tenantId: number, doctorId: number, date?: string) {
   const res = await api.get<{ results: SlotEntry[] }>(`/portal/hospitals/${tenantId}/doctors/${doctorId}/slots/`, {
     params: date ? { date } : {},
@@ -86,7 +74,7 @@ export async function getSlots(tenantId: number, doctorId: number, date?: string
   return res.data.results;
 }
 
-export interface BookPayload {
+interface BookPayload {
   tenant_id: number;
   doctor_id: number;
   scheduled_date?: string;
@@ -200,14 +188,6 @@ export async function getProfile() {
  * return value instead of a thrown error. Only the 200 body is enveloped
  * ({success, data}); the 428 body is raw, matching PortalEmergencyTokenView.
  */
-export async function generateEmergencyToken(payload: {
-  patient_awpid?: string;
-  consent_confirmed: boolean;
-}): Promise<EmergencyTokenResult | EmergencyConsentPrompt> {
-  const res = await api.post("/portal/emergency/token/", payload, { validateStatus: (s) => s === 200 || s === 428 });
-  return res.status === 428 ? res.data : res.data.data;
-}
-
 /* ── "Share Records" — the patient side of the doctor-has-a-laptop flow.
  * The clinician's laptop shows a QR/code + link; the patient scans or types
  * it here, approves once (2-hour window), and can end it or release
@@ -220,11 +200,6 @@ export async function createRecordsShare(note?: string): Promise<RecordsShareCre
 }
 
 /** Public status lookup — accepts the 32-char token OR the 6-digit pairing code. */
-export async function getRecordsShareStatus(tokenOrCode: string): Promise<RecordsShareStatus> {
-  const res = await api.get(`/records-share/${tokenOrCode}/`);
-  return res.data.data;
-}
-
 /**
  * Approve / decline after scanning. The patient must pass the session's
  * `pairing` — the 6-character code on the doctor's screen, lifted out of the
@@ -370,11 +345,6 @@ export async function requestMobileChangeOtp() {
   return res.data;
 }
 
-export async function changePassword(old_password: string, new_password: string) {
-  const res = await api.post<Envelope<null>>("/portal/profile/change-password/", { old_password, new_password });
-  return res.data;
-}
-
 export async function getFamily() {
   const res = await api.get<Envelope<{ results: FamilyMember[] }>>("/portal/family/");
   return res.data.data.results;
@@ -478,10 +448,24 @@ export async function getTimeline(patientAwpid?: string, limit = 30) {
   return res.data.data.results;
 }
 
-/** PortalDocumentListCreateView returns a raw object, not the {success,data} envelope. */
-export async function getMyDocuments(page = 1, patientAwpid?: string) {
+/**
+ * PortalDocumentListCreateView returns a raw object, not the {success,data} envelope.
+ * `status` is a csv of processing_status values (e.g. "queued,ocr,classifying") — the same
+ * filter apps/records's pipeline writes, used to track an in-progress upload or list what's
+ * still being read/classified without paging through everything else in My Reports.
+ */
+export async function getMyDocuments(
+  page = 1,
+  patientAwpid?: string,
+  opts?: { status?: string; pageSize?: number },
+) {
   const res = await api.get<{ results: PatientDocument[]; pagination: Pagination }>("/portal/documents/", {
-    params: { page, ...(patientAwpid ? { patient_awpid: patientAwpid } : {}) },
+    params: {
+      page,
+      ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
+      ...(opts?.status ? { status: opts.status } : {}),
+      ...(opts?.pageSize ? { page_size: opts.pageSize } : {}),
+    },
   });
   return res.data;
 }
@@ -531,224 +515,51 @@ export async function getHealthActivity(opts?: {
   return res.data.data;
 }
 
-/**
- * Re-file an unsorted / patient-uploaded document. Verified hospital docs 409.
- * Send only the field(s) the review flow is asking for right now — the
- * server recomputes `review_needs` from what's still missing afterward, so a
- * partial submission (e.g. just the type) correctly re-prompts for the rest
- * (e.g. the panel) instead of prematurely marking the row filed.
- */
-export async function fileReviewDocument(
-  id: number,
-  patch: { doc_type?: string; report_categories?: string[]; document_date?: string },
-) {
-  const res = await api.patch<Envelope<{
-    id: number; doc_type: string; report_categories: string[];
-    document_date: string | null; review_state: string; review_needs: string[];
-  }>>(`/portal/documents/${id}/`, patch);
-  return res.data.data;
-}
-
-/** @deprecated use fileReviewDocument — kept for any other caller of the old, type-only shape. */
-export async function recategoriseDocument(id: number, doc_type: string) {
-  return fileReviewDocument(id, { doc_type });
-}
-
 /** Remove from My Records — patient upload is soft-deleted, hospital doc hidden. */
 export async function deleteDocument(id: number) {
   const res = await api.delete<Envelope<{ id: number; deleted: boolean }>>(`/portal/documents/${id}/`);
   return res.data;
 }
 
-/**
- * One upload can come back three ways (all HTTP 200/201, raw object — not the
- * {success,data} envelope):
- *   • a created doc   — { id, review_state: "filed" | "unsorted", report_categories, unreadable, ... }
- *   • not a medical doc — { skipped: true, kind: "not_medical", reason }
- *   • already uploaded  — { duplicate: true, existing_id, existing_title, existing_doc_type }
- */
-export type UploadResult =
-  | (PatientDocument & { review_state: string; unreadable?: boolean; quality_message?: string; report_categories?: string[] })
-  | { skipped: true; kind: string; reason: string }
-  | { duplicate: true; existing_id: number; existing_title: string; existing_doc_type: string };
+// ── Upload (apps/records — extraction + classification) ─────────────────────
+// One multipart request for any batch size: the server itself decides whether
+// to process each file right away or defer it to the periodic sweep
+// (SweepConfig.instant_max_files, a Platform Admin setting the app never
+// sees) — nothing for the client to route or configure. Progress after that
+// is read back from the normal documents list (getMyDocuments), which already
+// carries processing_status/score/method/error per apps/records/views.py.
 
-export async function uploadDocument(payload: {
-  title: string;
-  doc_type: string;
-  file_name: string;
-  mime_type: string;
-  file_data: string;
-  qr_token?: string;
-  patient_awpid?: string;
-}): Promise<UploadResult> {
-  // The server reads the page (quality check -> OCR -> text/vision model) before
-  // it answers, which routinely outlasts the app-wide 15s limit — the phone then
-  // gave up and left the photo "uploading" while the server was still working.
-  const res = await api.post<UploadResult>("/portal/documents/", payload, { timeout: 120000 });
-  return res.data;
-}
+export type UploadResultDoc = { id: number; file_name: string; processing_status: string };
 
-// ── Upload-and-extract (mobile-only, extraction phase — no classification/filing yet) ──
-
-/** The second status, shown after "Read": the keyword rules + AI check on the linked My Reports row. */
-export type ExtractAi = {
-  /** queued/running = the AI check is pending; done = finished; skipped = it wasn't needed; failed = it couldn't run; none = no My Reports row. */
-  status: "none" | "skipped" | "queued" | "running" | "done" | "failed";
-  /** The type it was sorted as ("Lab Report"), empty when not sure. */
-  label: string;
-  needs_review: boolean;
-};
-
-export type ExtractSyncFileResult = {
-  item_id: string;
-  file_name: string;
-  status: "done" | "failed";
-  text: string;
-  confidence: number | null;
-  reason: string;
-};
-
-/** Up to instant_max_files files (see getExtractConfig), processed inline — same request/response shape family as uploadDocument. */
-export async function extractSync(
-  files: { file_name: string; mime_type: string; file_data: string }[],
-  patient_awpid?: string,
-  /** Bytes sent so far — lets the UI tell "sending" apart from "reading" inside this one request. */
-  onUpload?: (loaded: number, total: number) => void
-): Promise<ExtractSyncFileResult[]> {
-  const res = await api.post<Envelope<{ results: ExtractSyncFileResult[] }>>(
-    "/portal/documents/extract/sync/",
-    { files, patient_awpid },
-    { timeout: 120000, onUploadProgress: (e) => onUpload?.(e.loaded, e.total ?? 0) }
-  );
-  return res.data.data.results;
-}
-
-export type ExtractConfig = { instant_max_files: number; bulk_max_files: number; batch_max_bytes: number };
-
-/** The limits the server enforces — read BEFORE choosing instant or bulk (instant_max_files is an admin setting). */
-export async function getExtractConfig(): Promise<ExtractConfig> {
-  const res = await api.get<Envelope<ExtractConfig>>("/portal/documents/extract/config/");
-  return res.data.data;
-}
-
-export type ExtractBulkCreateResult = {
-  batch_id: string;
-  items: { index?: number; item_id: string; filename: string; put_url: string; content_type: string }[];
-  /** Files the server left out (unsupported type / over the size cap). */
-  skipped?: { index: number; name: string; reason: string }[];
-};
-
-/** Bigger uploads (up to 50 files) — returns presigned S3 PUT urls; caller PUTs each file, then calls extractBulkStart. */
-export async function extractBulkCreate(
-  files: { name: string; size: number; mime_type: string }[],
-  patient_awpid?: string
-): Promise<ExtractBulkCreateResult> {
-  const res = await api.post<Envelope<ExtractBulkCreateResult>>("/portal/documents/extract/bulk/", {
-    files,
-    patient_awpid,
+/** POST /api/v1/records/upload/ — apps/records/views.py::UploadView. 202 with one row per file. */
+export async function uploadDocuments(
+  files: { uri: string; name: string; mimeType: string }[],
+  patientAwpid?: string,
+  /** Bytes sent so far, across the whole request. */
+  onUpload?: (loaded: number, total: number) => void,
+): Promise<{ batch_id: number; documents: UploadResultDoc[] }> {
+  const form = new FormData();
+  files.forEach((f) => {
+    // React Native's FormData recognizes this {uri, name, type} shape and streams the file
+    // straight off disk — no base64 conversion, unlike a JSON body would need.
+    form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any);
   });
-  return res.data.data;
-}
-
-export async function extractBulkStart(batchId: string): Promise<{ batch_id: string; status: string }> {
-  // The server checks every uploaded file in S3 before queueing, which takes a few
-  // seconds for a big batch — well past the app-wide 15s default's comfort zone on a slow link.
-  const res = await api.post<Envelope<{ batch_id: string; status: string }>>(
-    `/portal/documents/extract/bulk/${batchId}/start/`,
-    undefined,
-    { timeout: 60000 }
+  if (patientAwpid) form.append("patient_awpid", patientAwpid);
+  const res = await api.post<Envelope<{ batch_id: number; documents: UploadResultDoc[] }>>(
+    "/records/upload/",
+    form,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 60000,
+      onUploadProgress: (e) => onUpload?.(e.loaded, e.total ?? 0),
+    },
   );
-  return res.data.data;
-}
-
-export type ExtractBatchStatus = {
-  batch: {
-    id: string;
-    status: "pending" | "queued" | "processing" | "done" | "partial" | "failed" | "cancelled";
-    processed?: number;
-    progress_percent?: number;
-    counts?: { uploading: number; queued: number; processing: number; done: number; failed: number };
-    total_files: number;
-    completed: number;
-    failed: number;
-    created_at: string;
-    started_at?: string | null;
-    finished_at: string | null;
-  };
-  items: { id: string; original_filename: string; status: string; reason: string }[];
-};
-
-export async function extractBulkStatus(batchId: string): Promise<ExtractBatchStatus> {
-  const res = await api.get<Envelope<ExtractBatchStatus>>(`/portal/documents/extract/bulk/${batchId}/status/`);
-  return res.data.data;
-}
-
-export type ExtractedItem = {
-  id: string;
-  name: string;
-  status: "done" | "failed";
-  mime_type: string;
-  /** False when the file was rejected (never kept) — nothing to open. */
-  has_file: boolean;
-  reason: string;
-  snippet: string;
-  created_at: string;
-  ai: ExtractAi;
-};
-export type ExtractedGroup = {
-  id: string;
-  kind: "batch" | "instant";
-  created_at: string;
-  /** Stable number of files in this upload (items only counts the ones still showing). */
-  total?: number;
-  items: ExtractedItem[];
-};
-export type ExtractedItems = { counts: { ready: number; failed: number; ai_pending?: number }; groups: ExtractedGroup[] };
-
-/** Finished extractions the patient hasn't dismissed yet, grouped per upload. */
-export async function getExtractedItems(patientAwpid?: string): Promise<ExtractedItems> {
-  const res = await api.get<Envelope<ExtractedItems>>("/portal/documents/extract/items/", {
-    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
-  });
-  return res.data.data;
-}
-
-/** A short-lived link to the kept original, to open it the same way any other report opens. */
-export async function getExtractedItemFile(id: string, patientAwpid?: string) {
-  const res = await api.get<Envelope<{ id: string; name: string; status: string; reason: string; mime_type: string; file_url: string }>>(
-    `/portal/documents/extract/items/${id}/`,
-    { params: patientAwpid ? { patient_awpid: patientAwpid } : {} }
-  );
-  return res.data.data;
-}
-
-/** Hides finished items from the list (nothing is deleted server-side). */
-export async function dismissExtractedItems(target: { itemIds: string[] } | { all: true }, patientAwpid?: string) {
-  const body = "all" in target ? { all: true } : { item_ids: target.itemIds };
-  const res = await api.post<Envelope<{ dismissed: number }>>("/portal/documents/extract/items/dismiss/", {
-    ...body,
-    ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
-  });
   return res.data.data;
 }
 
 /** Registers this device's Expo push token with the server, against the logged-in account. */
 export async function registerPushToken(token: string, platform: string): Promise<void> {
   await api.post("/portal/push-token/", { token, platform });
-}
-
-/** Raw PUT straight to S3 — headers must match what presigned_put_url() signed. */
-export async function putToS3(putUrl: string, mimeType: string, fileUri: string): Promise<void> {
-  // Native upload straight from disk. fetch(uri).blob() would copy the whole file
-  // through base64 in JS (slow, and the body it produced never reached S3).
-  const res = await FileSystem.uploadAsync(putUrl, fileUri, {
-    httpMethod: "PUT",
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers: { "Content-Type": mimeType, "x-amz-server-side-encryption": "AES256" },
-  });
-  if (res.status < 200 || res.status >= 300) {
-    throw new Error(`Upload to storage failed (${res.status}): ${String(res.body).slice(0, 200)}`);
-  }
 }
 
 /** PortalLabOrderListView returns a raw object, not the {success,data} envelope. */
@@ -777,13 +588,6 @@ export async function chooseLabOrder(payload: {
  * backend 404s / 400s otherwise. `result_summary` rides along so a caller
  * doesn't need the list row to show it.
  */
-export async function getLabReportFile(tenantDb: string, requestId: number) {
-  const res = await api.get<Envelope<{ file_data: string; file_name: string; mime_type: string; result_summary: string }>>(
-    `/portal/lab-orders/${tenantDb}/${requestId}/report/`
-  );
-  return res.data.data;
-}
-
 export async function getNotifications(patientAwpid?: string) {
   const res = await api.get<Envelope<{ results: NotificationItem[]; unread_count: number }>>("/portal/notifications/", {
     params: patientAwpid ? { patient_awpid: patientAwpid } : {},

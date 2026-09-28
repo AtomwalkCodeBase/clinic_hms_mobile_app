@@ -1,7 +1,7 @@
 // Shapes mirror the real Django responses read directly from
 // apps/patients/portal_views.py and apps/auth_app/views.py — not guessed.
 
-export interface Tokens {
+interface Tokens {
   access: string;
   refresh: string;
 }
@@ -83,40 +83,7 @@ export interface ConsentRequired {
   message: string;
 }
 
-// PortalEmergencyTokenView's 428 body — distinct from ConsentRequired above
-// (no hospital_name; carries ttl_minutes instead) since this is a patient-
-// initiated share to an unknown scanner, not a per-hospital HIE consent.
-export interface EmergencyConsentPrompt {
-  consent_required: true;
-  share_categories: string[];
-  ttl_minutes: number;
-  message: string;
-}
-
-export interface EmergencyTokenResult {
-  token: string;
-  view_url: string;
-  /** data:image/png;base64,... — server-rendered, ready for <Image source={{uri}}>. */
-  qr_image: string;
-  expires_at: string;
-  ttl_minutes: number;
-}
-
 /* ── "Share Records" — patient side of the laptop flow ── */
-export interface RecordsSharePendingDownload {
-  id: number;
-  title: string;
-}
-export interface RecordsShareStatus {
-  token: string;
-  status: "pending" | "approved" | "denied" | "ended" | "expired";
-  code?: string;
-  requester_label: string;
-  window_hours: number;
-  seconds_left: number;
-  patient_name?: string;
-  pending_download?: RecordsSharePendingDownload | null;
-}
 export interface RecordsShareCreated {
   token: string;
   code: string;
@@ -137,6 +104,10 @@ export interface RecordsShareDecision {
   expires_at: string | null;
   seconds_left: number;
   share_all: boolean;
+}
+interface RecordsSharePendingDownload {
+  id: number;
+  title: string;
 }
 export interface RecordsShareGrant {
   token: string;
@@ -197,24 +168,23 @@ export interface PatientDocument {
   mime_type: string;
   uploaded_by: "patient" | "staff";
   created_at: string;
-  // My Reports pipeline fields — PortalDocumentListCreateView.get()
+  // apps/records pipeline fields — PortalDocumentListCreateView._document_row()
   document_date?: string | null;
   public_document_id?: string;
   hospital_label?: string;
   doctor_label?: string;
   source_tenant_id?: number | null;
-  review_state?: "filed" | "unsorted" | string;
-  /** Which specific field(s) the classifier couldn't resolve — a subset of
-   *  "kind" | "category" | "date" | "file" (file = unreadable, needs a
-   *  retake). Empty/absent for a normal confident or QR-verified row. Drives
-   *  the review flow: ask only for what's actually missing. */
-  review_needs?: string[];
-  verification_status?: "verified" | "unverified" | "needs_review" | string;
+  /** queued -> ocr -> classifying -> completed | failed (apps/records/models.py::SharedDocument). */
+  processing_status: "queued" | "ocr" | "classifying" | "completed" | "failed";
+  /** Classifier confidence 0-100, only meaningful once processing_status is "completed". */
+  score?: number | null;
+  /** How doc_type was decided: "rule" | "llm" | "staff" (empty for a hospital-issued document). */
+  method?: "rule" | "llm" | "staff" | "";
+  /** Failure reason, only set when processing_status is "failed". */
+  error?: string;
+  batch_id?: number | null;
   /** the typeset prescription's handwritten sibling, if any */
   handwritten_doc_id?: number | null;
-  /** Lab-report panel slugs (cbc, lipid, thyroid, …) — used by the
-   *  shared-records privacy screen to group and filter. */
-  report_categories?: string[];
 }
 
 /** One row on the Shared-records privacy screen — the vault annotated with
@@ -238,7 +208,7 @@ export interface RecordsPrivacyDoc {
 
 /** One page of the privacy list — the list is paged on category boundaries
  *  server-side (whole panels per page), so `documents` is just this page. */
-export interface RecordsPrivacyPagination {
+interface RecordsPrivacyPagination {
   page: number;
   page_size: number;
   total_pages: number;
@@ -249,7 +219,7 @@ export interface RecordsPrivacyPagination {
 
 /** Whole-vault figures the screen's readout / facets / Hide-all speak for,
  *  computed over every record regardless of the current page or filter. */
-export interface RecordsPrivacySummary {
+interface RecordsPrivacySummary {
   vault_total: number;
   filtered_total: number;
   shown: number;
@@ -291,7 +261,7 @@ export interface Specialty {
   doctor_count: number;
 }
 
-export interface LabReportItem {
+interface LabReportItem {
   parameter_name: string;
   result_value: string;
   unit: string;
@@ -458,11 +428,11 @@ export interface HealthInsightSummary {
 // Activity page: month-by-month document counts and the report-type
 // breakdown, plus pattern_insights (deterministic, non-LLM sentences
 // already written server-side, e.g. "You've had 3 CBC reports on file").
-export interface HealthActivityMonth {
+interface HealthActivityMonth {
   month: string; // "YYYY-MM"
   count: number;
 }
-export interface HealthActivityPanel {
+interface HealthActivityPanel {
   slug: string;
   label: string;
   count: number;

@@ -1,10 +1,9 @@
-import React, { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Platform, Image, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { X, Camera as CameraIcon, QrCode, Check } from "lucide-react-native";
-import { NEUTRAL } from "@/theme/themes";
 import { AppStackParamList } from "@/navigation/types";
 import * as FileSystem from "expo-file-system/legacy";
 import { useUploadTasks, UploadCandidate } from "@/context/UploadTasksContext";
@@ -19,22 +18,13 @@ function estimateBytes(base64: string) {
   return Math.ceil((base64.length * 3) / 4);
 }
 
-// A bulk upload PUTs each file to S3 natively from disk, and that can't read an
-// inline `data:` string — so every shot is saved to the cache folder first and
-// the candidate carries that file's path. (The instant path still sends the
-// base64 in the request, via toDataUri.)
+// The upload is one multipart request built straight from disk, so every shot is saved to the
+// cache folder first and the candidate carries that file's path.
 async function shotToCandidate(b64: string, i: number): Promise<UploadCandidate> {
   const name = `capture-${Date.now()}-${i}.jpg`;
-  const dataUri = `data:image/jpeg;base64,${b64}`;
   const uri = `${FileSystem.cacheDirectory}${name}`;
   await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
-  return {
-    name,
-    mimeType: "image/jpeg",
-    size: estimateBytes(b64),
-    uri,
-    toDataUri: async () => dataUri,
-  };
+  return { name, mimeType: "image/jpeg", size: estimateBytes(b64), uri };
 }
 
 /**
