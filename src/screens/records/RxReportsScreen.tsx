@@ -352,10 +352,15 @@ export function RxReportsScreen() {
     },
     enabled: !!firstPage && totalPages > 1,
   });
-  const docs = useMemo(
-    () => [...(firstPage?.results ?? []), ...(totalPages > 1 ? docsRestQ.data ?? [] : [])],
-    [firstPage, docsRestQ.data, totalPages]
-  );
+  const docs = useMemo(() => {
+    // Offset pagination (page 1, then pages 2..N fetched afterward) isn't stable against
+    // concurrent inserts: a new upload shifts everything after it by one position, so a
+    // document already in firstPage.results can reappear in docsRestQ.data at the shifted
+    // offset. De-dupe by id (keep the first occurrence) rather than rendering it twice.
+    const combined = [...(firstPage?.results ?? []), ...(totalPages > 1 ? docsRestQ.data ?? [] : [])];
+    const seen = new Set<number>();
+    return combined.filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
+  }, [firstPage, docsRestQ.data, totalPages]);
   // "Ready to actually use" — the first page has landed, so there's real
   // content and search/filter/months already work over what's loaded so
   // far. Any remaining pages fill in silently afterward (backgroundLoading
