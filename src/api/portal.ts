@@ -8,8 +8,6 @@ import type {
   Envelope,
   FamilyMember,
   GrowthPoint,
-  HealthActivity,
-  HealthInsightSummary,
   HealthSummary,
   Hospital,
   LabOrder,
@@ -449,15 +447,15 @@ export async function getTimeline(patientAwpid?: string, limit = 30) {
 }
 
 /**
- * PortalDocumentListCreateView returns a raw object, not the {success,data} envelope.
- * `status` is a csv of processing_status values (e.g. "queued,ocr,classifying") — the same
- * filter apps/records's pipeline writes, used to track an in-progress upload or list what's
- * still being read/classified without paging through everything else in My Reports.
+ * GET /portal/documents/ — returns a raw object, not the {success,data} envelope.
+ * `review` picks the list: "confirmed" (default) is My Documents, "pending" is the uploads still waiting for the
+ * patient to confirm their type (the Needs Review list), "all" is both. `status` is a csv of processing_status
+ * values and `docType` narrows to one category.
  */
 export async function getMyDocuments(
   page = 1,
   patientAwpid?: string,
-  opts?: { status?: string; pageSize?: number },
+  opts?: { status?: string; pageSize?: number; review?: "pending" | "confirmed" | "all"; docType?: string },
 ) {
   const res = await api.get<{ results: PatientDocument[]; pagination: Pagination }>("/portal/documents/", {
     params: {
@@ -465,6 +463,8 @@ export async function getMyDocuments(
       ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
       ...(opts?.status ? { status: opts.status } : {}),
       ...(opts?.pageSize ? { page_size: opts.pageSize } : {}),
+      ...(opts?.review ? { review: opts.review } : {}),
+      ...(opts?.docType ? { doc_type: opts.docType } : {}),
     },
   });
   return res.data;
@@ -478,83 +478,79 @@ export async function getDocumentDetail(id: number, opts?: { download?: boolean 
   return res.data.data;
 }
 
-/**
- * The combined, point-form summary across every changed value at once —
- * POST for the same reason as the narrative above (the one call on this
- * screen that hits an LLM). `points` comes back empty (not null) when
- * nothing changed enough to flag; the caller falls back to a plain
- * "nothing out of the ordinary" state rather than an error either way.
- */
-export async function getHealthInsightSummary(opts?: {
-  range?: "3m" | "6m" | "12m" | "all";
-  patientAwpid?: string;
-}) {
-  const res = await api.post<Envelope<HealthInsightSummary>>("/portal/health-insights/summary/", {
-    range: opts?.range || "12m",
-    ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
-  });
-  return res.data.data;
+// ── Upload and review (apps/records) ─────────────────────────────────────────
+// One multipart call sends the files; the server reads and classifies them in the background. The patient then
+// confirms each file's type (submitDecisions) and only then does it appear in My Documents.
+
+export type DocumentTypeOption = { code: string; label: string };
+export type UploadMode = "instant" | "bulk";
+export type ReviewDecision = { document_id: number; document_type: string };
+export type SubmitRejection = {
+  document_id: number;
+  reason: "already_confirmed" | "still_processing" | "failed" | "invalid_type" | "not_found";
+};
+export type SubmitResult = { submitted: number[]; rejected: SubmitRejection[]; counts: { awaiting_review: number } };
+export type DocumentCounts = {
+  total: number; awaiting_review: number; unclassified: number; by_type: Record<string, number>;
+};
+
+/** GET /api/v1/records/types/ — the categories a document can be filed under (one list for every dropdown). */
+export async function getDocumentTypes(): Promise<DocumentTypeOption[]> {
+  const res = await api.get<Envelope<{ types: DocumentTypeOption[] }>>("/records/types/");
+  return res.data.data.types;
 }
 
 /**
- * Visits & reports activity — month-by-month document counts, the
- * report-type breakdown, and pattern_insights (deterministic, non-LLM
- * sentences already written server-side). No LLM call, so this is a plain
- * GET unlike the two above.
+ * POST /api/v1/records/upload/ — multipart. "instant" is exactly one file (its own fast queue); "bulk" is up to 50.
+ * The files are only sent here; reading them takes the server a little longer, so follow the new documents with the
+ * list (`getMyDocuments(..., { review: "pending" })`) or `getDocumentDetail`.
  */
-export async function getHealthActivity(opts?: {
-  range?: "3m" | "6m" | "12m" | "all";
-  patientAwpid?: string;
-}) {
-  const res = await api.get<Envelope<HealthActivity>>("/portal/health-insights/", {
-    params: {
-      range: opts?.range || "12m",
-      ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
-    },
-  });
-  return res.data.data;
-}
-
-/** Remove from My Records — patient upload is soft-deleted, hospital doc hidden. */
-export async function deleteDocument(id: number) {
-  const res = await api.delete<Envelope<{ id: number; deleted: boolean }>>(`/portal/documents/${id}/`);
-  return res.data;
-}
-
-// ── Upload (apps/records — extraction + classification) ─────────────────────
-// One multipart request for any batch size: the server itself decides whether
-// to process each file right away or defer it to the periodic sweep
-// (SweepConfig.instant_max_files, a Platform Admin setting the app never
-// sees) — nothing for the client to route or configure. Progress after that
-// is read back from the normal documents list (getMyDocuments), which already
-// carries processing_status/score/method/error per apps/records/views.py.
-
-export type UploadResultDoc = { id: number; file_name: string; processing_status: string };
-
-/** POST /api/v1/records/upload/ — apps/records/views.py::UploadView. 202 with one row per file. */
 export async function uploadDocuments(
   files: { uri: string; name: string; mimeType: string }[],
+  mode: UploadMode,
   patientAwpid?: string,
-  /** Bytes sent so far, across the whole request. */
-  onUpload?: (loaded: number, total: number) => void,
-): Promise<{ batch_id: number; documents: UploadResultDoc[] }> {
+  onProgress?: (fraction: number) => void,
+): Promise<{ batch_id: number; mode: UploadMode; documents: { id: number; file_name: string; processing_status: string }[] }> {
   const form = new FormData();
-  files.forEach((f) => {
-    // React Native's FormData recognizes this {uri, name, type} shape and streams the file
-    // straight off disk — no base64 conversion, unlike a JSON body would need.
-    form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any);
-  });
+  files.forEach((f) => form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any));
+  form.append("mode", mode);
   if (patientAwpid) form.append("patient_awpid", patientAwpid);
-  const res = await api.post<Envelope<{ batch_id: number; documents: UploadResultDoc[] }>>(
+  const res = await api.post<Envelope<{ batch_id: number; mode: UploadMode; documents: { id: number; file_name: string; processing_status: string }[] }>>(
     "/records/upload/",
     form,
     {
       headers: { "Content-Type": "multipart/form-data" },
-      timeout: 60000,
-      onUploadProgress: (e) => onUpload?.(e.loaded, e.total ?? 0),
+      timeout: 10 * 60 * 1000,
+      onUploadProgress: (e) => onProgress?.(e.total ? e.loaded / e.total : 0),
     },
   );
   return res.data.data;
+}
+
+/** GET /api/v1/portal/documents/counts/ — the My Documents dropdown counts (every category, zeros included). */
+export async function getDocumentCounts(patientAwpid?: string): Promise<DocumentCounts> {
+  const res = await api.get<Envelope<DocumentCounts>>("/portal/documents/counts/", {
+    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
+  });
+  return res.data.data;
+}
+
+/**
+ * POST /api/v1/records/submit/ — the patient's final answer for up to 100 files at once. Each file is judged on its
+ * own: the ones that pass get the chosen type and are locked for good (nobody can change them again), the others come
+ * back in `rejected` with a reason. Sending the same list twice is safe.
+ */
+export async function submitDecisions(decisions: ReviewDecision[], patientAwpid?: string): Promise<SubmitResult> {
+  const res = await api.post<Envelope<SubmitResult>>("/records/submit/", {
+    decisions,
+    ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
+  });
+  return res.data.data;
+}
+
+/** PATCH /api/v1/portal/documents/<id>/ {action: "retry"} — try a file that could not be read again. */
+export async function retryDocument(id: number, patientAwpid?: string): Promise<void> {
+  await api.patch(`/portal/documents/${id}/`, { action: "retry" }, { params: patientAwpid ? { patient_awpid: patientAwpid } : {} });
 }
 
 /** Registers this device's Expo push token with the server, against the logged-in account. */

@@ -6,63 +6,65 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { X, Camera as CameraIcon, QrCode, Check } from "lucide-react-native";
 import { AppStackParamList } from "@/navigation/types";
 import * as FileSystem from "expo-file-system/legacy";
-import { useUploadTasks, UploadCandidate } from "@/context/UploadTasksContext";
+import { useDocumentUpload, UploadCandidate } from "@/context/DocumentUploadContext";
 
 type Mode = "qr" | "photo";
 
-// How many photos one capture session holds before it makes you upload and
-// start again — keeps device memory sane (each shot is a base64 JPEG).
+// How many photos one bulk capture session holds before it makes you upload and
+// start again — keeps device memory sane (each shot is a base64 JPEG). Add Document (instant) takes exactly one.
 const MAX_SHOTS = 20;
 
 function estimateBytes(base64: string) {
   return Math.ceil((base64.length * 3) / 4);
 }
 
-// The upload is one multipart request built straight from disk, so every shot is saved to the
-// cache folder first and the candidate carries that file's path.
+// The upload is one multipart request built straight from disk, so every shot is saved to disk
+// first and the candidate carries that file's path. Written under documentDirectory rather than
+// cacheDirectory — Android (MIUI especially) can reclaim a cache-directory file before the upload
+// reads it; see fileHelpers.ts's stageForUpload for the same issue on the document-picker path.
 async function shotToCandidate(b64: string, i: number): Promise<UploadCandidate> {
+  const dir = `${FileSystem.documentDirectory}pending-uploads/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
   const name = `capture-${Date.now()}-${i}.jpg`;
-  const uri = `${FileSystem.cacheDirectory}${name}`;
+  const uri = `${dir}${name}`;
   await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
   return { name, mimeType: "image/jpeg", size: estimateBytes(b64), uri };
 }
 
 /**
- * One camera screen, two modes chosen by a toggle at the top:
- *   • "Scan QR"  — a bounded frame; a document QR held inside it auto-snaps
- *     and extracts on its own.
- *   • "Photo"    — full-screen viewfinder + shutter. Each tap adds a page to a
- *     tray; "Upload N" hands the tray off to the background extraction task
- *     (instant or bulk, decided automatically) and you can keep shooting or
- *     leave — nothing here blocks on the upload finishing. At MAX_SHOTS the
- *     shutter locks until you upload.
- * Extraction only for now — nothing is classified or filed into My Reports
- * yet, so there's no "added to your reports" outcome here anymore. Progress
- * and the completion message show on the Rx & Reports progress card (and a
- * floating pill on other screens) — not tied to this screen staying open.
+ * One camera screen, opened from two places (route param `mode`):
+ *   • "instant" (Add Document in My Documents) — one document. Two modes chosen by a toggle at the top:
+ *       "Scan QR" — a bounded frame; a document QR held inside it auto-snaps and uploads on its own.
+ *       "Photo"   — full-screen viewfinder + shutter, exactly one shot, then "Upload".
+ *     Afterwards My Documents opens with that document, to confirm its type.
+ *   • "bulk" (Bulk Upload) — Photo mode only. Each tap adds a page to a tray; "Upload N" sends them all and
+ *     returns to Bulk Upload, where they are reviewed. At MAX_SHOTS the shutter locks until you upload.
  */
 export function CaptureScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const route = useRoute<RouteProp<AppStackParamList, "RxCapture">>();
+  const route = useRoute<RouteProp<AppStackParamList, "DocumentCapture">>();
   const patientAwpid = route.params?.patientAwpid;
-  const { startUpload } = useUploadTasks();
+  const uploadMode = route.params?.mode ?? "instant";
+  const maxShots = uploadMode === "instant" ? 1 : MAX_SHOTS;
+  const { startUpload } = useDocumentUpload();
 
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
-  const [mode, setMode] = useState<Mode>("qr");
+  const [mode, setMode] = useState<Mode>(uploadMode === "instant" ? "qr" : "photo");
   const [shots, setShots] = useState<string[]>([]);     // base64 JPEGs, photo mode
   const [capturing, setCapturing] = useState(false);     // guards double-tap while grabbing a frame
   const [error, setError] = useState("");
   const handledQr = useRef(false);
 
-  // Leave the camera once an upload is under way: back to Rx & Reports if that's
-  // where we came from, otherwise open it — that's where the progress card lives.
-  const leaveForProgress = useCallback(() => {
-    const routes = navigation.getState().routes;
-    const prev = routes[routes.length - 2]?.name;
-    if (prev === "RxReports") navigation.goBack();
-    else navigation.replace("RxReports", patientAwpid ? { patientAwpid } : undefined);
-  }, [navigation, patientAwpid]);
+  // Leave the camera once the files are on the server: an instant document goes back to My Documents (which follows it
+  // until it is read, then asks for confirmation); a bulk upload goes back to Bulk Upload for the review.
+  const leaveAfterUpload = useCallback((documentIds: number[]) => {
+    if (uploadMode === "instant") {
+      navigation.navigate({ name: "MyDocuments", params: { ...(patientAwpid ? { patientAwpid } : {}), instantDocId: documentIds[0] }, merge: true });
+    } else {
+      navigation.navigate({ name: "DocumentUpload", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
+    }
+  }, [navigation, patientAwpid, uploadMode]);
 
   const grabFrame = useCallback(async (): Promise<string | null> => {
     if (!camRef.current) return null;
@@ -70,7 +72,7 @@ export function CaptureScreen() {
     return shot?.base64 ?? null;
   }, []);
 
-  // ── QR: capture the frame and hand it to the background extraction task ──
+  // ── QR: capture the frame and upload it as one instant document ──
   const captureQr = useCallback(async (_qrToken: string) => {
     if (capturing) return;
     setCapturing(true);
@@ -83,22 +85,20 @@ export function CaptureScreen() {
         setCapturing(false);
         return;
       }
-      const outcome = await startUpload([await shotToCandidate(b64, 0)], patientAwpid);
-      if (outcome.status === "rejected" || outcome.status === "busy") {
+      const outcome = await startUpload([await shotToCandidate(b64, 0)], "instant", patientAwpid);
+      if (outcome.status !== "started") {
         setError(outcome.reason);
         handledQr.current = false;
         setCapturing(false);
         return;
       }
-      // Started — extraction continues in the background regardless of this
-      // screen; no need to wait here.
-      leaveForProgress();
+      leaveAfterUpload(outcome.documentIds);
     } catch (err) {
       setError("Couldn't use the camera. Try again.");
       handledQr.current = false;
       setCapturing(false);
     }
-  }, [capturing, grabFrame, startUpload, patientAwpid, leaveForProgress]);
+  }, [capturing, grabFrame, startUpload, patientAwpid, leaveAfterUpload]);
 
   const onBarcode = useCallback(({ data }: { data: string }) => {
     if (handledQr.current || capturing || !data) return;
@@ -108,16 +108,16 @@ export function CaptureScreen() {
 
   // ── Photo: add to the tray ──────────────────────────────────────────────
   const addShot = useCallback(async () => {
-    if (capturing || shots.length >= MAX_SHOTS) return;
+    if (capturing || shots.length >= maxShots) return;
     setCapturing(true);
     try {
       const b64 = await grabFrame();
-      if (b64) setShots((s) => (s.length >= MAX_SHOTS ? s : [...s, b64]));
+      if (b64) setShots((s) => (s.length >= maxShots ? s : [...s, b64]));
     } catch {
       setError("Couldn't use the camera. Try again.");
     }
     setCapturing(false);
-  }, [capturing, shots.length, grabFrame]);
+  }, [capturing, shots.length, grabFrame, maxShots]);
 
   const removeShot = (i: number) => setShots((s) => s.filter((_, idx) => idx !== i));
 
@@ -125,16 +125,14 @@ export function CaptureScreen() {
     if (shots.length === 0) return;
     setError("");
     const candidates = await Promise.all(shots.map((b64, i) => shotToCandidate(b64, i)));
-    const outcome = await startUpload(candidates, patientAwpid);
-    if (outcome.status === "rejected" || outcome.status === "busy") {
+    const outcome = await startUpload(candidates, uploadMode, patientAwpid);
+    if (outcome.status !== "started") {
       setError(outcome.reason);
       return;
     }
-    // Started (instant or background batch) — clear the tray and head to Rx &
-    // Reports, where the progress card shows it working.
     setShots([]);
-    leaveForProgress();
-  }, [shots, startUpload, patientAwpid, leaveForProgress]);
+    leaveAfterUpload(outcome.documentIds);
+  }, [shots, startUpload, uploadMode, patientAwpid, leaveAfterUpload]);
 
   const switchMode = (m: Mode) => {
     if (m === mode) return;
@@ -162,7 +160,7 @@ export function CaptureScreen() {
   }
 
   const isQr = mode === "qr";
-  const atLimit = shots.length >= MAX_SHOTS;
+  const atLimit = shots.length >= maxShots;
 
   return (
     <View style={styles.fill}>
@@ -174,8 +172,8 @@ export function CaptureScreen() {
         onBarcodeScanned={isQr && !capturing ? onBarcode : undefined}
       />
 
-      {/* mode toggle */}
-      <View style={styles.toggleWrap}>
+      {/* mode toggle (only Add Document can scan a QR) */}
+      {uploadMode === "instant" && <View style={styles.toggleWrap}>
         <View style={styles.toggle}>
           <Pressable style={[styles.toggleBtn, isQr && styles.toggleBtnOn]} onPress={() => switchMode("qr")}>
             <QrCode size={13} color={isQr ? "#111" : "#fff"} />
@@ -186,7 +184,7 @@ export function CaptureScreen() {
             <Text style={[styles.toggleText, !isQr && styles.toggleTextOn]}>Photo</Text>
           </Pressable>
         </View>
-      </View>
+      </View>}
 
       {/* overlay differs by mode */}
       {isQr ? (
@@ -199,8 +197,10 @@ export function CaptureScreen() {
           <View style={styles.pageGuide} />
           <Text style={styles.hint}>
             {atLimit
-              ? `That's ${MAX_SHOTS} pages — upload them, then keep going.`
-              : "Fit the whole page in view, in good light, then tap the shutter. Add as many pages as you need."}
+              ? (uploadMode === "instant" ? "Got it — tap Upload." : `That's ${maxShots} pages — upload them, then keep going.`)
+              : (uploadMode === "instant"
+                ? "Fit the whole page in view, in good light, then tap the shutter."
+                : "Fit the whole page in view, in good light, then tap the shutter. Add as many pages as you need.")}
           </Text>
         </View>
       )}
@@ -234,7 +234,7 @@ export function CaptureScreen() {
         ) : (
           <View style={styles.photoBar}>
             <View style={styles.sideSlot}>
-              {shots.length > 0 && <Text style={styles.countText}>{shots.length}/{MAX_SHOTS}</Text>}
+              {shots.length > 0 && uploadMode === "bulk" && <Text style={styles.countText}>{shots.length}/{maxShots}</Text>}
             </View>
             <Pressable style={[styles.shutter, atLimit && styles.shutterOff]} disabled={capturing || atLimit} onPress={addShot}>
               <View style={styles.shutterInner} />
@@ -243,7 +243,7 @@ export function CaptureScreen() {
               {shots.length > 0 && (
                 <Pressable style={styles.uploadBtn} onPress={uploadAll}>
                   <Check size={15} color="#111" strokeWidth={3} />
-                  <Text style={styles.uploadBtnText}>Upload {shots.length}</Text>
+                  <Text style={styles.uploadBtnText}>{uploadMode === "instant" ? "Upload" : `Upload ${shots.length}`}</Text>
                 </Pressable>
               )}
             </View>

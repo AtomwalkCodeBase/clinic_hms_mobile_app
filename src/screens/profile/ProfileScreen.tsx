@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Image, Modal, Switch } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -13,7 +13,6 @@ import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
 import { MetalHero } from "@/components/MetalHero";
 import { ListRow } from "@/components/ListRow";
-import { GADGET_TINTS, DASHBOARD_TINTS } from "@/components/GadgetCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -221,16 +220,14 @@ export function ProfileScreen() {
         title="Personal details"
         subtitle="Mobile, email, gender, DOB"
         onPress={() => navigation.navigate("PersonalDetails")}
-        iconColors={GADGET_TINTS.green.icon}
-        iconShadowColor={GADGET_TINTS.green.shadow}
+        tinted
       />
       <ListRow
         icon={HeartPulse}
         title="Health summary"
         subtitle="Blood group, allergies, diagnoses"
         onPress={() => navigation.navigate("HealthSummary")}
-        iconColors={DASHBOARD_TINTS.rose.icon}
-        iconShadowColor={DASHBOARD_TINTS.rose.shadow}
+        tinted
       />
       <ListRow
         icon={Users}
@@ -238,24 +235,21 @@ export function ProfileScreen() {
         subtitle={family.length ? family.map((f) => f.full_name).join(", ") : "No family members added yet"}
         pillLabel={family.length ? String(family.length) : undefined}
         onPress={() => navigation.navigate("FamilyMembers")}
-        iconColors={GADGET_TINTS.blue.icon}
-        iconShadowColor={GADGET_TINTS.blue.shadow}
+        tinted
       />
       <ListRow
         icon={Lock}
         title="Shared records privacy"
         subtitle="Choose what a doctor sees when you share"
         onPress={() => navigation.navigate("SharedRecordsPrivacy")}
-        iconColors={GADGET_TINTS.muted.icon}
-        iconShadowColor={GADGET_TINTS.muted.shadow}
+        tinted
       />
       <ListRow
         icon={Building2}
         title="Linked hospitals"
         subtitle={summary?.linked_hospitals.length ? summary.linked_hospitals.map((h) => h.hospital_name).join(", ") : "No hospitals linked yet"}
         onPress={() => navigation.navigate("LinkedHospitals")}
-        iconColors={GADGET_TINTS.amber.icon}
-        iconShadowColor={GADGET_TINTS.amber.shadow}
+        tinted
       />
 
       <SectionTitle>Preferences</SectionTitle>
@@ -263,8 +257,7 @@ export function ProfileScreen() {
         icon={Lock}
         title="Biometric unlock"
         subtitle={biometricEnabled ? "On — pick fingerprint or password at sign-in" : "Off — sign in with your password"}
-        iconColors={GADGET_TINTS.green.icon}
-        iconShadowColor={GADGET_TINTS.green.shadow}
+        tinted
         trailing={
           <Switch
             value={biometricEnabled}
@@ -279,15 +272,13 @@ export function ProfileScreen() {
         title="Theme"
         subtitle={theme.label}
         onPress={() => navigation.navigate("ThemePicker")}
-        iconColors={GADGET_TINTS.purple.icon}
-        iconShadowColor={GADGET_TINTS.purple.shadow}
+        tinted
       />
       <ListRow
         icon={Headphones}
         title="Support"
         onPress={() => navigation.navigate("Support")}
-        iconColors={GADGET_TINTS.muted.icon}
-        iconShadowColor={GADGET_TINTS.muted.shadow}
+        tinted
       />
 
       <SecondaryButton label="Sign out" onPress={() => setSignOutConfirmVisible(true)} danger style={{ marginTop: 10 }} />

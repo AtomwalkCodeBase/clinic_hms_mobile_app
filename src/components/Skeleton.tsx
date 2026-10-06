@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Animated, Easing, View, StyleSheet, ViewStyle, DimensionValue } from "react-native";
 import { NEUTRAL } from "@/theme/themes";
 
@@ -44,7 +44,7 @@ export function SkeletonBlock({
   );
 }
 
-export function SkeletonCircle({ size = 34, style }: { size?: number; style?: ViewStyle }) {
+function SkeletonCircle({ size = 34, style }: { size?: number; style?: ViewStyle }) {
   return <SkeletonBlock width={size} height={size} radius={size / 2} style={style} />;
 }
 

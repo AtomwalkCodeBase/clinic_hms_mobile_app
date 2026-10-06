@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 
-export interface CategoryOption {
+interface CategoryOption {
   value: string;
   label: string;
   count: number;

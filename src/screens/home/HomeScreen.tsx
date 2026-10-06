@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { SkeletonBlock, SkeletonGadgetCard } from "@/components/Skeleton";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { CalendarDays, ClipboardList, HeartPulse, FileText, QrCode, Bell, ChevronRight, Users, X } from "lucide-react-native";
+import { CalendarDays, ClipboardList, HeartPulse, FileText, QrCode, Bell, ChevronRight, Users, X, Upload } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
@@ -16,13 +16,12 @@ import { Pill, statusTone } from "@/components/Pill";
 import { LogoPill } from "@/components/Logo";
 import { MetalHero } from "@/components/MetalHero";
 import { IconBadge } from "@/components/IconBadge";
-import { UploadRing } from "@/components/UploadProgress";
-import { GadgetCard, DASHBOARD_TINTS, GadgetTint } from "@/components/GadgetCard";
+import { GadgetCard } from "@/components/GadgetCard";
 import type { LucideIcon } from "@/theme/icons";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { getStats, getMyBookings, getNotifications, getProfile } from "@/api/portal";
+import { getStats, getMyBookings, getNotifications, getProfile, getDocumentCounts } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
 import { AppTabsParamList } from "@/navigation/types";
@@ -50,10 +49,11 @@ type Nav = CompositeNavigationProp<
 // was a dead extra step, not a shortcut to anything the grid itself
 // couldn't reach. Freed up for a visitor-management tile a teammate is
 // building.
-const QUICK_ACTIONS: { key: string; label: string; sub: string; icon: LucideIcon; tint: GadgetTint }[] = [
-  { key: "appointments", label: "Appointments", sub: "Upcoming and past visits", icon: ClipboardList, tint: DASHBOARD_TINTS.teal },
-  { key: "records", label: "Rx & Reports", sub: "Prescriptions, lab reports & docs", icon: FileText, tint: DASHBOARD_TINTS.slate },
-  { key: "shareRecords", label: "Share Records", sub: "Let any doctor view your records", icon: QrCode, tint: DASHBOARD_TINTS.gold },
+const QUICK_ACTIONS: { key: string; label: string; sub: string; icon: LucideIcon }[] = [
+  { key: "appointments", label: "Appointments", sub: "Upcoming and past visits", icon: ClipboardList },
+  { key: "records", label: "My Documents", sub: "Prescriptions, lab reports and more", icon: FileText },
+  { key: "shareRecords", label: "Share Records", sub: "Let any doctor view your records", icon: QrCode },
+  { key: "documentUpload", label: "Bulk Upload", sub: "Add many files at once", icon: Upload },
 ];
 
 function greetingForHour(hour: number): string {
@@ -86,11 +86,13 @@ export function HomeScreen() {
   const bookingsQ = useQuery({ queryKey: ["bookings", 1], queryFn: () => getMyBookings() });
   const notifsQ = useQuery({ queryKey: ["notifications"], queryFn: () => getNotifications().catch(() => null) });
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: () => getProfile().catch(() => null) });
+  // Same cache entry My Documents reads for the signed-in patient; here only for the "to review" badge.
+  const docCountsQ = useQuery({ queryKey: ["documentCounts", undefined], queryFn: () => getDocumentCounts().catch(() => null) });
 
   const refetchAll = useCallback(async () => {
-    await Promise.all([statsQ.refetch(), bookingsQ.refetch(), notifsQ.refetch(), profileQ.refetch()]);
-  }, [statsQ.refetch, bookingsQ.refetch, notifsQ.refetch, profileQ.refetch]);
-  useRefreshOnFocus([statsQ, bookingsQ, notifsQ, profileQ]);
+    await Promise.all([statsQ.refetch(), bookingsQ.refetch(), notifsQ.refetch(), profileQ.refetch(), docCountsQ.refetch()]);
+  }, [statsQ.refetch, bookingsQ.refetch, notifsQ.refetch, profileQ.refetch, docCountsQ.refetch]);
+  useRefreshOnFocus([statsQ, bookingsQ, notifsQ, profileQ, docCountsQ]);
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
   useFocusEffect(
@@ -102,6 +104,7 @@ export function HomeScreen() {
   const stats = statsQ.data ?? null;
   const upcoming = (bookingsQ.data?.results ?? []).filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status));
   const unreadCount = notifsQ.data?.unread_count ?? 0;
+  const awaitingReview = docCountsQ.data?.awaiting_review ?? 0;
   const firstName = profileQ.data?.full_name?.split(" ")[0] || "";
   const error = statsQ.error || bookingsQ.error;
   const isInitialLoading = !statsQ.data && !bookingsQ.data;
@@ -109,8 +112,9 @@ export function HomeScreen() {
 
   const onQuickAction = (key: string) => {
     if (key === "appointments") navigation.navigate("Tabs" as any, { screen: "Appointments" } as any);
-    else if (key === "records") navigation.navigate("RxReports");
+    else if (key === "records") navigation.navigate("MyDocuments");
     else if (key === "shareRecords") navigation.navigate("ShareRecords");
+    else if (key === "documentUpload") navigation.navigate("DocumentUpload");
   };
   const onBookVisit = () => navigation.navigate("BookingFor", undefined);
 
@@ -148,6 +152,7 @@ export function HomeScreen() {
           <SkeletonGadgetCard style={styles.qa} />
           <SkeletonGadgetCard style={styles.qa} />
           <SkeletonGadgetCard style={styles.qa} />
+          <SkeletonGadgetCard style={styles.qa} />
         </View>
       </Screen>
     );
@@ -165,7 +170,6 @@ export function HomeScreen() {
         <View style={styles.heroTop}>
           <LogoPill size={40} />
           <View style={styles.heroActions}>
-            <UploadRing onOpen={() => navigation.navigate("Uploads")} />
             <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
               <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
               {unreadCount > 0 && (
@@ -271,7 +275,7 @@ export function HomeScreen() {
             icon={qa.icon}
             title={qa.label}
             subtitle={qa.sub}
-            tint={qa.tint}
+            badge={qa.key === "documentUpload" && awaitingReview > 0 ? `${awaitingReview} to review` : undefined}
             iconSize={34}
             radius={22}
             cardPadding={16}

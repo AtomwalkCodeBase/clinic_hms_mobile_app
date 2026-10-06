@@ -1,4 +1,3 @@
-import React from "react";
 import { View, Image, StyleSheet } from "react-native";
 
 // Real aspect ratio of assets/logo.png (1981x1009) — used so the mark scales
@@ -6,7 +5,7 @@ import { View, Image, StyleSheet } from "react-native";
 const LOGO_ASPECT = 1981 / 1009;
 
 /** The actual Atomwalk Technologies lockup (icon + wordmark) — never a placeholder. */
-export function LogoMark({ size = 26 }: { size?: number }) {
+function LogoMark({ size = 26 }: { size?: number }) {
   return (
     <Image
       source={require("../../assets/logo.png")}
@@ -25,17 +24,7 @@ export function LogoPill({ size = 20 }: { size?: number }) {
   );
 }
 
-/** Compact header used on Home — the logo image already carries the wordmark, so no extra text is layered on top of it. */
-export function LogoHeader() {
-  return (
-    <View style={styles.row}>
-      <LogoMark size={24} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   pill: {
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",

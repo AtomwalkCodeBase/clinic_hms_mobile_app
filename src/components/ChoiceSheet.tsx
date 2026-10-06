@@ -1,4 +1,3 @@
-import React from "react";
 import { Modal, Pressable, View, Text, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NEUTRAL } from "@/theme/themes";

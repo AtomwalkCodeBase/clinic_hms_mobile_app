@@ -18,7 +18,7 @@ import type { GadgetTint } from "@/components/GadgetCard";
  * color from this set.
  */
 
-export type AgeTier = "toddler" | "school" | "teen";
+type AgeTier = "toddler" | "school" | "teen";
 
 const TIER_BOUNDS: { max: number; tier: AgeTier }[] = [
   { max: 3, tier: "toddler" },
@@ -26,7 +26,7 @@ const TIER_BOUNDS: { max: number; tier: AgeTier }[] = [
   { max: 18, tier: "teen" },
 ];
 
-export function ageTierFromDob(dob: string | null): AgeTier | null {
+function ageTierFromDob(dob: string | null): AgeTier | null {
   if (!dob) return null;
   const years = (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000);
   if (years < 0) return null;
@@ -34,7 +34,7 @@ export function ageTierFromDob(dob: string | null): AgeTier | null {
   return bound ? bound.tier : null; // 18+ -> null, not a pediatric tier
 }
 
-export interface FamilyAccent {
+interface FamilyAccent {
   fill: string;
   bg: string;
   text: string;
@@ -118,7 +118,7 @@ function tintFromAnchor(anchor: string): GadgetTint {
   };
 }
 
-export interface FamilyGadgetPalette {
+interface FamilyGadgetPalette {
   vaccinations: GadgetTint;
   timeline: GadgetTint;
   visits: GadgetTint;

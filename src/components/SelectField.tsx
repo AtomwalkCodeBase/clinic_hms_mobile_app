@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Modal, FlatList, TextInput } from "react-native";
 import { Check } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";

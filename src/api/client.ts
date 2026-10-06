@@ -13,7 +13,15 @@ export function setSessionExpiredHandler(fn: () => void) {
   onSessionExpired = fn;
 }
 
+// Calls made before a session exists (sign-in, OTP, password reset, registration). They must not carry a
+// leftover token from an earlier session, and a 401 from them means "wrong credentials", not "session expired".
+const PUBLIC_AUTH_PATHS = ["/auth/login/", "/auth/otp/", "/auth/forgot-password/", "/portal/register/"];
+function isPublicAuthCall(url?: string): boolean {
+  return !!url && PUBLIC_AUTH_PATHS.some((p) => url.includes(p));
+}
+
 api.interceptors.request.use(async (config) => {
+  if (isPublicAuthCall(config.url)) return config;
   const token = await getAccessToken();
   if (token) {
     config.headers = config.headers || {};
@@ -43,7 +51,7 @@ api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const original = error.config as any;
-    if (error.response?.status === 401 && original && !original._retried) {
+    if (error.response?.status === 401 && original && !original._retried && !isPublicAuthCall(original.url)) {
       original._retried = true;
       if (!refreshing) {
         refreshing = refreshAccessToken().finally(() => {

@@ -6,14 +6,6 @@ export const GENDER_OPTIONS: SelectOption[] = [
   { value: "O", label: "Other" },
 ];
 
-export const DOC_TYPE_OPTIONS: SelectOption[] = [
-  { value: "lab_report", label: "Lab report" },
-  { value: "prescription", label: "Prescription" },
-  { value: "scan", label: "Scan / Imaging" },
-  { value: "discharge_summary", label: "Discharge summary" },
-  { value: "other", label: "Other" },
-];
-
 export const RELATIONSHIP_OPTIONS: SelectOption[] = [
   { value: "son", label: "Son" },
   { value: "daughter", label: "Daughter" },

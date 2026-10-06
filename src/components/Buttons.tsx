@@ -1,4 +1,3 @@
-import React from "react";
 import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppTheme } from "@/context/ThemeContext";

@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 
-export interface RefreshableQuery {
+interface RefreshableQuery {
   /** React Query's own staleTime-vs-dataUpdatedAt verdict — true only once
    * this query's data is actually old enough to be worth a network call. */
   isStale: boolean;

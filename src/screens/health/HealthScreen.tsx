@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation, CompositeNavigationProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -9,11 +9,11 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { MetalHero } from "@/components/MetalHero";
-import { GadgetCard, GADGET_TINTS } from "@/components/GadgetCard";
+import { GadgetCard } from "@/components/GadgetCard";
 import { SkeletonBlock, SkeletonGadgetCard } from "@/components/Skeleton";
 import { Syringe, Clock, Stethoscope, FileText } from "lucide-react-native";
 import { useAppTheme } from "@/context/ThemeContext";
-import { familyAccentFor, familyGadgetPaletteFor } from "@/theme/familyColors";
+import { familyAccentFor } from "@/theme/familyColors";
 import { getFamily, getProfile, getHealthSummary, getVaccinations } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { FamilyMember } from "@/api/types";
@@ -67,7 +67,6 @@ export function HealthScreen() {
   // Self keeps the personal accent theme — only dependents get an
   // age/gender-derived color, and only when one applies (see familyColors.ts).
   const accent = selected && !selected.isSelf ? familyAccentFor(selected) : null;
-  const gadgetPalette = selected && !selected.isSelf ? familyGadgetPaletteFor(selected) : null;
 
   // Self (target undefined) uses the same 1-element key HealthSummaryScreen/
   // LinkedHospitalsScreen use for the identical self-only call — shares
@@ -111,7 +110,7 @@ export function HealthScreen() {
 
   const openRecords = () => {
     if (!selected) return;
-    navigation.navigate("RxReports", {
+    navigation.navigate("MyDocuments", {
       patientAwpid: target, patientName: selected.full_name,
       patientGender: selected.gender, patientDob: selected.date_of_birth,
     });
@@ -186,7 +185,6 @@ export function HealthScreen() {
 
       <View style={styles.grid}>
         <GadgetCard
-          tint={gadgetPalette?.vaccinations ?? GADGET_TINTS.green}
           icon={Syringe}
           title="Vaccinations"
           subtitle={vax ? `${vax.completed_count} of ${vax.total_count} completed` : "—"}
@@ -197,7 +195,6 @@ export function HealthScreen() {
           cardPadding={16}
         />
         <GadgetCard
-          tint={gadgetPalette?.timeline ?? GADGET_TINTS.blue}
           icon={Clock}
           title="Health timeline"
           subtitle="Visits, vaccinations, growth, and more"
@@ -208,7 +205,6 @@ export function HealthScreen() {
           cardPadding={16}
         />
         <GadgetCard
-          tint={gadgetPalette?.visits ?? GADGET_TINTS.coral}
           icon={Stethoscope}
           title="Visits"
           subtitle={summary?.last_hospital ? `Last: ${summary.last_hospital}` : "No visits yet"}
@@ -219,10 +215,9 @@ export function HealthScreen() {
           cardPadding={16}
         />
         <GadgetCard
-          tint={gadgetPalette?.rx ?? GADGET_TINTS.purple}
           icon={FileText}
-          title="Rx & Reports"
-          subtitle="Prescriptions, lab reports & docs"
+          title="My Documents"
+          subtitle="Prescriptions, lab reports and more"
           onPress={openRecords}
           style={styles.gadgetSize}
           iconSize={34}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, TextInput, Modal, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,9 +8,8 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonRow } from "@/components/Skeleton";
 import {
-  ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText,
-  ChevronDown, AlertCircle, Lock, Unlock, Clock,
-  Eye, Download, Trash2,
+  ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, Receipt, ScanLine, BedDouble, Syringe, Stethoscope, Send,
+  BadgeCheck, ChevronDown, AlertCircle, Lock, Unlock, Clock, Eye, Download,
 } from "lucide-react-native";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
 import { MessageDialog } from "@/components/MessageDialog";
@@ -18,18 +17,19 @@ import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
 import { SelectField } from "@/components/SelectField";
+import { InstantReviewSheet } from "@/components/InstantReviewSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { familyAccentFor } from "@/theme/familyColors";
 import type { LucideIcon } from "@/theme/icons";
 import { apiErrorMessage } from "@/api/client";
 import {
-  getMyDocuments, getDocumentDetail, deleteDocument,
+  getMyDocuments, getDocumentDetail, getDocumentCounts,
   getPrescriptions, getLabOrders, choosePrescription, chooseLabOrder,
   getRecordsPrivacy, toggleRecordPrivacy, revealForShare,
 } from "@/api/portal";
-import { useUploadTasks, UploadCandidate } from "@/context/UploadTasksContext";
-import { UploadsEntryRow } from "@/components/UploadProgress";
+import { useDocumentUpload } from "@/context/DocumentUploadContext";
+import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { pickDocuments, downloadDataUri, openInExternalApp } from "@/utils/fileHelpers";
 import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
@@ -84,18 +84,24 @@ function monthOptions(docs: PatientDocument[]) {
   return out;
 }
 
-const TYPE_META: Record<string, { tag: string; label: string; Icon: any; tint: string; ink: string }> = {
-  prescription:      { tag: "RX",   label: "Prescription",      Icon: PillIcon,      tint: "#EAE7FB", ink: "#4A3FB0" },
-  lab_report:        { tag: "LAB",  label: "Lab report",        Icon: FlaskConical, tint: "#F8EAC8", ink: "#8A5A12" },
-  scan:              { tag: "SCAN", label: "Scan / imaging",    Icon: FileText,     tint: "#E4EAF1", ink: "#3B4A5A" },
-  discharge_summary: { tag: "DISCH",label: "Discharge summary", Icon: FileText,     tint: "#E4EAF1", ink: "#3B4A5A" },
-  other:             { tag: "DOC",  label: "Document",          Icon: FileText,     tint: "#E4EAF1", ink: "#3B4A5A" },
+// The category names come from the server (useDocumentTypes); this is only how each one looks in a list row.
+const TYPE_META: Record<string, { tag: string; Icon: any; tint: string; ink: string }> = {
+  prescription:        { tag: "RX",    Icon: PillIcon,     tint: "#EAE7FB", ink: "#4A3FB0" },
+  lab_report:          { tag: "LAB",   Icon: FlaskConical, tint: "#F8EAC8", ink: "#8A5A12" },
+  imaging_report:      { tag: "IMG",   Icon: ScanLine,     tint: "#E4EAF1", ink: "#3B4A5A" },
+  discharge_summary:   { tag: "DISCH", Icon: BedDouble,    tint: "#E6EEF8", ink: "#27507A" },
+  consultation_note:   { tag: "NOTE",  Icon: Stethoscope,  tint: "#E3F3EF", ink: "#1F6F63" },
+  medical_bill:        { tag: "BILL",  Icon: Receipt,      tint: "#FBEFD9", ink: "#8A5A12" },
+  vaccination_record:  { tag: "VAX",   Icon: Syringe,      tint: "#E8F5EC", ink: "#166534" },
+  referral_letter:     { tag: "REF",   Icon: Send,         tint: "#EEE9F8", ink: "#4A3489" },
+  medical_certificate: { tag: "CERT",  Icon: BadgeCheck,   tint: "#F8E7EC", ink: "#8A2B4A" },
+  other:               { tag: "DOC",   Icon: FileText,     tint: "#E4EAF1", ink: "#3B4A5A" },
 };
 const metaFor = (t: string) => TYPE_META[t] || TYPE_META.other;
 
-/** apps/records/models.py::SharedDocument.IN_PROGRESS — what to show instead of a type tag while a
- *  document is still being read/classified, or if it failed. */
-const statusLabel = (s: string) => (s === "queued" ? "Waiting" : s === "ocr" ? "Reading…" : s === "classifying" ? "Classifying…" : "Couldn't be read");
+const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
+/** What to show instead of a type tag while a document is still being read, or if it could not be. */
+const statusLabel = (s: string) => (s === "queued" ? "Waiting" : s === "extracting" ? "Reading…" : s === "classifying" ? "Classifying…" : "Couldn't be read");
 
 // ── one row ────────────────────────────────────────────────────────────────
 function RecRow({
@@ -108,9 +114,9 @@ function RecRow({
 }) {
   const meta = metaFor(d.doc_type);
   const Icon = meta.Icon;
-  const title = d.doc_type === "prescription" && d.doctor_label ? `Prescription · ${d.doctor_label}` : d.title;
-  const sub = d.hospital_label || (d.uploaded_by === "staff" ? "Issued by your hospital" : "Uploaded by you");
-  const inProgress = d.processing_status !== "completed" && d.processing_status !== "failed";
+  const title = d.title;
+  const sub = d.uploaded_by === "staff" ? "Issued by your hospital" : d.confirmed ? "Verified by you" : "Uploaded by you";
+  const inProgress = IN_PROGRESS.has(d.processing_status);
   const failed = d.processing_status === "failed";
   const pState = priv ? (priv.revealed_for_visit ? "visit" : priv.private ? "private" : "shared") : null;
   const LockIcon = pState === "shared" ? Unlock : Lock;
@@ -184,10 +190,11 @@ function FileAction({
   );
 }
 
+
 // ── screen ─────────────────────────────────────────────────────────────────
-export function RxReportsScreen() {
+export function MyDocumentsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const route = useRoute<RouteProp<AppStackParamList, "RxReports">>();
+  const route = useRoute<RouteProp<AppStackParamList, "MyDocuments">>();
   const patientAwpid = route.params?.patientAwpid;
   const patientName = route.params?.patientName;
   const patientGender = route.params?.patientGender;
@@ -215,7 +222,13 @@ export function RxReportsScreen() {
   const [sheetError, setSheetError] = useState("");
   const [sheetMessage, setSheetMessage] = useState("");
 
-  const [tab, setTab] = useState<"all" | "prescription" | "lab_report" | "other">("all");
+  const [category, setCategory] = useState("");        // "" = every category, else a type code
+  useEffect(() => {
+    if (route.params?.instantDocId) {
+      setInstantDocId(route.params.instantDocId);
+      navigation.setParams({ instantDocId: undefined });
+    }
+  }, [route.params?.instantDocId, navigation]);
   const [q, setQ] = useState("");
   const [month, setMonth] = useState<string>(""); // "" until resolved, "ALL", or "YYYY-MM"
   const [visible, setVisible] = useState(PAGE);
@@ -323,7 +336,10 @@ export function RxReportsScreen() {
     [privMap],
   );
   const [addOpen, setAddOpen] = useState(false);
-  const { startUpload } = useUploadTasks();
+  const { startUpload } = useDocumentUpload();
+  const { types, labelOf } = useDocumentTypes();
+  // The one document just added with "+": followed until it is read, then confirmed (or changed) in a sheet.
+  const [instantDocId, setInstantDocId] = useState<number | null>(route.params?.instantDocId ?? null);
 
   // Search, the month picker, and the category-panel counts below all work
   // over the FULL document set — they're client-side, not server-driven —
@@ -382,18 +398,23 @@ export function RxReportsScreen() {
   const pendingRx = (pendingRxQ.data ?? []).filter((r) => r.patient_choice === "pending");
   const pendingLab = (pendingLabQ.data ?? []).filter((l) => l.patient_choice === "pending");
 
+  // Per-category numbers for the dropdown (every category, zeros included) and how many uploads still wait for review.
+  const countsQ = useQuery({ queryKey: ["documentCounts", patientAwpid], queryFn: () => getDocumentCounts(patientAwpid) });
+  const counts = countsQ.data;
+
   const load = useCallback(async () => {
     await Promise.all([
       docsFirstQ.refetch(),
       totalPages > 1 ? docsRestQ.refetch() : Promise.resolve(),
       pendingRxQ.refetch(),
       pendingLabQ.refetch(),
+      countsQ.refetch(),
     ]);
-  }, [docsFirstQ.refetch, docsRestQ.refetch, totalPages, pendingRxQ.refetch, pendingLabQ.refetch]);
+  }, [docsFirstQ.refetch, docsRestQ.refetch, totalPages, pendingRxQ.refetch, pendingLabQ.refetch, countsQ.refetch]);
   const refetchAll = useCallback(async () => {
     await Promise.all([load(), privacyQ.refetch()]);
   }, [load, privacyQ.refetch]);
-  useRefreshOnFocus([docsFirstQ, docsRestQ, pendingRxQ, pendingLabQ, privacyQ]);
+  useRefreshOnFocus([docsFirstQ, docsRestQ, pendingRxQ, pendingLabQ, privacyQ, countsQ]);
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
   const isFetchingAny = docsFirstQ.isFetching || docsRestQ.isFetching || pendingRxQ.isFetching || pendingLabQ.isFetching;
 
@@ -411,33 +432,24 @@ export function RxReportsScreen() {
     setMonth(pick ? pick.key : "ALL");
   }, [monthOpts, month]);
 
-  useEffect(() => { setVisible(PAGE); }, [tab, q, month]);
+  useEffect(() => { setVisible(PAGE); }, [category, q, month]);
 
-  const counts = useMemo(() => {
-    const c = { all: 0, prescription: 0, lab_report: 0, other: 0 };
-    docs.forEach((d) => {
-      c.all++;
-      if (d.doc_type === "prescription") c.prescription++;
-      else if (d.doc_type === "lab_report") c.lab_report++;
-      else c.other++;
-    });
-    return c;
-  }, [docs]);
+  const categoryOptions = useMemo(
+    () => types.map((t) => ({ value: t.code, label: t.label, meta: String(counts?.by_type?.[t.code] ?? 0) })),
+    [types, counts],
+  );
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return docs
-      .filter((d) =>
-        tab === "all" ? true
-        : tab === "other" ? d.doc_type !== "prescription" && d.doc_type !== "lab_report"
-        : d.doc_type === tab)
+      .filter((d) => !category || d.doc_type === category)
       .filter((d) =>
         !needle ||
-        [d.title, d.hospital_label, d.doctor_label, d.public_document_id]
+        [d.title, d.file_name, d.public_document_id]
           .filter(Boolean).join(" ").toLowerCase().includes(needle))
       .filter((d) => (!month || month === "ALL" ? true : ymKey(d.document_date || d.created_at) === month))
       .sort((a, b) => (b.document_date || b.created_at).localeCompare(a.document_date || a.created_at));
-  }, [docs, tab, q, month]);
+  }, [docs, category, q, month]);
 
   const shown = filtered.slice(0, visible);
 
@@ -515,51 +527,27 @@ export function RxReportsScreen() {
     }
   }
 
-  async function removeDoc(d: PatientDocument) {
-    setBusyId(d.id);
-    try {
-      await deleteDocument(d.id);
-      setDetail(null);
-      queryClient.setQueryData<PatientDocument[]>(["documents", patientAwpid], (prev) =>
-        prev?.filter((x) => x.id !== d.id)
-      );
-    } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't remove this."));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  // One "Upload" — a single pick of one file or many PDFs/images. Handed straight to the
-  // background upload+extract+classify pipeline (apps/records) — this screen doesn't wait on it;
-  // the sheet closes right away and progress shows on the entry row above the list.
+  // Add Document: one file, uploaded on the fast lane. It is then followed in a sheet until it has been read, where the
+  // patient confirms the type or changes it. (For many files at once there is the Bulk Upload screen.)
   async function pickAndUpload() {
     try {
-      const files = await pickDocuments();
+      const files = await pickDocuments(false);
       if (!files.length) return;
-      const candidates: UploadCandidate[] = files.map((f) => ({
-        name: f.name || "upload",
-        mimeType: f.mimeType || "application/octet-stream",
-        size: f.size || 0,
-        uri: f.uri,
-      }));
-      const outcome = await startUpload(candidates, patientAwpid);
-      if (outcome.status === "rejected" || outcome.status === "busy") {
-        setAddOpen(false);
+      const f = files[0];
+      const outcome = await startUpload(
+        [{ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri }],
+        "instant",
+        patientAwpid,
+      );
+      setAddOpen(false);
+      if (outcome.status !== "started") {
         setUploadNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
         return;
       }
-      setAddOpen(false);
-      if (outcome.skipped.length) {
-        const n = outcome.skipped.length;
-        setUploadNotice({
-          title: `${n} file${n === 1 ? "" : "s"} skipped`,
-          message: `${outcome.skipped.map((s) => `${s.name} — ${s.reason}`).join("\n")}\n\nThe rest ${candidates.length - n === 1 ? "is" : "are"} being uploaded.`,
-          tone: "success",
-        });
-      }
+      setInstantDocId(outcome.documentIds[0] ?? null);
     } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't upload those files."));
+      setAddOpen(false);
+      setUploadNotice({ title: "Can't upload", message: apiErrorMessage(err, "Couldn't upload that file."), tone: "error" });
     }
   }
 
@@ -596,23 +584,31 @@ export function RxReportsScreen() {
           <ArrowLeft size={19} color={accent?.text ?? NEUTRAL.textPrimary} strokeWidth={2.2} />
         </Pressable>
         <Text style={[styles.hdrTitle, accent && { color: accent.text }]}>
-          {patientName ? `Rx & Reports — ${patientName}` : "Rx & Reports"}
+          {patientName ? `My Documents — ${patientName}` : "My Documents"}
         </Text>
         <Pressable onPress={() => setAddOpen(true)} hitSlop={10} style={[styles.addBtn, { backgroundColor: accent?.fill ?? theme.fill }]}>
           <Plus size={15} color={accent?.on ?? theme.on} strokeWidth={2.8} />
         </Pressable>
       </View>
       <Text style={styles.subline}>
-        {counts.all} record{counts.all === 1 ? "" : "s"}
+        {counts?.total ?? docs.length} document{(counts?.total ?? docs.length) === 1 ? "" : "s"}
         {docs.length ? ` · newest ${fmtShort(docs[0]?.document_date || docs[0]?.created_at)}` : ""}
       </Text>
 
-      {/* one quiet line into the Uploads screen (live progress, or reports waiting to be viewed) */}
-      <UploadsEntryRow
-        patientAwpid={patientAwpid}
-        accent={accent ?? undefined}
-        onOpen={() => navigation.navigate("Uploads", patientAwpid ? { patientAwpid } : undefined)}
-      />
+      {/* uploads still waiting for the patient to confirm their type */}
+      {(counts?.awaiting_review ?? 0) > 0 && (
+        <Pressable
+          style={styles.reviewBanner}
+          onPress={() => navigation.navigate("DocumentUpload", patientAwpid ? { patientAwpid } : undefined)}
+        >
+          <AlertCircle size={15} color={NEUTRAL.warning} strokeWidth={2.2} />
+          <Text style={styles.reviewBannerT}>
+            <Text style={styles.reviewBannerB}>{counts!.awaiting_review} document{counts!.awaiting_review === 1 ? " needs" : "s need"} review.</Text>
+            {" "}Confirm their types to add them here.
+          </Text>
+          <Text style={[styles.reviewBannerGo, { color: theme.text }]}>Review ›</Text>
+        </Pressable>
+      )}
 
       {privEnabled && !!privSession && (
         <View style={styles.privBanner}>
@@ -635,24 +631,15 @@ export function RxReportsScreen() {
 
       {!!error && <ErrorBanner message={error} onRetry={load} />}
 
-      {/* type chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {([
-          ["all", "All", counts.all],
-          ["prescription", "Prescriptions", counts.prescription],
-          ["lab_report", "Lab reports", counts.lab_report],
-          ["other", "Docs", counts.other],
-        ] as const).map(([k, l, n]) => {
-          const on = tab === k;
-          return (
-            <Pressable key={k} onPress={() => setTab(k)} style={[styles.chip, on && { backgroundColor: theme.fill, borderColor: theme.fill }]}>
-              <Text style={[styles.chipT, on && { color: theme.on }]}>
-                {l}<Text style={[styles.chipN, on && { color: theme.on }]}> {n}</Text>
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {/* category */}
+      <SelectField
+        label="Category"
+        value={category}
+        onChange={(v) => setCategory(v)}
+        options={categoryOptions}
+        placeholder={`All categories${counts ? ` (${counts.total})` : ""}`}
+        clearLabel="All categories"
+      />
 
       {/* search */}
       <View style={styles.srch}>
@@ -732,7 +719,7 @@ export function RxReportsScreen() {
               text={
                 q ? `Nothing matches "${q}".`
                 : monthFiltered ? `No records in ${ymLabel(month)}.`
-                : tab !== "all" ? "Nothing here yet."
+                : category ? "Nothing in this category yet."
                 : "No records yet. Tap + to add one."
               }
             />
@@ -773,25 +760,16 @@ export function RxReportsScreen() {
       <DetailSheet
         visible={!!detail}
         onClose={() => { setDetail(null); setSheetError(""); setSheetMessage(""); }}
-        title={
-          detail
-            ? detail.doc_type === "prescription" && detail.doctor_label
-              ? `Prescription · ${detail.doctor_label}`
-              : detail.title
-            : ""
-        }
+        title={detail ? detail.title : ""}
       >
         {detail && (
           <>
-            <DetailRow label="Type" value={metaFor(detail.doc_type).label} />
+            <DetailRow label="Type" value={labelOf(detail.doc_type)} />
+            {detail.confirmed && <DetailRow label="Verified" value="You confirmed this type" />}
             <DetailRow label="Date" value={fmtLong(detail.document_date || detail.created_at)} />
-            {!!detail.doctor_label && <DetailRow label="Doctor" value={detail.doctor_label} />}
-            <DetailRow
-              label="Hospital"
-              value={detail.hospital_label || (detail.uploaded_by === "staff" ? "Your hospital" : "Uploaded by you")}
-            />
+            <DetailRow label="Source" value={detail.uploaded_by === "staff" ? "Issued by your hospital" : "Uploaded by you"} />
             {!!detail.public_document_id && <DetailRow label="Document ID" value={detail.public_document_id} />}
-            {detail.processing_status !== "completed" && (
+            {detail.processing_status !== "completed" && detail.processing_status !== "review_required" && (
               <DetailRow
                 label="Status"
                 value={detail.processing_status === "failed" ? (detail.error || "Couldn't be processed") : statusLabel(detail.processing_status)}
@@ -831,19 +809,7 @@ export function RxReportsScreen() {
               )}
               {!!sheetError && <Text style={styles.sheetErrorText}>{sheetError}</Text>}
               {!!sheetMessage && <Text style={styles.sheetSuccessText}>{sheetMessage}</Text>}
-              <Pressable
-                onPress={() => removeDoc(detail)}
-                style={({ pressed }) => [styles.deleteLink, pressed && { opacity: 0.6 }]}
-              >
-                <Trash2 size={13} color={NEUTRAL.danger} strokeWidth={2.2} />
-                <Text style={styles.deleteLinkText}>Delete from my records</Text>
-              </Pressable>
             </View>
-            {detail.uploaded_by === "staff" && (
-              <Text style={styles.sheetNote}>
-                Your hospital keeps its own copy. This removes it from your records and from other hospitals.
-              </Text>
-            )}
           </>
         )}
       </DetailSheet>
@@ -853,14 +819,14 @@ export function RxReportsScreen() {
         <Pressable style={styles.mBackdrop} onPress={() => setAddOpen(false)}>
           <View style={[styles.mSheet, { paddingBottom: Math.max(22, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
             <View style={styles.handle} />
-            <Text style={styles.mTitle}>Add a record</Text>
-            <Text style={styles.mSub}>We'll read each one and sort it into your reports automatically.</Text>
+            <Text style={styles.mTitle}>Add Document</Text>
+            <Text style={styles.mSub}>We'll read it, suggest a type, and you confirm it.</Text>
             <View style={{ gap: 8, marginTop: 6 }}>
-              <PrimaryButton label="Upload files" onPress={pickAndUpload} />
-              <Text style={styles.mHint}>Select the files you want to upload — one, or several PDFs and photos.</Text>
+              <PrimaryButton label="Choose a file" onPress={pickAndUpload} />
+              <Text style={styles.mHint}>One PDF or photo. To add several at once, use Bulk Upload on the Home screen.</Text>
               <SecondaryButton
                 label="Take photo / Scan QR"
-                onPress={() => { setAddOpen(false); navigation.navigate("RxCapture", patientAwpid ? { patientAwpid } : undefined); }}
+                onPress={() => { setAddOpen(false); navigation.navigate("DocumentCapture", { mode: "instant", ...(patientAwpid ? { patientAwpid } : {}) }); }}
               />
               <Pressable onPress={() => setAddOpen(false)} style={{ alignItems: "center", paddingVertical: 8 }}>
                 <Text style={styles.mCancel}>Cancel</Text>
@@ -876,6 +842,18 @@ export function RxReportsScreen() {
         message={lockSheet?.message}
         actions={lockSheet?.actions || []}
         onClose={() => setLockSheet(null)}
+      />
+
+      <InstantReviewSheet
+        documentId={instantDocId}
+        patientAwpid={patientAwpid}
+        onClose={() => { setInstantDocId(null); load(); }}
+        onSubmitted={(type) => {
+          setInstantDocId(null);
+          queryClient.invalidateQueries({ queryKey: ["documents"] });
+          queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
+          setUploadNotice({ title: "Added to My Documents", message: `Saved as ${labelOf(type)}.`, tone: "success" });
+        }}
       />
 
       <MessageDialog
@@ -910,10 +888,10 @@ const styles = StyleSheet.create({
   lockBtn: { width: 30, height: 30, borderRadius: 8, borderWidth: 1, borderColor: NEUTRAL.border, alignItems: "center", justifyContent: "center", backgroundColor: NEUTRAL.surface },
   lockBtnOn: { borderColor: NEUTRAL.success, backgroundColor: NEUTRAL.successBg },
 
-  chipRow: { gap: 6, paddingRight: 8, marginBottom: 10 },
-  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 0.5, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface },
-  chipT: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  chipN: { fontSize: 10, color: NEUTRAL.textMuted, fontWeight: "600" },
+  reviewBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 11, marginBottom: 12 },
+  reviewBannerT: { flex: 1, fontSize: 11.5, lineHeight: 16, color: "#5C3A08" },
+  reviewBannerB: { fontWeight: "700", color: "#3E2A08" },
+  reviewBannerGo: { fontSize: 11.5, fontWeight: "700" },
 
   srch: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 10 },
   srchIn: { flex: 1, fontSize: 12.5, color: NEUTRAL.textPrimary, padding: 0 },
@@ -937,7 +915,6 @@ const styles = StyleSheet.create({
 
   count: { textAlign: "center", fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 4 },
 
-  sheetNote: { fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, lineHeight: 14 },
   sheetErrorText: { fontSize: 12, color: NEUTRAL.danger, marginTop: 8, lineHeight: 16 },
   sheetSuccessText: { fontSize: 12, color: NEUTRAL.success, marginTop: 8, lineHeight: 16 },
 
@@ -948,8 +925,6 @@ const styles = StyleSheet.create({
     backgroundColor: NEUTRAL.surface,
   },
   fileActionText: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary },
-  deleteLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, marginTop: 6 },
-  deleteLinkText: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.danger },
 
   mBackdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   mSheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 22 },

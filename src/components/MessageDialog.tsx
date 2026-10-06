@@ -1,4 +1,3 @@
-import React from "react";
 import { Modal, View, Text, StyleSheet } from "react-native";
 import { CheckCircle2, XCircle } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";

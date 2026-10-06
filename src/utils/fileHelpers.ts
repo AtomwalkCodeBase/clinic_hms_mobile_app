@@ -4,9 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as IntentLauncher from "expo-intent-launcher";
-import * as Print from "expo-print";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { withBiometricSuppressed } from "./biometricSuppress";
 
 export interface PickedFile {
   uri: string;
@@ -16,72 +14,111 @@ export interface PickedFile {
   size?: number;
 }
 
-/** Opens the system file picker restricted to PDFs. Returns null if the user cancels. */
-export async function pickPdf(): Promise<PickedFile | null> {
-  return withBiometricSuppressed(async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
-    if (result.canceled || !result.assets?.[0]) return null;
-    const asset = result.assets[0];
-    return { uri: asset.uri, name: asset.name || "report.pdf", mimeType: asset.mimeType || "application/pdf" };
-  });
+const UPLOAD_STAGING_DIR = `${FileSystem.documentDirectory}pending-uploads/`;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * DocumentPicker's `getDocumentAsync({ copyToCacheDirectory: true })` can resolve its JS promise
+ * before the freshly-copied cache file is actually openable for a real byte-level read — confirmed
+ * on-device: `getInfoAsync` (a stat() call — exists + size) reports the file present and non-empty
+ * immediately, yet the very next `copyAsync` (an actual open()/read()) on that same URI still
+ * throws "isn't readable". So a metadata check alone doesn't prove the file is readable — only
+ * retrying the real read operation does. This retries copyAsync itself, since that's the operation
+ * that actually needs to succeed, not a proxy for it.
+ */
+async function copyWithRetry(from: string, to: string, attempts = 6, delayMs = 200): Promise<void> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await FileSystem.copyAsync({ from, to });
+      return;
+    } catch (err) {
+      if (i === attempts - 1) throw err;
+      await sleep(delayMs);
+    }
+  }
 }
 
 /**
- * Opens the system file picker for one OR many PDFs / images in a single
- * pick — the mobile equivalent of "select the files you want to upload".
- * Returns [] if the user cancels.
+ * Copies a picked file out of DocumentPicker's cache copy into the app's own persistent storage.
+ * Uploading happens after the pick, with a network round-trip in between — Android can reclaim a cache-directory file at any time, and MIUI in
+ * particular does this aggressively for Expo Go, so a file that read fine right after picking can
+ * throw "isn't readable" by the time the PUT actually runs. documentDirectory isn't OS-reclaimable
+ * the way cacheDirectory is, so staging here closes that window. Callers delete the staged copy
+ * once the upload succeeds (see DocumentUploadContext.startUpload).
  */
-export async function pickDocuments(): Promise<PickedFile[]> {
-  return withBiometricSuppressed(async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/*"],
-      multiple: true,
-      copyToCacheDirectory: true,
-    });
-    if (result.canceled || !result.assets?.length) return [];
-    return result.assets.map((a) => ({
-      uri: a.uri,
-      name: a.name || "document",
-      mimeType: a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
-      size: a.size ?? 0,
-    }));
+async function stageForUpload(sourceUri: string, name: string): Promise<string> {
+  await FileSystem.makeDirectoryAsync(UPLOAD_STAGING_DIR, { intermediates: true }).catch(() => {});
+  const dest = `${UPLOAD_STAGING_DIR}${Date.now()}-${name}`;
+  await copyWithRetry(sourceUri, dest);
+  return dest;
+}
+
+/** Opens the system file picker restricted to PDFs. Returns null if the user cancels. */
+export async function pickPdf(): Promise<PickedFile | null> {
+  // copyToCacheDirectory: false — DocumentPicker's own cache copy lands in the app's raw
+  // context.cacheDir, not the per-experience sandboxed folder Expo Go's FileSystem module reads
+  // from, so a subsequent copyAsync/uploadAsync on that path throws "isn't readable" even though
+  // the bytes are genuinely there. Staging straight from the picker's original content:// URI into
+  // our own documentDirectory (which IS in the sandboxed folder) avoids that mismatch entirely.
+  const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: false });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const name = asset.name || "report.pdf";
+  const uri = await stageForUpload(asset.uri, name);
+  return { uri, name, mimeType: asset.mimeType || "application/pdf" };
+}
+
+/**
+ * Opens the system file picker for PDFs / images — several in one pick by default (Bulk Upload), or exactly one
+ * (Add Document: `pickDocuments(false)`). Returns [] if the user cancels.
+ */
+export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
+  // See pickPdf() above for why copyToCacheDirectory is false, not true.
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ["application/pdf", "image/*"],
+    multiple,
+    copyToCacheDirectory: false,
   });
+  if (result.canceled || !result.assets?.length) return [];
+  return Promise.all(result.assets.map(async (a) => {
+    const name = a.name || "document";
+    const mimeType = a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+    const uri = await stageForUpload(a.uri, name);
+    return { uri, name, mimeType, size: a.size ?? 0 };
+  }));
 }
 
 /** Opens the photo library restricted to images. Returns null if the user cancels or denies permission. */
 export async function pickImage(): Promise<PickedFile | null> {
-  return withBiometricSuppressed(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return null;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets?.[0]) return null;
-    const asset = result.assets[0];
-    const mimeType = asset.mimeType || (asset.uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
-    const name = asset.fileName || `photo.${mimeType === "image/png" ? "png" : "jpg"}`;
-    return { uri: asset.uri, name, mimeType };
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) return null;
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    quality: 0.85,
   });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const mimeType = asset.mimeType || (asset.uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
+  const name = asset.fileName || `photo.${mimeType === "image/png" ? "png" : "jpg"}`;
+  return { uri: asset.uri, name, mimeType };
 }
 
 /** Opens the camera restricted to a square photo. Returns null if the user cancels or denies permission. */
 export async function pickImageFromCamera(): Promise<PickedFile | null> {
-  return withBiometricSuppressed(async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) return null;
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (result.canceled || !result.assets?.[0]) return null;
-    const asset = result.assets[0];
-    const mimeType = asset.mimeType || "image/jpeg";
-    const name = asset.fileName || "photo.jpg";
-    return { uri: asset.uri, name, mimeType };
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) return null;
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    quality: 0.85,
+    allowsEditing: true,
+    aspect: [1, 1],
   });
+  if (result.canceled || !result.assets?.[0]) return null;
+  const asset = result.assets[0];
+  const mimeType = asset.mimeType || "image/jpeg";
+  const name = asset.fileName || "photo.jpg";
+  return { uri: asset.uri, name, mimeType };
 }
 
 /** Reads a local file into a base64 data URI, ready to POST to the backend. */
@@ -90,7 +127,7 @@ export async function fileToDataUri(file: PickedFile): Promise<string> {
   return `data:${file.mimeType};base64,${base64}`;
 }
 
-export function base64FromDataUri(dataUri: string): { mime: string; base64: string } {
+function base64FromDataUri(dataUri: string): { mime: string; base64: string } {
   const [header, payload] = dataUri.split(",", 2);
   const mime = header.slice(5).split(";")[0] || "application/octet-stream";
   return { mime, base64: payload || "" };
@@ -151,7 +188,7 @@ async function saveToDeviceAndroid(fileName: string, mimeType: string, base64Con
  * download buttons look broken with no feedback at all.
  */
 /** Which path saveOrShare actually took — the caller uses this to word its success message accurately. */
-export type SaveOutcome = "saved" | "shared";
+type SaveOutcome = "saved" | "shared";
 
 async function saveOrShare(fileName: string, mimeType: string, base64Content: string): Promise<SaveOutcome> {
   if (Platform.OS === "android") {
@@ -246,16 +283,4 @@ export async function openInExternalApp(fileName: string, source: string, mimeTy
     throw new Error("No app available to open this file on this device.");
   }
   await Sharing.shareAsync(localUri, { mimeType, dialogTitle: fileName });
-}
-
-/**
- * Renders simple HTML to a real PDF (expo-print) and downloads it — used
- * for reports constructed here (e.g. a lab result summary with no
- * underlying uploaded file), where a plain .txt dump isn't what "download
- * this report" should mean.
- */
-export async function downloadHtmlAsPdf(fileName: string, html: string): Promise<void> {
-  const { uri } = await Print.printToFileAsync({ html, base64: false });
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  await saveOrShare(fileName, "application/pdf", base64);
 }

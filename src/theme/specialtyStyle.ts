@@ -18,7 +18,7 @@ import {
 } from "lucide-react-native";
 import type { LucideIcon } from "./icons";
 
-// Reuses the same 10 color families as GADGET_TINTS/DASHBOARD_TINTS
+// Reuses the same 10 color families the gadget tiles once used
 // (green/blue/coral/purple/amber/teal/indigo/rose/gold/slate) so a
 // specialty's color reads as "this app's palette", not an arbitrary
 // rainbow bolted on for this one screen.

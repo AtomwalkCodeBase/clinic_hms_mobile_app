@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import type { LucideIcon } from "@/theme/icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { WHISPER_GREEN } from "@/theme/gadgetSurface";
 import { Pill } from "./Pill";
 import { IconBadge } from "./IconBadge";
 
@@ -19,6 +21,7 @@ export function ListRow({
   iconColors,
   iconShadowColor,
   trailing,
+  tinted,
 }: {
   icon: LucideIcon;
   title: string;
@@ -31,9 +34,19 @@ export function ListRow({
   iconShadowColor?: string;
   /** Replaces the pill+chevron with a custom control (e.g. a Switch) — for a settings row that toggles in place instead of navigating. */
   trailing?: React.ReactNode;
+  /** The Whisper green look (the same surface as the gadget tiles) instead of a plain white row. */
+  tinted?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.row}>
+    <Pressable onPress={onPress} style={[styles.row, tinted && styles.rowTinted]}>
+      {tinted && (
+        <LinearGradient
+          colors={WHISPER_GREEN.bg}
+          start={{ x: 0.05, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+        />
+      )}
       <IconBadge icon={icon} size={30} colors={iconColors} shadowColor={iconShadowColor} />
       <View style={styles.mid}>
         <Text style={styles.title} numberOfLines={1}>
@@ -70,6 +83,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 8,
   },
+  rowTinted: { borderColor: WHISPER_GREEN.border, borderWidth: 1, overflow: "hidden", backgroundColor: "#F2FAF6" },
   mid: { flex: 1, minWidth: 0 },
   title: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
   subtitle: { fontSize: 11, color: NEUTRAL.textSecondary, marginTop: 2 },

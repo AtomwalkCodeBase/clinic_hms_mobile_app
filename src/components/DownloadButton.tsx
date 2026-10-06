@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { ViewStyle } from "react-native";
 import { SecondaryButton } from "@/components/Buttons";
 import { ConfirmDialog } from "@/components/ConfirmDialog";

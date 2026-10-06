@@ -41,9 +41,11 @@ export type AppStackParamList = {
   };
   BookingSuccess: { hospital: string; doctor: string; date: string; time?: string; tokenNumber?: number };
   PrescriptionDetail: { record: import("@/api/types").MedicalRecord };
-  RxReports: { patientAwpid?: string; patientName?: string; patientGender?: string; patientDob?: string | null } | undefined;
-  RxCapture: { patientAwpid?: string } | undefined;
-  Uploads: { patientAwpid?: string } | undefined;
+  // instantDocId: a document just added with the camera, handed back so My Documents can follow it until it is read
+  MyDocuments: { patientAwpid?: string; patientName?: string; patientGender?: string; patientDob?: string | null; instantDocId?: number } | undefined;
+  // mode "instant" = one document on the fast lane (QR scan or one photo); "bulk" = several photos at once
+  DocumentCapture: { mode: "instant" | "bulk"; patientAwpid?: string };
+  DocumentUpload: { patientAwpid?: string } | undefined;
   Notifications: undefined;
   Reschedule: { bookingId: number; tenantId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
   // patientGender/patientDob: raw fields for theme/familyColors.ts's

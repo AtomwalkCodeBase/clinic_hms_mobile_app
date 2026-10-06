@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 import { Lock } from "lucide-react-native";
 import { PrimaryButton, SecondaryButton } from "./Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { getBiometricLockEnabled, setBiometricLockEnabled, setBiometricPromptSeen } from "@/utils/storage";
+import { setBiometricLockEnabled, setBiometricPromptSeen } from "@/utils/storage";
 
 /**
  * Shown exactly once, right after a patient's first successful login or

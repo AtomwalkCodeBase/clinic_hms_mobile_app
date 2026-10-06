@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -11,7 +11,6 @@ import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getDoctorDetail, getSlots } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { DoctorDetail, SlotEntry } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 function dateOffsetLabel(daysFromToday: number): { key: string; label: string } {

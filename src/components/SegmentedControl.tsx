@@ -1,4 +1,3 @@
-import React from "react";
 import { ScrollView, Pressable, Text, StyleSheet } from "react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, TextInput, Share } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -463,11 +463,6 @@ const styles = StyleSheet.create({
   body: { fontSize: 12.5, color: NEUTRAL.textSecondary, lineHeight: 18 },
   label: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textPrimary, marginBottom: 6 },
   input: { borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13.5, color: NEUTRAL.textPrimary },
-
-  linkRow: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
-  linkText: { flex: 1, fontSize: 11.5, color: NEUTRAL.textSecondary },
-  codeHint: { fontSize: 11.5, color: NEUTRAL.textMuted, alignSelf: "center" },
-  code: { fontFamily: "monospace", fontWeight: "800", color: NEUTRAL.textPrimary, letterSpacing: 1 },
 
   codePanel: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 12, paddingVertical: 16, paddingHorizontal: 14, alignItems: "center", marginTop: 6 },
   codeBig: { fontFamily: "monospace", fontSize: 34, fontWeight: "800", letterSpacing: 6, color: NEUTRAL.textPrimary },

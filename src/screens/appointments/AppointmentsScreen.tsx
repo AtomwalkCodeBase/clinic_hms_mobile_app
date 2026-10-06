@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation, CompositeNavigationProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,11 +7,11 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
-import { Screen, EmptyState, ErrorBanner, SectionTitle } from "@/components/Layout";
+import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { Pill, statusTone, toneColor } from "@/components/Pill";
 import { SegmentedControl } from "@/components/SegmentedControl";
-import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
+import { SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -16,7 +16,7 @@ import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
 import { getRecordsPrivacy, toggleRecordPrivacy, updateRecordsPrivacy, revealForShare, RecordsPrivacyQuery } from "@/api/portal";
-import { RecordsPrivacyDoc, RecordsPrivacyPayload } from "@/api/types";
+import { RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -28,15 +28,14 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 const catLabel = (s: string) => CATEGORY_LABELS[s] || s;
 const KIND_LABEL: Record<string, string> = {
-  lab_report: "Lab reports", prescription: "Prescriptions", scan: "Imaging",
-  discharge_summary: "Discharge summaries", other: "Documents",
+  lab_report: "Lab reports", prescription: "Prescriptions", imaging_report: "Imaging reports",
+  discharge_summary: "Discharge summaries", consultation_note: "Consultation notes", medical_bill: "Medical bills",
+  vaccination_record: "Vaccination records", referral_letter: "Referral letters", medical_certificate: "Medical certificates",
+  other: "Other documents", not_classified: "Other documents",
 };
-const KIND_ORDER = ["lab_report", "prescription", "scan", "discharge_summary", "other"];
 const KIND_TILE: Record<string, { bg: string; fg: string; Icon: any }> = {
   lab_report: { bg: "#F8EAC8", fg: "#8A5A12", Icon: FlaskConical },
   prescription: { bg: "#EAE7FB", fg: "#4A3FB0", Icon: PillIcon },
-  scan: { bg: "#E4EAF1", fg: "#3B4A5A", Icon: FileText },
-  discharge_summary: { bg: "#E4EAF1", fg: "#3B4A5A", Icon: FileText },
   other: { bg: "#E4EAF1", fg: "#3B4A5A", Icon: FileText },
 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -52,7 +51,7 @@ const KIND_PARAM: Record<TypeF, string | undefined> = {
   all: undefined,
   lab_report: "lab_report",
   prescription: "prescription",
-  doc: "scan,discharge_summary,other",
+  doc: "imaging_report,discharge_summary,consultation_note,medical_bill,vaccination_record,referral_letter,medical_certificate,other,not_classified",
 };
 
 // debounce a fast value (the search box) so it drives one request on pause
@@ -137,14 +136,14 @@ export function SharedRecordsPrivacyScreen() {
   const groups = useMemo(() => {
     const m = new Map<string, { key: string; label: string; list: RecordsPrivacyDoc[] }>();
     docs.forEach((d) => {
-      const cats = d.report_categories.filter((c) => CATEGORY_LABELS[c]);
+      const cats = (d.report_categories ?? []).filter((c) => CATEGORY_LABELS[c]);
       const key = cats.length ? `c:${cats[0]}` : `k:${d.doc_type}`;
-      const label = cats.length ? catLabel(cats[0]) : KIND_LABEL[d.doc_type] || "Documents";
+      const label = cats.length ? catLabel(cats[0]) : KIND_LABEL[d.doc_type] || summary?.kind_labels?.[d.doc_type] || "Documents";
       if (!m.has(key)) m.set(key, { key, label, list: [] });
       m.get(key)!.list.push(d);
     });
     return [...m.values()];
-  }, [docs]);
+  }, [docs, summary]);
 
   // ── mutations ────────────────────────────────────────────────────────────
   const [mutationError, setMutationError] = useState("");

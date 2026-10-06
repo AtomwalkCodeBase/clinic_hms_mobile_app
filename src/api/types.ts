@@ -160,26 +160,36 @@ export interface MedicalRecord {
   vitals: { bp: string | null; pulse: number | null; spo2: number | null; temperature: string | null; weight_kg: string | null } | null;
 }
 
+/** The categories a document can be filed under (GET /records/types/ is the source of truth). */
+export type DocumentTypeCode =
+  | "prescription" | "lab_report" | "imaging_report" | "discharge_summary" | "consultation_note"
+  | "medical_bill" | "vaccination_record" | "referral_letter" | "medical_certificate" | "other";
+
+/** queued -> extracting -> classifying -> completed | review_required | failed (apps/records/models.py). */
+export type ProcessingStatus = "queued" | "extracting" | "classifying" | "completed" | "review_required" | "failed";
+
 export interface PatientDocument {
   id: number;
   title: string;
-  doc_type: "lab_report" | "prescription" | "scan" | "discharge_summary" | "consult_note" | "other";
+  /** "" or "not_classified" until the rules (or the patient) have settled it */
+  doc_type: DocumentTypeCode | "not_classified" | "";
   file_name: string;
   mime_type: string;
+  size?: number;
   uploaded_by: "patient" | "staff";
   created_at: string;
-  // apps/records pipeline fields — PortalDocumentListCreateView._document_row()
   document_date?: string | null;
   public_document_id?: string;
-  hospital_label?: string;
-  doctor_label?: string;
-  source_tenant_id?: number | null;
-  /** queued -> ocr -> classifying -> completed | failed (apps/records/models.py::SharedDocument). */
-  processing_status: "queued" | "ocr" | "classifying" | "completed" | "failed";
-  /** Classifier confidence 0-100, only meaningful once processing_status is "completed". */
+  source_tenant_id?: number | string | null;
+  processing_status: ProcessingStatus;
+  /** The rule engine's points (not a percentage); only meaningful once the document has been read. */
   score?: number | null;
-  /** How doc_type was decided: "rule" | "llm" | "staff" (empty for a hospital-issued document). */
-  method?: "rule" | "llm" | "staff" | "";
+  /** How doc_type was decided: "rule" (the keyword rules) or "staff" (a person, or the issuing hospital). */
+  method?: "rule" | "staff" | "";
+  /** The type the rules filed it under, or null if they could not tell (or a person has decided). */
+  suggested_type?: DocumentTypeCode | null;
+  /** True once the patient (or the issuing hospital) confirmed the type: the document is locked. */
+  confirmed?: boolean;
   /** Failure reason, only set when processing_status is "failed". */
   error?: string;
   batch_id?: number | null;
@@ -193,7 +203,8 @@ export interface RecordsPrivacyDoc {
   id: number;
   title: string;
   doc_type: PatientDocument["doc_type"];
-  report_categories: string[];
+  /** only the older backend sent these; the current one groups by doc_type alone */
+  report_categories?: string[];
   document_date?: string | null;
   created_at: string;
   hospital_label?: string | null;
@@ -410,41 +421,3 @@ export interface RescheduleResult {
 }
 
 export type Envelope<T> = { success: boolean; message: string; data: T };
-
-
-// PortalHealthInsightSummaryView (POST /portal/health-insights/summary/) — the
-// combined, point-form summary across every changed value at once (drawing
-// on lab values AND any prescriptions started in the same window), distinct
-// from the per-parameter narrative above.
-export interface HealthInsightSummary {
-  points: string[];
-  flagged_count: number;
-  /** Trending parameters that exist but didn't change enough to flag —
-   * always a real count, never inferred client-side. */
-  stable_count: number;
-}
-
-// PortalHealthInsightsView (GET /portal/health-insights/) — powers the
-// Activity page: month-by-month document counts and the report-type
-// breakdown, plus pattern_insights (deterministic, non-LLM sentences
-// already written server-side, e.g. "You've had 3 CBC reports on file").
-interface HealthActivityMonth {
-  month: string; // "YYYY-MM"
-  count: number;
-}
-interface HealthActivityPanel {
-  slug: string;
-  label: string;
-  count: number;
-}
-export interface HealthActivity {
-  range: string;
-  total_documents: number;
-  total_reports: number;
-  total_prescriptions: number;
-  most_common_panel: string | null;
-  latest_report_date: string | null;
-  report_distribution: HealthActivityPanel[];
-  upload_activity: HealthActivityMonth[];
-  pattern_insights: string[];
-}

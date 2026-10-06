@@ -1,4 +1,3 @@
-import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { AppStackParamList } from "./types";
 import { NEUTRAL } from "@/theme/themes";
@@ -9,9 +8,9 @@ import { BookingForScreen } from "@/screens/appointments/BookingForScreen";
 import { ConfirmBookingScreen } from "@/screens/appointments/ConfirmBookingScreen";
 import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScreen";
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
-import { RxReportsScreen } from "@/screens/records/RxReportsScreen";
+import { MyDocumentsScreen } from "@/screens/records/MyDocumentsScreen";
 import { CaptureScreen } from "@/screens/records/CaptureScreen";
-import { UploadsScreen } from "@/screens/records/UploadsScreen";
+import { DocumentUploadScreen } from "@/screens/records/DocumentUploadScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
 import { VaccinationsScreen } from "@/screens/health/VaccinationsScreen";
@@ -58,9 +57,9 @@ export function AppStack() {
       <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
       <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
-      <Stack.Screen name="RxReports" component={RxReportsScreen} />
-      <Stack.Screen name="RxCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
-      <Stack.Screen name="Uploads" component={UploadsScreen} />
+      <Stack.Screen name="MyDocuments" component={MyDocumentsScreen} />
+      <Stack.Screen name="DocumentCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
+      <Stack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
       <Stack.Screen name="Vaccinations" component={VaccinationsScreen} />
