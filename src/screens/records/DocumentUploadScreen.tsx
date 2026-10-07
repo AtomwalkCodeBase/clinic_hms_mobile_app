@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, Animated } from "react-native";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Animated } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MessageDialog } from "@/components/MessageDialog";
 import { ReviewRow } from "@/components/ReviewRow";
 import { UploadStages } from "@/components/UploadStages";
+import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -20,7 +21,7 @@ import { useDocumentUpload } from "@/context/DocumentUploadContext";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { useReviewDraft } from "@/hooks/useReviewDraft";
 import { apiErrorMessage } from "@/api/client";
-import { dismissDocument, getDocumentDetail, getMyDocuments, retryDocument, submitDecisions } from "@/api/portal";
+import { dismissDocument, getDocumentDetail, getFamily, getMyDocuments, retryDocument, submitDecisions } from "@/api/portal";
 import type { PatientDocument } from "@/api/types";
 import { buildDecisions, currentType, isReviewable, stageOf } from "@/utils/reviewDraft";
 import { openInExternalApp, pickDocuments } from "@/utils/fileHelpers";
@@ -68,10 +69,16 @@ type Notice = { title: string; message: string; tone: "success" | "error" } | nu
 export function DocumentUploadScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "DocumentUpload">>();
-  const patientAwpid = route.params?.patientAwpid;
+  // Whose files this screen is about: the person chosen in "Who is this for?" (asked every time files are added). The list
+  // below, the review and the submit all follow it.
+  const [patientAwpid, setPatientAwpid] = useState<string | undefined>(route.params?.patientAwpid);
+  const who = useWhoIsThisFor(patientAwpid);
+  const familyQ = useQuery({ queryKey: ["family"], queryFn: getFamily });
   const { theme } = useAppTheme();
   const queryClient = useQueryClient();
-  const { uploading, uploadPct, fileCount, startUpload } = useDocumentUpload();
+  const { uploading, uploadPct, fileCount, startUpload, ready: justRead, clearReady } = useDocumentUpload();
+  // The files just sent are read right here, so the "ready to review" bar on My Documents has nothing left to say.
+  useEffect(() => { if (justRead) clearReady(); }, [justRead, clearReady]);
   const { labelOf } = useDocumentTypes();
   const { draft, loaded, setType, confirm, moveBack, keepOnly } = useReviewDraft(patientAwpid ?? "self");
 
@@ -111,6 +118,7 @@ export function DocumentUploadScreen() {
   // Files already read when the screen opens show at once; files that finish while you watch appear one at a time.
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const seeded = useRef(false);
+  useEffect(() => { seeded.current = false; setRevealed(new Set()); }, [patientAwpid]);       // another person, another list
   useEffect(() => {
     if (!pendingQ.data) return;
     const settled = docs.filter((d) => !IN_PROGRESS.has(d.processing_status));
@@ -135,12 +143,15 @@ export function DocumentUploadScreen() {
   // ── actions ────────────────────────────────────────────────────────────────
   async function addFiles() {
     try {
+      const target = await who.ask();
+      if (!target) return;
+      setPatientAwpid(target.awpid);
       const picked = await pickDocuments();
       if (!picked.length) return;
       const outcome = await startUpload(
         picked.map((f) => ({ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri })),
         "bulk",
-        patientAwpid,
+        target.awpid,
       );
       if (outcome.status !== "started") {
         setNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
@@ -159,10 +170,22 @@ export function DocumentUploadScreen() {
     }
   }
 
+  async function takePhotos() {
+    const target = await who.ask();
+    if (!target) return;
+    setPatientAwpid(target.awpid);
+    navigation.navigate("DocumentCapture", { mode: "bulk", ...(target.awpid ? { patientAwpid: target.awpid } : {}) });
+  }
+
+  async function changePerson() {
+    const target = await who.ask();
+    if (target) setPatientAwpid(target.awpid);
+  }
+
   async function viewFile(doc: PatientDocument) {
     setActionError("");
     try {
-      const full = await getDocumentDetail(doc.id);
+      const full = await getDocumentDetail(doc.id, { patientAwpid });
       const src = (full as any).file_data as string;
       if (!src) throw new Error("This document doesn't have a file to view.");
       await openInExternalApp(full.file_name || full.title || "document", src, full.mime_type);
@@ -262,13 +285,21 @@ export function DocumentUploadScreen() {
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <BackHeader title="Bulk Upload" onBack={() => navigation.goBack()} />
       <Text style={styles.lead}>Add several files at once. Review the type we found for each, then submit.</Text>
+      {(familyQ.data?.length ?? 0) > 0 && (
+        <View style={styles.forRow}>
+          <Text style={styles.forText}>
+            For: <Text style={styles.forName}>{patientAwpid ? familyQ.data!.find((m) => m.awpid === patientAwpid)?.full_name ?? "Family member" : "Myself"}</Text>
+          </Text>
+          <Pressable onPress={changePerson} hitSlop={8}><Text style={[styles.forChange, { color: theme.text }]}>Change</Text></Pressable>
+        </View>
+      )}
 
       <View style={styles.addRow}>
         <SecondaryButton label="Upload files" icon={Upload} onPress={addFiles} loading={uploading} style={{ flex: 1 }} />
         <SecondaryButton
           label="Take photos"
           icon={Camera}
-          onPress={() => navigation.navigate("DocumentCapture", { mode: "bulk", ...(patientAwpid ? { patientAwpid } : {}) })}
+          onPress={takePhotos}
           disabled={uploading}
           style={{ flex: 1 }}
         />
@@ -334,6 +365,8 @@ export function DocumentUploadScreen() {
         ))
       )}
 
+      {who.sheet}
+
       <TypePickerSheet
         visible={!!picker}
         selected={picker ? currentType(picker.doc, pickerEntry) : null}
@@ -376,6 +409,10 @@ export function DocumentUploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  lead: { fontSize: 12.5, color: NEUTRAL.textSecondary, marginBottom: 14, lineHeight: 18 },
+  lead: { fontSize: 12.5, color: NEUTRAL.textSecondary, marginBottom: 10, lineHeight: 18 },
+  forRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  forText: { fontSize: 13, color: NEUTRAL.textSecondary },
+  forName: { fontWeight: "700", color: NEUTRAL.textPrimary },
+  forChange: { fontSize: 13, fontWeight: "600" },
   addRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
 });

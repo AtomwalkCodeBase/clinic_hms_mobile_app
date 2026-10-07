@@ -71,7 +71,7 @@ export function ReviewRow({
       {failed ? (
         <View style={styles.failActions}>
           <Pressable onPress={onRetry} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: theme.text }]}>Try again</Text></Pressable>
-          {onDismiss && <Pressable onPress={onDismiss} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: NEUTRAL.textMuted }]}>Remove</Text></Pressable>}
+          {onDismiss && <Pressable onPress={onDismiss} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: NEUTRAL.danger }]}>Remove</Text></Pressable>}
         </View>
       ) : working ? null : mode === "ready" ? (
         <Pressable onPress={onMoveBack} hitSlop={8}><Text style={[styles.moveBack, { color: theme.text }]}>Move back</Text></Pressable>

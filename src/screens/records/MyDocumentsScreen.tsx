@@ -8,8 +8,8 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonRow } from "@/components/Skeleton";
 import {
-  ArrowLeft, Plus, Search, Pill as PillIcon, FlaskConical, FileText, Receipt, ScanLine, BedDouble, Syringe, Stethoscope, Send,
-  BadgeCheck, ChevronDown, AlertCircle, Lock, Unlock, Clock, Eye, Download,
+  ArrowLeft, Plus, Search, FlaskConical, FileText, Receipt, ScanLine, BedDouble, Syringe, Stethoscope, Send,
+  BadgeCheck, ChevronDown, AlertCircle, Lock, Unlock, Clock, Eye, Download,ClipboardPlus
 } from "lucide-react-native";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
 import { MessageDialog } from "@/components/MessageDialog";
@@ -18,6 +18,8 @@ import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
 import { SelectField } from "@/components/SelectField";
 import { InstantReviewSheet } from "@/components/InstantReviewSheet";
+import { UploadStatusBar } from "@/components/UploadStatusBar";
+import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { familyAccentFor } from "@/theme/familyColors";
@@ -86,7 +88,7 @@ function monthOptions(docs: PatientDocument[]) {
 
 // The category names come from the server (useDocumentTypes); this is only how each one looks in a list row.
 const TYPE_META: Record<string, { tag: string; Icon: any; tint: string; ink: string }> = {
-  prescription:        { tag: "RX",    Icon: PillIcon,     tint: "#EAE7FB", ink: "#4A3FB0" },
+  prescription:        { tag: "RX",    Icon: ClipboardPlus,tint: "#EAE7FB", ink: "#4A3FB0" },
   lab_report:          { tag: "LAB",   Icon: FlaskConical, tint: "#F8EAC8", ink: "#8A5A12" },
   imaging_report:      { tag: "IMG",   Icon: ScanLine,     tint: "#E4EAF1", ink: "#3B4A5A" },
   discharge_summary:   { tag: "DISCH", Icon: BedDouble,    tint: "#E6EEF8", ink: "#27507A" },
@@ -223,12 +225,6 @@ export function MyDocumentsScreen() {
   const [sheetMessage, setSheetMessage] = useState("");
 
   const [category, setCategory] = useState("");        // "" = every category, else a type code
-  useEffect(() => {
-    if (route.params?.instantDocId) {
-      setInstantDocId(route.params.instantDocId);
-      navigation.setParams({ instantDocId: undefined });
-    }
-  }, [route.params?.instantDocId, navigation]);
   const [q, setQ] = useState("");
   const [month, setMonth] = useState<string>(lastMonth); // "ALL" or "YYYY-MM"
   useEffect(() => { lastMonth = month; }, [month]);
@@ -333,10 +329,11 @@ export function MyDocumentsScreen() {
     }
   }
   const [addOpen, setAddOpen] = useState(false);
-  const { startUpload } = useDocumentUpload();
+  const { startUpload, ready } = useDocumentUpload();
   const { types, labelOf } = useDocumentTypes();
-  // The one document just added with "+": followed until it is read, then confirmed (or changed) in a sheet.
-  const [instantDocId, setInstantDocId] = useState<number | null>(route.params?.instantDocId ?? null);
+  const who = useWhoIsThisFor(patientAwpid);
+  // The one document just added with "+", opened to confirm (or change) its type once the bar says it has been read.
+  const [instant, setInstant] = useState<{ id: number; awpid?: string } | null>(null);
 
   // Search, the month picker, and the category-panel counts below all work
   // over the FULL document set — they're client-side, not server-driven —
@@ -466,7 +463,7 @@ export function MyDocumentsScreen() {
     setSheetError("");
     setSheetMessage("");
     try {
-      const full = await getDocumentDetail(id);
+      const full = await getDocumentDetail(id, { patientAwpid });
       const src = (full as any).file_data as string;
       if (!src) {
         // A handful of demo/seed rows carry no actual file (they only exist
@@ -494,7 +491,7 @@ export function MyDocumentsScreen() {
     setSheetError("");
     setSheetMessage("");
     try {
-      const full = await getDocumentDetail(id, { download: true });
+      const full = await getDocumentDetail(id, { download: true, patientAwpid });
       const src = (full as any).file_data as string;
       if (!src) {
         setSheetError("This document doesn't have a file to download.");
@@ -512,24 +509,24 @@ export function MyDocumentsScreen() {
     }
   }
 
-  // Add Document: one file, uploaded on the fast lane. It is then followed in a sheet until it has been read, where the
-  // patient confirms the type or changes it. (For many files at once there is the Bulk Upload screen.)
+  // Add Document: one file, uploaded on the fast lane after asking whose it is. A bar at the top follows it until it has
+  // been read, then offers to confirm the type. (For many files at once there is the Bulk Upload screen.)
   async function pickAndUpload() {
     try {
+      setAddOpen(false);
+      const target = await who.ask();
+      if (!target) return;
       const files = await pickDocuments(false);
       if (!files.length) return;
       const f = files[0];
       const outcome = await startUpload(
         [{ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri }],
         "instant",
-        patientAwpid,
+        target.awpid,
       );
-      setAddOpen(false);
       if (outcome.status !== "started") {
         setUploadNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
-        return;
       }
-      setInstantDocId(outcome.documentIds[0] ?? null);
     } catch (err) {
       setAddOpen(false);
       setUploadNotice({ title: "Can't upload", message: apiErrorMessage(err, "Couldn't upload that file."), tone: "error" });
@@ -580,8 +577,17 @@ export function MyDocumentsScreen() {
         {docs.length ? ` · newest ${fmtShort(docs[0]?.document_date || docs[0]?.created_at)}` : ""}
       </Text>
 
+      {/* files just uploaded: a progress bar while they are read, then a Review button */}
+      <UploadStatusBar
+        onReview={(r) =>
+          r.ids.length === 1
+            ? setInstant({ id: r.ids[0], awpid: r.patientAwpid })
+            : navigation.navigate("DocumentUpload", r.patientAwpid ? { patientAwpid: r.patientAwpid } : undefined)
+        }
+      />
+
       {/* uploads still waiting for the patient to confirm their type */}
-      {(counts?.awaiting_review ?? 0) > 0 && (
+      {!ready && (counts?.awaiting_review ?? 0) > 0 && (
         <Pressable
           style={styles.reviewBanner}
           onPress={() => navigation.navigate("DocumentUpload", patientAwpid ? { patientAwpid } : undefined)}
@@ -808,7 +814,11 @@ export function MyDocumentsScreen() {
               <Text style={styles.mHint}>One PDF or photo. To add several at once, use Bulk Upload on the Home screen.</Text>
               <SecondaryButton
                 label="Take photo / Scan QR"
-                onPress={() => { setAddOpen(false); navigation.navigate("DocumentCapture", { mode: "instant", ...(patientAwpid ? { patientAwpid } : {}) }); }}
+                onPress={async () => {
+                  setAddOpen(false);
+                  const target = await who.ask();
+                  if (target) navigation.navigate("DocumentCapture", { mode: "instant", ...(target.awpid ? { patientAwpid: target.awpid } : {}) });
+                }}
               />
               <Pressable onPress={() => setAddOpen(false)} style={{ alignItems: "center", paddingVertical: 8 }}>
                 <Text style={styles.mCancel}>Cancel</Text>
@@ -826,12 +836,14 @@ export function MyDocumentsScreen() {
         onClose={() => setLockSheet(null)}
       />
 
+      {who.sheet}
+
       <InstantReviewSheet
-        documentId={instantDocId}
-        patientAwpid={patientAwpid}
-        onClose={() => { setInstantDocId(null); load(); }}
+        documentId={instant?.id ?? null}
+        patientAwpid={instant ? instant.awpid : patientAwpid}
+        onClose={() => { setInstant(null); load(); }}
         onSubmitted={(type) => {
-          setInstantDocId(null);
+          setInstant(null);
           queryClient.invalidateQueries({ queryKey: ["documents"] });
           queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
           setUploadNotice({ title: "Added to My Documents", message: `Saved as ${labelOf(type)}.`, tone: "success" });

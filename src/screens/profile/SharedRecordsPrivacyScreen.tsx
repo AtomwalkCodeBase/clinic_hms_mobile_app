@@ -5,8 +5,9 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import {
-  Clock, Lock, Search, FlaskConical, Pill as PillIcon, FileText,
+  Clock, Lock, Search, FlaskConical, FileText,
   ChevronDown, ChevronLeft, ChevronRight,
+  ClipboardPlus,
 } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
@@ -35,7 +36,7 @@ const KIND_LABEL: Record<string, string> = {
 };
 const KIND_TILE: Record<string, { bg: string; fg: string; Icon: any }> = {
   lab_report: { bg: "#F8EAC8", fg: "#8A5A12", Icon: FlaskConical },
-  prescription: { bg: "#EAE7FB", fg: "#4A3FB0", Icon: PillIcon },
+  prescription: { bg: "#EAE7FB", fg: "#4A3FB0", Icon: ClipboardPlus },
   other: { bg: "#E4EAF1", fg: "#3B4A5A", Icon: FileText },
 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

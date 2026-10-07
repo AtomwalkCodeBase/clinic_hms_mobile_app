@@ -1,8 +1,11 @@
-import { useQueryClient } from "@tanstack/react-query";
-import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
-import { uploadDocuments, UploadMode } from "@/api/portal";
+import { getMyDocuments, uploadDocuments, UploadMode } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
+import { notifyDocumentsReady } from "@/utils/pushNotifications";
+import { isReviewable } from "@/utils/reviewDraft";
 
 /** One file to upload — built straight from a picked file or a camera shot, already on disk. */
 export type UploadCandidate = { name: string; mimeType: string; size: number; uri: string };
@@ -43,6 +46,14 @@ function toRequests(files: UploadCandidate[]): UploadCandidate[][] {
   return requests;
 }
 
+const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
+const WATCH_GIVE_UP_MS = 10 * 60 * 1000;      // stop following files that never finish; the lists still show them
+
+/** How far the server has got with the files just sent. */
+export type ReadingState = { total: number; finished: number };
+/** The files just sent have all been read: some are ready to review, some may have failed. */
+export type ReadyState = { ids: number[]; failed: number; patientAwpid?: string };
+
 export type StartUploadOutcome =
   | { status: "rejected"; reason: string }
   | { status: "busy"; reason: string }
@@ -55,6 +66,11 @@ interface DocumentUploadContextValue {
   fileCount: number;
   /** "instant" is exactly one file on the fast lane; "bulk" is any number of files on the bulk lane. */
   startUpload: (files: UploadCandidate[], mode: UploadMode, patientAwpid?: string) => Promise<StartUploadOutcome>;
+  /** The files sent and still being read, or null. */
+  reading: ReadingState | null;
+  /** Set when everything just sent has been read, until the patient dismisses it or opens the review. */
+  ready: ReadyState | null;
+  clearReady: () => void;
 }
 
 const DocumentUploadContext = createContext<DocumentUploadContextValue | null>(null);
@@ -64,6 +80,8 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const [uploadPct, setUploadPct] = useState(0);
   const [fileCount, setFileCount] = useState(0);
   const queryClient = useQueryClient();
+  const [watch, setWatch] = useState<{ ids: number[]; patientAwpid?: string } | null>(null);
+  const [ready, setReady] = useState<ReadyState | null>(null);
   // setState is async — two quick taps could both read a stale "not busy" and start two uploads.
   const busyRef = useRef(false);
 
@@ -104,6 +122,11 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
         }
         queryClient.invalidateQueries({ queryKey: ["documents"] });
         queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
+        // Follow these files until they have been read, so any screen can show it and the patient can be told.
+        setReady(null);
+        setWatch((prev) => (prev && prev.patientAwpid === patientAwpid
+          ? { ids: [...prev.ids, ...documentIds], patientAwpid }
+          : { ids: documentIds, patientAwpid }));
         return { status: "started", mode, documentIds, skipped };
       } catch (err) {
         return { status: "rejected", reason: apiErrorMessage(err, "Upload failed, try again.") };
@@ -115,8 +138,48 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
     [queryClient],
   );
 
+  const watchQ = useQuery({
+    queryKey: ["uploadWatch", watch?.patientAwpid ?? "self"],
+    queryFn: () => getMyDocuments(1, watch?.patientAwpid, { review: "pending", pageSize: 100 }),
+    enabled: !!watch,
+    refetchInterval: 2500,
+  });
+  const reading = useMemo<ReadingState | null>(() => {
+    if (!watch) return null;
+    if (!watchQ.data) return { total: watch.ids.length, finished: 0 };
+    const byId = new Map(watchQ.data.results.map((d) => [d.id, d]));
+    const finished = watch.ids.filter((id) => {
+      const d = byId.get(id);
+      return !d || !IN_PROGRESS.has(d.processing_status);          // a file no longer waiting counts as done
+    }).length;
+    return { total: watch.ids.length, finished };
+  }, [watch, watchQ.data]);
+
+  // Everything read: say so, once. A notification only when the app is not in front.
+  useEffect(() => {
+    if (!watch || !reading || !watchQ.data || reading.finished < reading.total) return;
+    const docs = watchQ.data.results.filter((d) => watch.ids.includes(d.id));
+    const ids = docs.filter(isReviewable).map((d) => d.id);
+    const failed = docs.filter((d) => d.processing_status === "failed").length;
+    setWatch(null);
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
+    if (ids.length || failed) {
+      setReady({ ids, failed, patientAwpid: watch.patientAwpid });
+      if (AppState.currentState !== "active") notifyDocumentsReady(ids.length, failed);
+    }
+  }, [watch, reading, watchQ.data, queryClient]);
+
+  useEffect(() => {
+    if (!watch) return;
+    const t = setTimeout(() => setWatch(null), WATCH_GIVE_UP_MS);
+    return () => clearTimeout(t);
+  }, [watch]);
+
+  const clearReady = useCallback(() => setReady(null), []);
+
   return (
-    <DocumentUploadContext.Provider value={{ uploading, uploadPct, fileCount, startUpload }}>
+    <DocumentUploadContext.Provider value={{ uploading, uploadPct, fileCount, startUpload, reading, ready, clearReady }}>
       {children}
     </DocumentUploadContext.Provider>
   );

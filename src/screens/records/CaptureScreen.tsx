@@ -11,24 +11,21 @@ import { useDocumentUpload, UploadCandidate } from "@/context/DocumentUploadCont
 type Mode = "qr" | "photo";
 
 // How many photos one bulk capture session holds before it makes you upload and
-// start again — keeps device memory sane (each shot is a base64 JPEG). Add Document (instant) takes exactly one.
+// start again — keeps the tray manageable. Add Document (instant) takes exactly one.
 const MAX_SHOTS = 20;
 
-function estimateBytes(base64: string) {
-  return Math.ceil((base64.length * 3) / 4);
-}
-
-// The upload is one multipart request built straight from disk, so every shot is saved to disk
-// first and the candidate carries that file's path. Written under documentDirectory rather than
-// cacheDirectory — Android (MIUI especially) can reclaim a cache-directory file before the upload
-// reads it; see fileHelpers.ts's stageForUpload for the same issue on the document-picker path.
-async function shotToCandidate(b64: string, i: number): Promise<UploadCandidate> {
+// The camera already saves each photo as a file and hands back its path, and the upload is one multipart request built
+// straight from a file path, so the photo is never turned into text. It is only moved (instantly) from the camera's cache
+// folder to documentDirectory: Android (MIUI especially) can reclaim a cache-directory file before the upload reads it;
+// see fileHelpers.ts's stageForUpload for the same issue on the document-picker path.
+async function shotToCandidate(shotUri: string, i: number): Promise<UploadCandidate> {
   const dir = `${FileSystem.documentDirectory}pending-uploads/`;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
   const name = `capture-${Date.now()}-${i}.jpg`;
   const uri = `${dir}${name}`;
-  await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
-  return { name, mimeType: "image/jpeg", size: estimateBytes(b64), uri };
+  await FileSystem.moveAsync({ from: shotUri, to: uri });
+  const info = await FileSystem.getInfoAsync(uri);
+  return { name, mimeType: "image/jpeg", size: info.exists ? info.size : 0, uri };
 }
 
 /**
@@ -51,16 +48,16 @@ export function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
   const [mode, setMode] = useState<Mode>(uploadMode === "instant" ? "qr" : "photo");
-  const [shots, setShots] = useState<string[]>([]);     // base64 JPEGs, photo mode
+  const [shots, setShots] = useState<string[]>([]);     // the photos taken (file paths), photo mode
   const [capturing, setCapturing] = useState(false);     // guards double-tap while grabbing a frame
   const [error, setError] = useState("");
   const handledQr = useRef(false);
 
-  // Leave the camera once the files are on the server: an instant document goes back to My Documents (which follows it
-  // until it is read, then asks for confirmation); a bulk upload goes back to Bulk Upload for the review.
-  const leaveAfterUpload = useCallback((documentIds: number[]) => {
+  // Leave the camera once the files are on the server: an instant document goes back to My Documents (a bar there follows
+  // it until it is read, then offers the confirmation); a bulk upload goes back to Bulk Upload for the review.
+  const leaveAfterUpload = useCallback(() => {
     if (uploadMode === "instant") {
-      navigation.navigate({ name: "MyDocuments", params: { ...(patientAwpid ? { patientAwpid } : {}), instantDocId: documentIds[0] }, merge: true });
+      navigation.navigate({ name: "MyDocuments", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
     } else {
       navigation.navigate({ name: "DocumentUpload", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
     }
@@ -68,8 +65,8 @@ export function CaptureScreen() {
 
   const grabFrame = useCallback(async (): Promise<string | null> => {
     if (!camRef.current) return null;
-    const shot = await camRef.current.takePictureAsync({ quality: 0.7, base64: true, skipProcessing: true });
-    return shot?.base64 ?? null;
+    const shot = await camRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
+    return shot?.uri ?? null;
   }, []);
 
   // ── QR: capture the frame and upload it as one instant document ──
@@ -78,21 +75,21 @@ export function CaptureScreen() {
     setCapturing(true);
     setError("");
     try {
-      const b64 = await grabFrame();
-      if (!b64) {
+      const shotUri = await grabFrame();
+      if (!shotUri) {
         setError("Couldn't use the camera. Try again.");
         handledQr.current = false;
         setCapturing(false);
         return;
       }
-      const outcome = await startUpload([await shotToCandidate(b64, 0)], "instant", patientAwpid);
+      const outcome = await startUpload([await shotToCandidate(shotUri, 0)], "instant", patientAwpid);
       if (outcome.status !== "started") {
         setError(outcome.reason);
         handledQr.current = false;
         setCapturing(false);
         return;
       }
-      leaveAfterUpload(outcome.documentIds);
+      leaveAfterUpload();
     } catch (err) {
       setError("Couldn't use the camera. Try again.");
       handledQr.current = false;
@@ -111,27 +108,30 @@ export function CaptureScreen() {
     if (capturing || shots.length >= maxShots) return;
     setCapturing(true);
     try {
-      const b64 = await grabFrame();
-      if (b64) setShots((s) => (s.length >= maxShots ? s : [...s, b64]));
+      const shotUri = await grabFrame();
+      if (shotUri) setShots((s) => (s.length >= maxShots ? s : [...s, shotUri]));
     } catch {
       setError("Couldn't use the camera. Try again.");
     }
     setCapturing(false);
   }, [capturing, shots.length, grabFrame, maxShots]);
 
-  const removeShot = (i: number) => setShots((s) => s.filter((_, idx) => idx !== i));
+  const removeShot = (i: number) => {
+    FileSystem.deleteAsync(shots[i], { idempotent: true }).catch(() => {});
+    setShots((s) => s.filter((_, idx) => idx !== i));
+  };
 
   const uploadAll = useCallback(async () => {
     if (shots.length === 0) return;
     setError("");
-    const candidates = await Promise.all(shots.map((b64, i) => shotToCandidate(b64, i)));
+    const candidates = await Promise.all(shots.map((shotUri, i) => shotToCandidate(shotUri, i)));
     const outcome = await startUpload(candidates, uploadMode, patientAwpid);
     if (outcome.status !== "started") {
       setError(outcome.reason);
       return;
     }
     setShots([]);
-    leaveAfterUpload(outcome.documentIds);
+    leaveAfterUpload();
   }, [shots, startUpload, uploadMode, patientAwpid, leaveAfterUpload]);
 
   const switchMode = (m: Mode) => {
@@ -213,9 +213,9 @@ export function CaptureScreen() {
       {!isQr && shots.length > 0 && (
         <View style={styles.tray}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trayRow}>
-            {shots.map((b64, i) => (
+            {shots.map((shotUri, i) => (
               <View key={i} style={styles.thumbWrap}>
-                <Image source={{ uri: `data:image/jpeg;base64,${b64}` }} style={styles.thumb} />
+                <Image source={{ uri: shotUri }} style={styles.thumb} />
                 <Pressable style={styles.thumbX} hitSlop={8} onPress={() => removeShot(i)}>
                   <X size={11} color="#fff" strokeWidth={3} />
                 </Pressable>

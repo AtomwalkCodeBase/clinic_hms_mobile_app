@@ -46,7 +46,7 @@ export function InstantReviewSheet({
   const queryClient = useQueryClient();
   const docQ = useQuery({
     queryKey: ["document", documentId],
-    queryFn: () => getDocumentDetail(documentId as number),
+    queryFn: () => getDocumentDetail(documentId as number, { patientAwpid }),
     enabled: documentId != null,
     refetchInterval: (query) => (!query.state.data || IN_PROGRESS.has(query.state.data.processing_status) ? 1500 : false),
   });
@@ -84,7 +84,7 @@ export function InstantReviewSheet({
   async function view() {
     if (!doc) return;
     try {
-      const full = await getDocumentDetail(doc.id);
+      const full = await getDocumentDetail(doc.id, { patientAwpid });
       const src = (full as any).file_data as string;
       if (src) await openInExternalApp(full.file_name || full.title || "document", src, full.mime_type);
     } catch (err) {
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   centerSub: { fontSize: 12, color: NEUTRAL.textSecondary, textAlign: "center", paddingHorizontal: 12 },
   retry: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   retryText: { fontSize: 13, fontWeight: "700" },
-  removeText: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textMuted, marginTop: 4 },
+  removeText: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.danger, marginTop: 4 },
   notice: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, padding: 10, marginBottom: 10 },
   noticeText: { flex: 1, fontSize: 12.5, fontWeight: "600", color: NEUTRAL.warning },
   foot: { fontSize: 11, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 2 },

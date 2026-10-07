@@ -486,10 +486,10 @@ export async function getMyDocuments(
   return res.data;
 }
 
-export async function getDocumentDetail(id: number, opts?: { download?: boolean }) {
+export async function getDocumentDetail(id: number, opts?: { download?: boolean; patientAwpid?: string }) {
   const res = await api.get<Envelope<PatientDocument & { file_data: string; handwritten_doc_id?: number | null }>>(
     `/portal/documents/${id}/`,
-    { params: opts?.download ? { download: 1 } : {} },
+    { params: { ...(opts?.download ? { download: 1 } : {}), ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}) } },
   );
   return res.data.data;
 }
