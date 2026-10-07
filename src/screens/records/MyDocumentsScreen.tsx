@@ -514,6 +514,7 @@ export function MyDocumentsScreen() {
   async function pickAndUpload() {
     try {
       setAddOpen(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));        // let the add sheet finish closing first
       const target = await who.ask();
       if (!target) return;
       const files = await pickDocuments(false);
@@ -816,6 +817,7 @@ export function MyDocumentsScreen() {
                 label="Take photo / Scan QR"
                 onPress={async () => {
                   setAddOpen(false);
+                  await new Promise((resolve) => setTimeout(resolve, 300));
                   const target = await who.ask();
                   if (target) navigation.navigate("DocumentCapture", { mode: "instant", ...(target.awpid ? { patientAwpid: target.awpid } : {}) });
                 }}

@@ -129,6 +129,7 @@ export function CaptureScreen() {
     const outcome = queueUpload(candidates, uploadMode, patientAwpid);
     if (outcome.status !== "queued") {
       setError(outcome.reason);
+      setShots(candidates.map((c) => c.uri));       // the photos were moved to their upload names: keep the tray in step
       return;
     }
     setShots([]);

@@ -119,7 +119,8 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const [uploadPct, setUploadPct] = useState(0);
   const [fileCount, setFileCount] = useState(0);
   const queryClient = useQueryClient();
-  const [watch, setWatch] = useState<{ ids: number[]; patientAwpid?: string } | null>(null);
+  // `startedAt`: a poll result older than this was fetched before these files existed, so it says nothing about them.
+  const [watch, setWatch] = useState<{ ids: number[]; patientAwpid?: string; startedAt: number } | null>(null);
   const [ready, setReady] = useState<ReadyState | null>(null);
   const [failedUpload, setFailedUpload] = useState<FailedUpload | null>(null);
   // setState is async — two quick taps could both read a stale "not busy" and start two uploads.
@@ -151,8 +152,8 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
         // Follow these files until they have been read, so any screen can show it and the patient can be told.
         setReady(null);
         setWatch((prev) => (prev && prev.patientAwpid === patientAwpid
-          ? { ids: [...prev.ids, ...documentIds], patientAwpid }
-          : { ids: documentIds, patientAwpid }));
+          ? { ids: [...prev.ids, ...documentIds], patientAwpid, startedAt: Date.now() }
+          : { ids: documentIds, patientAwpid, startedAt: Date.now() }));
         return { status: "started", mode, documentIds, skipped };
       } catch (err) {
         return { status: "rejected", reason: apiErrorMessage(err, "Upload failed, try again."), unsent: valid.slice(sent) };
@@ -213,18 +214,18 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   });
   const reading = useMemo<ReadingState | null>(() => {
     if (!watch) return null;
-    if (!watchQ.data) return { total: watch.ids.length, finished: 0 };
+    if (!watchQ.data || watchQ.dataUpdatedAt < watch.startedAt) return { total: watch.ids.length, finished: 0 };
     const byId = new Map(watchQ.data.results.map((d) => [d.id, d]));
     const finished = watch.ids.filter((id) => {
       const d = byId.get(id);
       return !d || !IN_PROGRESS.has(d.processing_status);          // a file no longer waiting counts as done
     }).length;
     return { total: watch.ids.length, finished };
-  }, [watch, watchQ.data]);
+  }, [watch, watchQ.data, watchQ.dataUpdatedAt]);
 
   // Everything read: say so, once. A notification only when the app is not in front.
   useEffect(() => {
-    if (!watch || !reading || !watchQ.data || reading.finished < reading.total) return;
+    if (!watch || !reading || !watchQ.data || watchQ.dataUpdatedAt < watch.startedAt || reading.finished < reading.total) return;
     const docs = watchQ.data.results.filter((d) => watch.ids.includes(d.id));
     const ids = docs.filter(isReviewable).map((d) => d.id);
     const failed = docs.filter((d) => d.processing_status === "failed").length;
@@ -235,7 +236,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       setReady({ ids, failed, patientAwpid: watch.patientAwpid });
       if (AppState.currentState !== "active") notifyDocumentsReady(ids.length, failed);
     }
-  }, [watch, reading, watchQ.data, queryClient]);
+  }, [watch, reading, watchQ.data, watchQ.dataUpdatedAt, queryClient]);
 
   useEffect(() => {
     if (!watch) return;

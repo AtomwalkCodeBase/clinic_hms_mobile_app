@@ -20,7 +20,8 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "ios": {
@@ -38,6 +39,7 @@
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       "expo-sharing",
+      "expo-notifications",
       "expo-status-bar",
       [
         "expo-camera",
