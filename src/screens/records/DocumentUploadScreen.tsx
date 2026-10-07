@@ -7,6 +7,7 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { BackHeader, EmptyState, ErrorBanner, Screen } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
+import { Upload, Camera } from "lucide-react-native";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MessageDialog } from "@/components/MessageDialog";
@@ -19,7 +20,7 @@ import { useDocumentUpload } from "@/context/DocumentUploadContext";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { useReviewDraft } from "@/hooks/useReviewDraft";
 import { apiErrorMessage } from "@/api/client";
-import { getDocumentDetail, getMyDocuments, retryDocument, submitDecisions } from "@/api/portal";
+import { dismissDocument, getDocumentDetail, getMyDocuments, retryDocument, submitDecisions } from "@/api/portal";
 import type { PatientDocument } from "@/api/types";
 import { buildDecisions, currentType, isReviewable, stageOf } from "@/utils/reviewDraft";
 import { openInExternalApp, pickDocuments } from "@/utils/fileHelpers";
@@ -80,6 +81,8 @@ export function DocumentUploadScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [actionError, setActionError] = useState("");
+  const [dismissing, setDismissing] = useState<PatientDocument | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const pendingQ = useQuery({
     queryKey: ["documents", patientAwpid, "pending"],
@@ -178,6 +181,23 @@ export function DocumentUploadScreen() {
     }
   }
 
+  async function doDismiss() {
+    if (!dismissing) return;
+    setRemoving(true);
+    setActionError("");
+    try {
+      await dismissDocument(dismissing.id, patientAwpid);
+      setDismissing(null);
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
+    } catch (err) {
+      setDismissing(null);
+      setActionError(apiErrorMessage(err, "Couldn't remove that file."));
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   function onConfirm(doc: PatientDocument) {
     if (!currentType(doc, draft[doc.id])) setPicker({ doc, thenConfirm: true });     // nothing to confirm until a type is chosen
     else confirm(doc.id);
@@ -244,9 +264,10 @@ export function DocumentUploadScreen() {
       <Text style={styles.lead}>Add several files at once. Review the type we found for each, then submit.</Text>
 
       <View style={styles.addRow}>
-        <SecondaryButton label="Upload files" onPress={addFiles} loading={uploading} style={{ flex: 1 }} />
+        <SecondaryButton label="Upload files" icon={Upload} onPress={addFiles} loading={uploading} style={{ flex: 1 }} />
         <SecondaryButton
           label="Take photos"
+          icon={Camera}
           onPress={() => navigation.navigate("DocumentCapture", { mode: "bulk", ...(patientAwpid ? { patientAwpid } : {}) })}
           disabled={uploading}
           style={{ flex: 1 }}
@@ -307,6 +328,7 @@ export function DocumentUploadScreen() {
             onChange={() => setPicker({ doc, thenConfirm: false })}
             onMoveBack={() => moveBack(doc.id)}
             onRetry={() => retry(doc)}
+            onDismiss={() => setDismissing(doc)}
           />
           </FadeIn>
         ))
@@ -317,6 +339,17 @@ export function DocumentUploadScreen() {
         selected={picker ? currentType(picker.doc, pickerEntry) : null}
         onSelect={onPick}
         onClose={() => setPicker(null)}
+      />
+
+      <ConfirmDialog
+        visible={!!dismissing}
+        title="Remove this file?"
+        message={`${dismissing?.file_name || dismissing?.title || "This file"} couldn't be read. Removing it deletes it for good; you can upload it again any time.`}
+        confirmLabel="Remove"
+        cancelLabel="Keep"
+        loading={removing}
+        onConfirm={doDismiss}
+        onCancel={() => setDismissing(null)}
       />
 
       <ConfirmDialog

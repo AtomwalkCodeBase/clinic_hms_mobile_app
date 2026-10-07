@@ -207,8 +207,6 @@ export interface RecordsPrivacyDoc {
   report_categories?: string[];
   document_date?: string | null;
   created_at: string;
-  hospital_label?: string | null;
-  doctor_label?: string | null;
   /** hidden from a scanning doctor right now */
   private: boolean;
   /** hidden because of a category / kind / hide-all rule, not an individual lock */

@@ -26,7 +26,7 @@ import { apiErrorMessage } from "@/api/client";
 import {
   getMyDocuments, getDocumentDetail, getDocumentCounts,
   getPrescriptions, getLabOrders, choosePrescription, chooseLabOrder,
-  getRecordsPrivacy, toggleRecordPrivacy, revealForShare,
+  getAllRecordsPrivacy, toggleRecordPrivacy, revealForShare,
 } from "@/api/portal";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
@@ -35,6 +35,10 @@ import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc } from 
 import { AppStackParamList } from "@/navigation/types";
 
 const PAGE = 15;
+
+// The month filter the patient last chose, kept while the app is open so leaving this screen and coming back does not
+// reset it. "ALL" until they pick one.
+let lastMonth = "ALL";
 
 // ── date helpers ───────────────────────────────────────────────────────────
 const ymKey = (iso?: string | null) => {
@@ -48,10 +52,6 @@ const ymLabel = (key: string) => {
 const ymShort = (key: string) => {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-};
-const lastCompletedMonthKey = () => {
-  const n = new Date();
-  return ymKey(new Date(n.getFullYear(), n.getMonth() - 1, 1).toISOString());
 };
 const fmtShort = (iso?: string | null) => {
   const d = new Date(iso || "");
@@ -230,7 +230,8 @@ export function MyDocumentsScreen() {
     }
   }, [route.params?.instantDocId, navigation]);
   const [q, setQ] = useState("");
-  const [month, setMonth] = useState<string>(""); // "" until resolved, "ALL", or "YYYY-MM"
+  const [month, setMonth] = useState<string>(lastMonth); // "ALL" or "YYYY-MM"
+  useEffect(() => { lastMonth = month; }, [month]);
   const [visible, setVisible] = useState(PAGE);
   const [showPending, setShowPending] = useState(false);
 
@@ -250,7 +251,7 @@ export function MyDocumentsScreen() {
   // cache entry rather than colliding with that screen's paginated one.
   const privacyQ = useQuery({
     queryKey: ["recordsPrivacyDocs"],
-    queryFn: () => getRecordsPrivacy().catch(() => null),
+    queryFn: () => getAllRecordsPrivacy().catch(() => null),
     enabled: !patientAwpid,
   });
   const privMap = useMemo(
@@ -331,10 +332,6 @@ export function MyDocumentsScreen() {
       });
     }
   }
-  const privateCount = useMemo(
-    () => [...privMap.values()].filter((x) => x.private && !x.revealed_for_visit).length,
-    [privMap],
-  );
   const [addOpen, setAddOpen] = useState(false);
   const { startUpload } = useDocumentUpload();
   const { types, labelOf } = useDocumentTypes();
@@ -419,18 +416,6 @@ export function MyDocumentsScreen() {
   const isFetchingAny = docsFirstQ.isFetching || docsRestQ.isFetching || pendingRxQ.isFetching || pendingLabQ.isFetching;
 
   const monthOpts = useMemo(() => monthOptions(docs), [docs]);
-
-  // Land on the last completed month that has records (else newest with data,
-  // else "All"). Runs once when records first arrive.
-  useEffect(() => {
-    if (month || !monthOpts.length) return;
-    const lc = lastCompletedMonthKey();
-    const pick =
-      monthOpts.find((o) => o.key === lc && o.has) ||
-      monthOpts.find((o) => o.key <= lc && o.has) ||
-      monthOpts.find((o) => o.has);
-    setMonth(pick ? pick.key : "ALL");
-  }, [monthOpts, month]);
 
   useEffect(() => { setVisible(PAGE); }, [category, q, month]);
 
@@ -621,10 +606,7 @@ export function MyDocumentsScreen() {
       )}
       {privEnabled && privMap.size > 0 && (
         <Pressable style={styles.privLine} onPress={() => navigation.navigate("SharedRecordsPrivacy")}>
-          <Lock size={11} color={NEUTRAL.textMuted} strokeWidth={2} />
-          <Text style={styles.privLineT}>
-            <Text style={styles.privLineB}>{privateCount}</Text> of {privMap.size} report{privMap.size === 1 ? "" : "s"} private
-          </Text>
+          <Lock size={16} color={NEUTRAL.textMuted} strokeWidth={2} />
           <Text style={[styles.privLineGo, { color: theme.text }]}>Shared records privacy ›</Text>
         </Pressable>
       )}
@@ -647,7 +629,7 @@ export function MyDocumentsScreen() {
         <TextInput
           value={q}
           onChangeText={setQ}
-          placeholder="Search name, hospital, ID"
+          placeholder="Search by name"
           placeholderTextColor={NEUTRAL.textMuted}
           style={styles.srchIn}
         />
@@ -878,10 +860,8 @@ const styles = StyleSheet.create({
   privBanner: { flexDirection: "row", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 10, marginBottom: 10 },
   privBannerT: { flex: 1, fontSize: 11, lineHeight: 16, color: "#5C3A08" },
   privBannerB: { fontWeight: "700", color: "#3E2A08" },
-  privLine: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
-  privLineT: { flex: 1, fontSize: 11, color: NEUTRAL.textMuted },
-  privLineB: { fontWeight: "700", color: NEUTRAL.textPrimary },
-  privLineGo: { fontSize: 11, fontWeight: "600" },
+  privLine: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14, paddingVertical: 6 },
+  privLineGo: { fontSize: 14, fontWeight: "600" },
   privTag: { fontSize: 8, fontWeight: "700", letterSpacing: 0.4, color: "#4A3489", backgroundColor: "#ECE7F7", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginTop: 4, alignSelf: "flex-start" },
   visTag: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4, alignSelf: "flex-start" },
   visTagT: { fontSize: 8, fontWeight: "700", letterSpacing: 0.4, color: NEUTRAL.success },

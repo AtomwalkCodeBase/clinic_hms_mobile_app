@@ -73,6 +73,15 @@ export async function pickPdf(): Promise<PickedFile | null> {
  * Opens the system file picker for PDFs / images — several in one pick by default (Bulk Upload), or exactly one
  * (Add Document: `pickDocuments(false)`). Returns [] if the user cancels.
  */
+/** Some pickers hand over a URL-encoded name ("Complete%20Blood%20Count.pdf"); show and send the readable one. */
+function readableName(name: string): string {
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+}
+
 export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
   // See pickPdf() above for why copyToCacheDirectory is false, not true.
   const result = await DocumentPicker.getDocumentAsync({
@@ -82,10 +91,10 @@ export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
   });
   if (result.canceled || !result.assets?.length) return [];
   return Promise.all(result.assets.map(async (a) => {
-    const name = a.name || "document";
+    const rawName = a.name || "document";
     const mimeType = a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
-    const uri = await stageForUpload(a.uri, name);
-    return { uri, name, mimeType, size: a.size ?? 0 };
+    const uri = await stageForUpload(a.uri, rawName);         // the raw name: a decoded "%2F" would turn into a path
+    return { uri, name: readableName(rawName), mimeType, size: a.size ?? 0 };
   }));
 }
 

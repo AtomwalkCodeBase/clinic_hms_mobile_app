@@ -1,4 +1,5 @@
-import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
+import { Pressable, Text, View, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
+import type { LucideIcon } from "@/theme/icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppTheme } from "@/context/ThemeContext";
 
@@ -47,7 +48,7 @@ export function PrimaryButton({ label, onPress, loading, disabled, style, compac
   );
 }
 
-export function SecondaryButton({ label, onPress, loading, disabled, style, danger, compact, color: colorOverride }: ButtonProps & { danger?: boolean; color?: string }) {
+export function SecondaryButton({ label, onPress, loading, disabled, style, danger, compact, color: colorOverride, icon: Icon }: ButtonProps & { danger?: boolean; color?: string; icon?: LucideIcon }) {
   const { theme, neutral } = useAppTheme();
   const color = danger ? neutral.danger : colorOverride || theme.text;
   return (
@@ -65,13 +66,17 @@ export function SecondaryButton({ label, onPress, loading, disabled, style, dang
       {loading ? (
         <ActivityIndicator color={color} size={compact ? "small" : undefined} />
       ) : (
-        <Text style={[styles.label, compact && styles.compactLabel, { color }]}>{label}</Text>
+        <View style={styles.content}>
+          {Icon && <Icon size={compact ? 14 : 17} color={color} strokeWidth={2} />}
+          <Text style={[styles.label, compact && styles.compactLabel, { color }]}>{label}</Text>
+        </View>
       )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   base: {
     paddingVertical: 13,
     borderRadius: 24,

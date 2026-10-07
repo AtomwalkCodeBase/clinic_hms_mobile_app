@@ -368,10 +368,10 @@ export function SharedRecordsPrivacyScreen() {
                         </View>
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={[styles.recTitle, st === "off" && { color: NEUTRAL.textSecondary }]} numberOfLines={1}>
-                            {d.doc_type === "prescription" && d.doctor_label ? `Prescription · ${d.doctor_label}` : d.title}
+                            {d.title}
                           </Text>
                           <Text style={styles.recSub} numberOfLines={1}>
-                            {[fmtDate(dOf(d)), d.hospital_label].filter(Boolean).join(" · ")}
+                            {fmtDate(dOf(d))}
                             {d.private_by_rule ? " · by rule" : ""}
                           </Text>
                         </View>

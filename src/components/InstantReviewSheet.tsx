@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Modal, Pressable, View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, X } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
-import { getDocumentDetail, retryDocument, submitDecisions } from "@/api/portal";
+import { dismissDocument, getDocumentDetail, retryDocument, submitDecisions } from "@/api/portal";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ReviewRow } from "@/components/ReviewRow";
@@ -43,6 +43,7 @@ export function InstantReviewSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const queryClient = useQueryClient();
   const docQ = useQuery({
     queryKey: ["document", documentId],
     queryFn: () => getDocumentDetail(documentId as number),
@@ -101,6 +102,18 @@ export function InstantReviewSheet({
     }
   }
 
+  async function dismiss() {
+    if (!doc) return;
+    try {
+      await dismissDocument(doc.id, patientAwpid);
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
+      close();
+    } catch (err) {
+      setError(apiErrorMessage(err, "Couldn't remove that file."));
+    }
+  }
+
   const working = !doc || IN_PROGRESS.has(doc.processing_status);
   const failed = doc?.processing_status === "failed";
 
@@ -126,6 +139,7 @@ export function InstantReviewSheet({
                 <Text style={[styles.centerTitle, { color: NEUTRAL.danger }]}>We couldn't read this file</Text>
                 <Text style={styles.centerSub}>{doc?.error || "Something went wrong while reading it."}</Text>
                 <Pressable onPress={retry} style={[styles.retry, { backgroundColor: theme.fill }]}><Text style={[styles.retryText, { color: theme.on }]}>Try again</Text></Pressable>
+                <Pressable onPress={dismiss} hitSlop={8}><Text style={styles.removeText}>Remove this file</Text></Pressable>
               </View>
             ) : doc && isReviewable(doc) ? (
               <>
@@ -143,6 +157,7 @@ export function InstantReviewSheet({
                   onChange={() => setPicking(true)}
                   onMoveBack={() => {}}
                   onRetry={retry}
+                  onDismiss={dismiss}
                 />
                 <Text style={styles.foot}>If you close this, the document stays in Bulk Upload until you confirm it.</Text>
               </>
@@ -183,6 +198,7 @@ const styles = StyleSheet.create({
   centerSub: { fontSize: 12, color: NEUTRAL.textSecondary, textAlign: "center", paddingHorizontal: 12 },
   retry: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   retryText: { fontSize: 13, fontWeight: "700" },
+  removeText: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textMuted, marginTop: 4 },
   notice: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, padding: 10, marginBottom: 10 },
   noticeText: { flex: 1, fontSize: 12.5, fontWeight: "600", color: NEUTRAL.warning },
   foot: { fontSize: 11, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 2 },

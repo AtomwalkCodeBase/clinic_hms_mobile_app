@@ -3,7 +3,6 @@ import { FileText, Image as ImageIcon } from "lucide-react-native";
 import type { PatientDocument } from "@/api/types";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { ScoreBadge } from "@/components/ScoreBadge";
 import { isEdited, isReviewable, currentType, ReviewEntry } from "@/utils/reviewDraft";
 
 /**
@@ -14,7 +13,7 @@ import { isEdited, isReviewable, currentType, ReviewEntry } from "@/utils/review
  * A file that is still being read, or could not be read, shows that instead of the buttons.
  */
 export function ReviewRow({
-  doc, entry, mode, labelOf, onView, onConfirm, onChange, onMoveBack, onRetry,
+  doc, entry, mode, labelOf, onView, onConfirm, onChange, onMoveBack, onRetry, onDismiss,
 }: {
   doc: PatientDocument;
   entry?: ReviewEntry;
@@ -25,6 +24,8 @@ export function ReviewRow({
   onChange: () => void;
   onMoveBack: () => void;
   onRetry: () => void;
+  /** remove a file that failed (only offered for a failed file) */
+  onDismiss?: () => void;
 }) {
   const { theme } = useAppTheme();
   const isImage = doc.mime_type?.startsWith("image/");
@@ -48,7 +49,7 @@ export function ReviewRow({
           {edited ? "Your selection: " : "Classified as "}
           <Text style={styles.subStrong}>{labelOf(type)}</Text>
         </Text>
-        {edited ? <Text style={styles.edited}>edited</Text> : <ScoreBadge score={doc.score} />}
+        {edited ? <Text style={styles.edited}>edited</Text>: null }
       </View>
     );
   } else {
@@ -68,7 +69,10 @@ export function ReviewRow({
       </Pressable>
 
       {failed ? (
-        <Pressable onPress={onRetry} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: theme.text }]}>Try again</Text></Pressable>
+        <View style={styles.failActions}>
+          <Pressable onPress={onRetry} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: theme.text }]}>Try again</Text></Pressable>
+          {onDismiss && <Pressable onPress={onDismiss} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: NEUTRAL.textMuted }]}>Remove</Text></Pressable>}
+        </View>
       ) : working ? null : mode === "ready" ? (
         <Pressable onPress={onMoveBack} hitSlop={8}><Text style={[styles.moveBack, { color: theme.text }]}>Move back</Text></Pressable>
       ) : (
@@ -107,6 +111,7 @@ const styles = StyleSheet.create({
   btnOutline: { borderWidth: 0.5, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface },
   btnText: { fontSize: 11.5, fontWeight: "700" },
   moveBack: { fontSize: 12, fontWeight: "600" },
+  failActions: { alignItems: "flex-end", gap: 6 },
   retry: { paddingHorizontal: 4 },
   retryText: { fontSize: 12, fontWeight: "700" },
 });

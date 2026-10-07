@@ -259,6 +259,8 @@ export async function recordsShareDownloadDecision(token: string, approve: boole
 export interface RecordsPrivacyQuery {
   /** 1-based page; the list is paged on category boundaries */
   page?: number;
+  /** rows per page (the server allows 10-200) */
+  page_size?: number;
   /** csv of panel slugs */
   category?: string;
   /** csv of doc_type slugs */
@@ -275,6 +277,20 @@ export async function getRecordsPrivacy(
     params: query,
   });
   return res.data.data;
+}
+
+/**
+ * Every row of the privacy list: a screen that needs to know each document's state (the lock on My Documents) can not
+ * use one page, because a page holds whole type groups and a big group would leave every other type without a lock.
+ * The server caps the vault at 1000 rows, so this is at most 5 requests of 200.
+ */
+export async function getAllRecordsPrivacy(): Promise<RecordsPrivacyPayload> {
+  const first = await getRecordsPrivacy({ page: 1, page_size: 200 });
+  const documents = [...first.documents];
+  for (let page = 2; page <= Math.min(first.pagination.total_pages, 5); page++) {
+    documents.push(...(await getRecordsPrivacy({ page, page_size: 200 })).documents);
+  }
+  return { ...first, documents };
 }
 
 /**
@@ -551,6 +567,14 @@ export async function submitDecisions(decisions: ReviewDecision[], patientAwpid?
 /** PATCH /api/v1/portal/documents/<id>/ {action: "retry"} — try a file that could not be read again. */
 export async function retryDocument(id: number, patientAwpid?: string): Promise<void> {
   await api.patch(`/portal/documents/${id}/`, { action: "retry" }, { params: patientAwpid ? { patient_awpid: patientAwpid } : {} });
+}
+
+/**
+ * DELETE /api/v1/portal/documents/<id>/ — dismiss a file that could not be read: the server removes it and its stored
+ * copy for good. It refuses (409) for any file that did not fail, so nothing the patient can use is ever deleted.
+ */
+export async function dismissDocument(id: number, patientAwpid?: string): Promise<void> {
+  await api.delete(`/portal/documents/${id}/`, { params: patientAwpid ? { patient_awpid: patientAwpid } : {} });
 }
 
 /** Registers this device's Expo push token with the server, against the logged-in account. */
