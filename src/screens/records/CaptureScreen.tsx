@@ -43,7 +43,7 @@ export function CaptureScreen() {
   const patientAwpid = route.params?.patientAwpid;
   const uploadMode = route.params?.mode ?? "instant";
   const maxShots = uploadMode === "instant" ? 1 : MAX_SHOTS;
-  const { startUpload } = useDocumentUpload();
+  const { queueUpload } = useDocumentUpload();
 
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
@@ -53,8 +53,9 @@ export function CaptureScreen() {
   const [error, setError] = useState("");
   const handledQr = useRef(false);
 
-  // Leave the camera once the files are on the server: an instant document goes back to My Documents (a bar there follows
-  // it until it is read, then offers the confirmation); a bulk upload goes back to Bulk Upload for the review.
+  // Leave the camera as soon as the upload has been started, without waiting for it to finish (it carries on in the
+  // background): an instant document goes back to My Documents (a bar there follows the upload, then the reading, then
+  // offers the confirmation); a bulk upload goes back to Bulk Upload for the review.
   const leaveAfterUpload = useCallback(() => {
     if (uploadMode === "instant") {
       navigation.navigate({ name: "MyDocuments", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
@@ -82,8 +83,8 @@ export function CaptureScreen() {
         setCapturing(false);
         return;
       }
-      const outcome = await startUpload([await shotToCandidate(shotUri, 0)], "instant", patientAwpid);
-      if (outcome.status !== "started") {
+      const outcome = queueUpload([await shotToCandidate(shotUri, 0)], "instant", patientAwpid);
+      if (outcome.status !== "queued") {
         setError(outcome.reason);
         handledQr.current = false;
         setCapturing(false);
@@ -95,7 +96,7 @@ export function CaptureScreen() {
       handledQr.current = false;
       setCapturing(false);
     }
-  }, [capturing, grabFrame, startUpload, patientAwpid, leaveAfterUpload]);
+  }, [capturing, grabFrame, queueUpload, patientAwpid, leaveAfterUpload]);
 
   const onBarcode = useCallback(({ data }: { data: string }) => {
     if (handledQr.current || capturing || !data) return;
@@ -125,14 +126,14 @@ export function CaptureScreen() {
     if (shots.length === 0) return;
     setError("");
     const candidates = await Promise.all(shots.map((shotUri, i) => shotToCandidate(shotUri, i)));
-    const outcome = await startUpload(candidates, uploadMode, patientAwpid);
-    if (outcome.status !== "started") {
+    const outcome = queueUpload(candidates, uploadMode, patientAwpid);
+    if (outcome.status !== "queued") {
       setError(outcome.reason);
       return;
     }
     setShots([]);
     leaveAfterUpload();
-  }, [shots, startUpload, uploadMode, patientAwpid, leaveAfterUpload]);
+  }, [shots, queueUpload, uploadMode, patientAwpid, leaveAfterUpload]);
 
   const switchMode = (m: Mode) => {
     if (m === mode) return;

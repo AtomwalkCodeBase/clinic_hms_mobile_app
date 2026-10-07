@@ -329,7 +329,7 @@ export function MyDocumentsScreen() {
     }
   }
   const [addOpen, setAddOpen] = useState(false);
-  const { startUpload, ready } = useDocumentUpload();
+  const { queueUpload, ready } = useDocumentUpload();
   const { types, labelOf } = useDocumentTypes();
   const who = useWhoIsThisFor(patientAwpid);
   // The one document just added with "+", opened to confirm (or change) its type once the bar says it has been read.
@@ -519,12 +519,12 @@ export function MyDocumentsScreen() {
       const files = await pickDocuments(false);
       if (!files.length) return;
       const f = files[0];
-      const outcome = await startUpload(
+      const outcome = queueUpload(
         [{ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri }],
         "instant",
         target.awpid,
       );
-      if (outcome.status !== "started") {
+      if (outcome.status !== "queued") {
         setUploadNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
       }
     } catch (err) {

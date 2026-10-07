@@ -5,13 +5,40 @@ import { useAppTheme } from "@/context/ThemeContext";
 import { ReadyState, useDocumentUpload } from "@/context/DocumentUploadContext";
 
 /**
- * A slim bar for files that were just uploaded: a progress bar while the server reads them, then "ready to review"
- * with a Review button once they have been (the same message goes out as a notification if the app is in the
- * background). Renders nothing when there is nothing to report.
+ * A slim bar for files just sent, from the moment the upload starts: its progress while the photo or file goes up (the
+ * camera closes at once and leaves the upload running in the background), a retry if it did not get through, a progress
+ * bar while the server reads it, then "ready to review" with a Review button (the same message goes out as a
+ * notification if the app is in the background). Renders nothing when there is nothing to report.
  */
 export function UploadStatusBar({ onReview }: { onReview: (ready: ReadyState) => void }) {
   const { theme } = useAppTheme();
-  const { reading, ready, clearReady } = useDocumentUpload();
+  const { uploading, uploadPct, fileCount, failedUpload, retryFailedUpload, clearFailedUpload, reading, ready, clearReady } = useDocumentUpload();
+
+  if (uploading) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.top}>
+          <Text style={styles.title}>Uploading {fileCount} file{fileCount === 1 ? "" : "s"}…</Text>
+          <Text style={styles.num}>{uploadPct}%</Text>
+        </View>
+        <View style={styles.bar}><View style={[styles.fill, { width: `${Math.max(4, uploadPct)}%`, backgroundColor: theme.fill }]} /></View>
+        <Text style={styles.hint}>You can keep using the app.</Text>
+      </View>
+    );
+  }
+
+  if (failedUpload) {
+    return (
+      <View style={[styles.card, styles.readyCard]}>
+        <View style={[styles.tick, { backgroundColor: NEUTRAL.danger }]}>
+          <X size={12} color="#fff" strokeWidth={3} />
+        </View>
+        <Text style={styles.readyText}>Upload didn't finish. {failedUpload.message}</Text>
+        <Pressable onPress={retryFailedUpload} hitSlop={8}><Text style={[styles.action, { color: theme.text }]}>Try again</Text></Pressable>
+        <Pressable onPress={clearFailedUpload} hitSlop={10} accessibilityLabel="Discard"><X size={15} color={NEUTRAL.textMuted} /></Pressable>
+      </View>
+    );
+  }
 
   if (reading) {
     const pct = Math.max(8, Math.round((reading.finished / reading.total) * 100));      // never an empty bar

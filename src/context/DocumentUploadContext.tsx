@@ -46,6 +46,31 @@ function toRequests(files: UploadCandidate[]): UploadCandidate[][] {
   return requests;
 }
 
+const BUSY = { status: "busy" as const, reason: "Still uploading your last files — wait a moment." };
+
+/** The quick checks that need no network: either the files are refused outright, or here are the ones to send. */
+function prepare(
+  allFiles: UploadCandidate[],
+  mode: UploadMode,
+): { refused: { status: "rejected"; reason: string } } | { valid: UploadCandidate[]; skipped: SkippedFile[] } {
+  const { valid, skipped } = partition(allFiles);
+  if (valid.length === 0) {
+    if (allFiles.length === 0) return { refused: { status: "rejected", reason: "No files selected." } };
+    return {
+      refused: {
+        status: "rejected",
+        reason: allFiles.length === 1
+          ? `${skipped[0].name}\n${skipped[0].reason}`
+          : `None of these files can be uploaded.\n\n${skipped.map((s) => `${s.name} — ${s.reason}`).join("\n")}`,
+      },
+    };
+  }
+  if (mode === "instant" && valid.length !== 1) {
+    return { refused: { status: "rejected", reason: "Add Document takes one file at a time. Use Bulk Upload for several." } };
+  }
+  return { valid, skipped };
+}
+
 const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
 const WATCH_GIVE_UP_MS = 10 * 60 * 1000;      // stop following files that never finish; the lists still show them
 
@@ -59,6 +84,14 @@ export type StartUploadOutcome =
   | { status: "busy"; reason: string }
   | { status: "started"; mode: UploadMode; documentIds: number[]; skipped: SkippedFile[] };
 
+/** What `queueUpload` says at once: it is on its way, or it was refused before sending anything. */
+export type QueueOutcome =
+  | { status: "queued"; skipped: SkippedFile[] }
+  | { status: "rejected" | "busy"; reason: string };
+
+/** An upload that did not get through; the unsent files are kept on the phone so it can be tried again. */
+type FailedUpload = { files: UploadCandidate[]; mode: UploadMode; patientAwpid?: string; message: string };
+
 interface DocumentUploadContextValue {
   uploading: boolean;
   /** 0..100 — how much of the files has reached the server (reading them happens afterwards, on the server). */
@@ -66,6 +99,12 @@ interface DocumentUploadContextValue {
   fileCount: number;
   /** "instant" is exactly one file on the fast lane; "bulk" is any number of files on the bulk lane. */
   startUpload: (files: UploadCandidate[], mode: UploadMode, patientAwpid?: string) => Promise<StartUploadOutcome>;
+  /** Starts the upload and returns immediately; it carries on in the background (see UploadStatusBar). */
+  queueUpload: (files: UploadCandidate[], mode: UploadMode, patientAwpid?: string) => QueueOutcome;
+  /** A background upload that failed, with the reason; null when there is none. */
+  failedUpload: { message: string; count: number } | null;
+  retryFailedUpload: () => void;
+  clearFailedUpload: () => void;
   /** The files sent and still being read, or null. */
   reading: ReadingState | null;
   /** Set when everything just sent has been read, until the patient dismisses it or opens the review. */
@@ -82,34 +121,21 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const queryClient = useQueryClient();
   const [watch, setWatch] = useState<{ ids: number[]; patientAwpid?: string } | null>(null);
   const [ready, setReady] = useState<ReadyState | null>(null);
+  const [failedUpload, setFailedUpload] = useState<FailedUpload | null>(null);
   // setState is async — two quick taps could both read a stale "not busy" and start two uploads.
   const busyRef = useRef(false);
 
-  const startUpload = useCallback(
-    async (allFiles: UploadCandidate[], mode: UploadMode, patientAwpid?: string): Promise<StartUploadOutcome> => {
-      const { valid, skipped } = partition(allFiles);
-      if (valid.length === 0) {
-        if (allFiles.length === 0) return { status: "rejected", reason: "No files selected." };
-        return {
-          status: "rejected",
-          reason: allFiles.length === 1
-            ? `${skipped[0].name}\n${skipped[0].reason}`
-            : `None of these files can be uploaded.\n\n${skipped.map((s) => `${s.name} — ${s.reason}`).join("\n")}`,
-        };
-      }
-      if (mode === "instant" && valid.length !== 1) {
-        return { status: "rejected", reason: "Add Document takes one file at a time. Use Bulk Upload for several." };
-      }
-      if (busyRef.current) return { status: "busy", reason: "Still uploading your last files — wait a moment." };
-
+  /** Sends the files. Resolves when the server has them (or has refused them); nothing is read yet at that point. */
+  const runUpload = useCallback(
+    async (valid: UploadCandidate[], skipped: SkippedFile[], mode: UploadMode, patientAwpid?: string): Promise<StartUploadOutcome & { unsent?: UploadCandidate[] }> => {
       busyRef.current = true;
       setUploading(true);
       setUploadPct(0);
       setFileCount(valid.length);
+      let sent = 0;
       try {
         const requests = toRequests(valid);
         const documentIds: number[] = [];
-        let sent = 0;
         for (const group of requests) {
           const result = await uploadDocuments(group, mode, patientAwpid, (fraction) =>
             setUploadPct(Math.round(((sent + group.length * fraction) / valid.length) * 100)),
@@ -129,7 +155,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
           : { ids: documentIds, patientAwpid }));
         return { status: "started", mode, documentIds, skipped };
       } catch (err) {
-        return { status: "rejected", reason: apiErrorMessage(err, "Upload failed, try again.") };
+        return { status: "rejected", reason: apiErrorMessage(err, "Upload failed, try again."), unsent: valid.slice(sent) };
       } finally {
         busyRef.current = false;
         setUploading(false);
@@ -137,6 +163,47 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
     },
     [queryClient],
   );
+
+  /** Uploads and waits for the result: for a screen that shows the upload itself or needs the new ids. */
+  const startUpload = useCallback(
+    async (files: UploadCandidate[], mode: UploadMode, patientAwpid?: string): Promise<StartUploadOutcome> => {
+      const prepared = prepare(files, mode);
+      if ("refused" in prepared) return prepared.refused;
+      if (busyRef.current) return BUSY;
+      return runUpload(prepared.valid, prepared.skipped, mode, patientAwpid);
+    },
+    [runUpload],
+  );
+
+  /**
+   * Starts the upload and returns at once, so a screen (the camera) can close straight away: the upload carries on in
+   * the background, the status bar shows it, and if it fails the files are kept so the patient can try again.
+   */
+  const queueUpload = useCallback(
+    (files: UploadCandidate[], mode: UploadMode, patientAwpid?: string): QueueOutcome => {
+      const prepared = prepare(files, mode);
+      if ("refused" in prepared) return prepared.refused;
+      if (busyRef.current) return BUSY;
+      setFailedUpload(null);
+      runUpload(prepared.valid, prepared.skipped, mode, patientAwpid).then((outcome) => {
+        if (outcome.status === "rejected" && outcome.unsent?.length) {
+          setFailedUpload({ files: outcome.unsent, mode, patientAwpid, message: outcome.reason });
+        }
+      });
+      return { status: "queued", skipped: prepared.skipped };
+    },
+    [runUpload],
+  );
+
+  const retryFailedUpload = useCallback(() => {
+    if (!failedUpload) return;
+    const { files, mode, patientAwpid } = failedUpload;
+    queueUpload(files, mode, patientAwpid);
+  }, [failedUpload, queueUpload]);
+  const clearFailedUpload = useCallback(() => {
+    failedUpload?.files.forEach((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {}));
+    setFailedUpload(null);
+  }, [failedUpload]);
 
   const watchQ = useQuery({
     queryKey: ["uploadWatch", watch?.patientAwpid ?? "self"],
@@ -179,7 +246,13 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const clearReady = useCallback(() => setReady(null), []);
 
   return (
-    <DocumentUploadContext.Provider value={{ uploading, uploadPct, fileCount, startUpload, reading, ready, clearReady }}>
+    <DocumentUploadContext.Provider
+      value={{
+        uploading, uploadPct, fileCount, startUpload, queueUpload, reading, ready, clearReady,
+        failedUpload: failedUpload ? { message: failedUpload.message, count: failedUpload.files.length } : null,
+        retryFailedUpload, clearFailedUpload,
+      }}
+    >
       {children}
     </DocumentUploadContext.Provider>
   );
