@@ -4,6 +4,7 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens, getBiometricL
 import { loginPatient, logout as apiLogout } from "@/api/auth";
 import { setSessionExpiredHandler } from "@/api/client";
 import { registerForPushNotifications } from "@/utils/pushNotifications";
+import { queryClient } from "@/api/queryClient";
 
 interface AuthContextValue {
   isLoading: boolean; // true only during the initial "do we have a saved session" check
@@ -65,6 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionExpiredHandler(() => {
       setIsAuthenticated(false);
       setNeedsUnlock(false);
+      // Whoever signs in next must never be shown this person's saved screens.
+      queryClient.clear();
     });
   }, []);
 
@@ -81,12 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (mobile: string, password: string) => {
     const tokens = await loginPatient(mobile, password);
     await saveTokens(tokens.access, tokens.refresh);
+    queryClient.clear();   // saved screens from a previous account must not appear under this one
     setNeedsUnlock(false);
     setIsAuthenticated(true);
   }, []);
 
   const loginWithTokens = useCallback(async (access: string, refresh: string) => {
     await saveTokens(access, refresh);
+    queryClient.clear();   // same as login: start this account with an empty cache
     setNeedsUnlock(false);
     setIsAuthenticated(true);
   }, []);
@@ -105,6 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearTokens();
     setNeedsUnlock(false);
     setIsAuthenticated(false);
+    // Drop every saved screen (profile, family, documents...) so the next person to sign in on this phone starts
+    // clean. Cleared after the app has switched to the login screens, so nothing still mounted refetches without a token.
+    queryClient.clear();
   }, []);
 
   return (

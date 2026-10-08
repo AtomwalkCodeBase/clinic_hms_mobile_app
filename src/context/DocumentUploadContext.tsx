@@ -6,6 +6,7 @@ import { getMyDocuments, uploadDocuments, UploadMode } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { notifyDocumentsReady } from "@/utils/pushNotifications";
 import { isReviewable } from "@/utils/reviewDraft";
+import { useAuth } from "@/context/AuthContext";
 
 /** One file to upload — built straight from a picked file or a camera shot, already on disk. */
 export type UploadCandidate = { name: string; mimeType: string; size: number; uri: string };
@@ -125,6 +126,17 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const [failedUpload, setFailedUpload] = useState<FailedUpload | null>(null);
   // setState is async — two quick taps could both read a stale "not busy" and start two uploads.
   const busyRef = useRef(false);
+
+  // Signing out (or an expired session) ends this person's upload tracking: the next account must not see the previous
+  // one's "reading" bar, "ready to review" bar or retry bar.
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setWatch(null);
+      setReady(null);
+      setFailedUpload(null);
+    }
+  }, [isAuthenticated]);
 
   /** Sends the files. Resolves when the server has them (or has refused them); nothing is read yet at that point. */
   const runUpload = useCallback(
