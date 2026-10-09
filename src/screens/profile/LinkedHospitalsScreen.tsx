@@ -9,6 +9,7 @@ import { NEUTRAL } from "@/theme/themes";
 import { getHealthSummary } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function LinkedHospitalsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -44,7 +45,7 @@ export function LinkedHospitalsScreen() {
 
 const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  empty: { fontSize: 12, color: NEUTRAL.textMuted },
-  name: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  date: { fontSize: 11, color: NEUTRAL.textMuted },
+  empty: { fontSize: CARD_TEXT.body, color: NEUTRAL.textMuted },
+  name: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  date: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted },
 });

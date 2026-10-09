@@ -7,6 +7,7 @@ import { Card } from "@/components/Card";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function ThemeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -36,5 +37,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: NEUTRAL.border },
   swatch: { width: 26, height: 26, borderRadius: 13 },
-  label: { flex: 1, fontSize: 13, color: NEUTRAL.textPrimary },
+  label: { flex: 1, fontSize: CARD_TEXT.body, color: NEUTRAL.textPrimary },
 });

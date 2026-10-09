@@ -14,11 +14,11 @@ export type ReviewStage = "review" | "ready";
 export interface ReviewEntry {
   /** The type the patient picked with Change, or null to keep the system's suggestion. */
   selectedType: string | null;
-  /** "review" = Needs Review window, "ready" = confirmed on the phone, waiting to be submitted. */
+  /** "review" = Needs Review window, "ready" = confirmed (by default, or by the patient), waiting to be submitted. */
   stage: ReviewStage;
 }
 
-/** Keyed by document id. A document with no entry is in Needs Review, untouched. */
+/** Keyed by document id. A document with no entry is untouched: it sits where `stageOf` puts it by default. */
 export type ReviewDraft = Record<string, ReviewEntry>;
 
 const FINISHED = new Set(["completed", "review_required"]);
@@ -41,7 +41,12 @@ export async function saveDraft(awpid: string, draft: ReviewDraft): Promise<void
   }
 }
 
-export const stageOf = (entry?: ReviewEntry): ReviewStage => entry?.stage ?? "review";
+/**
+ * Where a file is. Until the patient moves it, a file the system classified starts as confirmed ("ready") and only a file
+ * it could not classify starts in Needs Review. What the patient does (Confirm, Move back) is kept in the draft and wins.
+ */
+export const stageOf = (doc: PatientDocument, entry?: ReviewEntry): ReviewStage =>
+  entry?.stage ?? (doc.suggested_type ? "ready" : "review");
 export const isEdited = (entry?: ReviewEntry): boolean => !!entry?.selectedType;
 
 /** The type this file would be submitted under: the patient's pick, else the system's suggestion, else none. */
@@ -54,7 +59,7 @@ export const isReviewable = (doc: PatientDocument): boolean => FINISHED.has(doc.
 
 /** Picking the system's own suggestion again is not an edit. */
 export function withSelectedType(draft: ReviewDraft, doc: PatientDocument, type: string): ReviewDraft {
-  const stage = stageOf(draft[doc.id]);
+  const stage = stageOf(doc, draft[doc.id]);
   const selectedType = type === doc.suggested_type ? null : type;
   return { ...draft, [doc.id]: { selectedType, stage } };
 }
@@ -86,7 +91,7 @@ export function buildDecisions(
   for (const doc of docs) {
     if (!isReviewable(doc)) continue;
     const entry = draft[doc.id];
-    if (scope === "ready" && stageOf(entry) !== "ready") continue;
+    if (scope === "ready" && stageOf(doc, entry) !== "ready") continue;
     const type = currentType(doc, entry);
     if (!type) missing.push(doc);
     else decisions.push({ document_id: doc.id, document_type: type });

@@ -5,6 +5,7 @@ import { Screen, BackHeader } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { NEUTRAL } from "@/theme/themes";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function SupportScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -27,6 +28,6 @@ export function SupportScreen() {
 }
 
 const styles = StyleSheet.create({
-  text: { fontSize: 12, color: NEUTRAL.textSecondary, lineHeight: 18 },
-  note: { fontSize: 11, color: NEUTRAL.textMuted, lineHeight: 16, marginTop: 8 },
+  text: { fontSize: CARD_TEXT.body, color: NEUTRAL.textSecondary, lineHeight: 18 },
+  note: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, lineHeight: 16, marginTop: 8 },
 });

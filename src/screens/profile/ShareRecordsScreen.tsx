@@ -18,6 +18,7 @@ import {
 import { apiErrorMessage } from "@/api/client";
 import { RecordsShareCreated, RecordsShareDecision, RecordsShareGrant, RecordsShareScope } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD, CARD_TEXT } from "@/theme/cardSizes";
 
 // The doctor's laptop QR encodes …/share-records/<token>?p=<pairing>. Pull
 // both out: the token so we can check it's this patient's own session, the
@@ -458,9 +459,9 @@ const styles = StyleSheet.create({
   noticeRow: { flexDirection: "row", gap: 6, marginBottom: 16, paddingHorizontal: 2 },
   noticeIcon: { marginTop: 1, flexShrink: 0 },
   noticeText: { flex: 1, fontSize: 11.5, color: NEUTRAL.textSecondary, lineHeight: 16 },
-  card: { padding: 16, marginBottom: 12 },
-  h: { fontSize: 13.5, fontWeight: "700", color: NEUTRAL.textPrimary, marginBottom: 6 },
-  body: { fontSize: 12.5, color: NEUTRAL.textSecondary, lineHeight: 18 },
+  card: { padding: CARD.padding, marginBottom: CARD.gap },
+  h: { fontSize: CARD_TEXT.title, fontWeight: "700", color: NEUTRAL.textPrimary, marginBottom: 6 },
+  body: { fontSize: CARD_TEXT.body, color: NEUTRAL.textSecondary, lineHeight: 18 },
   label: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textPrimary, marginBottom: 6 },
   input: { borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9, fontSize: 13.5, color: NEUTRAL.textPrimary },
 
@@ -484,7 +485,7 @@ const styles = StyleSheet.create({
   checkList: { gap: 6, marginTop: 10, marginBottom: 16 },
   checkRow: { flexDirection: "row", gap: 6 },
   checkIcon: { marginTop: 2, flexShrink: 0 },
-  checkText: { flex: 1, fontSize: 12, color: NEUTRAL.textPrimary, lineHeight: 17 },
+  checkText: { flex: 1, fontSize: CARD_TEXT.body, color: NEUTRAL.textPrimary, lineHeight: 17 },
 
   scopeLabel: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8 },
   scopeOption: {
@@ -497,23 +498,23 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginTop: 1, flexShrink: 0,
   },
   radioDot: { width: 9, height: 9, borderRadius: 4.5 },
-  scopeTitle: { fontSize: 12.5, fontWeight: "700", color: NEUTRAL.textPrimary },
-  scopeBody: { fontSize: 11, color: NEUTRAL.textSecondary, lineHeight: 15, marginTop: 2 },
+  scopeTitle: { fontSize: CARD_TEXT.body, fontWeight: "700", color: NEUTRAL.textPrimary },
+  scopeBody: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, lineHeight: 15, marginTop: 2 },
 
   doneRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   doneTitle: { fontSize: 15, fontWeight: "700", color: NEUTRAL.success },
 
   sectionLabel: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", color: NEUTRAL.textMuted, marginBottom: 8, marginLeft: 2 },
   grantCard: { padding: 13, marginBottom: 8 },
-  grantWho: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  grantTime: { fontSize: 11, color: NEUTRAL.textMuted },
+  grantWho: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  grantTime: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted },
   fullAccessTag: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   fullAccessTagText: { fontSize: 9.5, fontWeight: "700", color: NEUTRAL.warning, textTransform: "uppercase", letterSpacing: 0.3 },
   dlBox: { marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
   dlText: { flex: 1, fontSize: 11.5, color: NEUTRAL.textSecondary, lineHeight: 16 },
 
   emptyRow: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center", marginTop: 8 },
-  emptyText: { fontSize: 11.5, color: NEUTRAL.textMuted },
+  emptyText: { fontSize: CARD_TEXT.body, color: NEUTRAL.textMuted },
 
   permWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, gap: 14 },
   permText: { color: "#fff", fontSize: 13, textAlign: "center" },

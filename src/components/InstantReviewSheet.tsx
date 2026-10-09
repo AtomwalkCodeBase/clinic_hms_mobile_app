@@ -40,6 +40,7 @@ export function InstantReviewSheet({
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -108,9 +109,11 @@ export function InstantReviewSheet({
       await dismissDocument(doc.id, patientAwpid);
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
+      setDeleting(false);
       close();
     } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't remove that file."));
+      setDeleting(false);
+      setError(apiErrorMessage(err, "Couldn't delete that file."));
     }
   }
 
@@ -139,7 +142,7 @@ export function InstantReviewSheet({
                 <Text style={[styles.centerTitle, { color: NEUTRAL.danger }]}>We couldn't read this file</Text>
                 <Text style={styles.centerSub}>{doc?.error || "Something went wrong while reading it."}</Text>
                 <Pressable onPress={retry} style={[styles.retry, { backgroundColor: theme.fill }]}><Text style={[styles.retryText, { color: theme.on }]}>Try again</Text></Pressable>
-                <Pressable onPress={dismiss} hitSlop={8}><Text style={styles.removeText}>Remove this file</Text></Pressable>
+                <Pressable onPress={() => setDeleting(true)} hitSlop={8}><Text style={styles.removeText}>Delete this file</Text></Pressable>
               </View>
             ) : doc && isReviewable(doc) ? (
               <>
@@ -157,7 +160,7 @@ export function InstantReviewSheet({
                   onChange={() => setPicking(true)}
                   onMoveBack={() => {}}
                   onRetry={retry}
-                  onDismiss={dismiss}
+                  onDelete={() => setDeleting(true)}
                 />
                 <Text style={styles.foot}>If you close this, the document stays in Bulk Upload until you confirm it.</Text>
               </>
@@ -173,6 +176,17 @@ export function InstantReviewSheet({
         onSelect={(code) => { setSelectedType(code === doc?.suggested_type ? null : code); setPicking(false); }}
         onClose={() => setPicking(false)}
       />
+      <ConfirmDialog
+        visible={deleting}
+        title="Delete this file?"
+        message={`${doc?.file_name || doc?.title || "This file"} will be deleted for good. This can't be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        danger
+        onConfirm={dismiss}
+        onCancel={() => setDeleting(false)}
+      />
+
       <ConfirmDialog
         visible={asking}
         title="Confirm this document?"

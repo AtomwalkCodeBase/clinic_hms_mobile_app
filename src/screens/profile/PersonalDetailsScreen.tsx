@@ -17,6 +17,7 @@ import { verifyContactChangeOtp } from "@/api/auth";
 import { apiErrorMessage } from "@/api/client";
 import { Profile } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function PersonalDetailsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -230,14 +231,14 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  editLink: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary, marginRight: 16 },
+  editLink: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary, marginRight: 16 },
   sectionLabel: { fontSize: 10.5, fontWeight: "600", color: NEUTRAL.textMuted, letterSpacing: 0.4, marginTop: 6, marginBottom: 8 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 9 },
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: NEUTRAL.border },
-  rowLabel: { fontSize: 12, color: NEUTRAL.textMuted },
-  rowValue: { fontSize: 13, color: NEUTRAL.textPrimary, fontWeight: "500" },
-  emName: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  emMeta: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 3 },
+  rowLabel: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted },
+  rowValue: { fontSize: CARD_TEXT.body, color: NEUTRAL.textPrimary, fontWeight: "500" },
+  emName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  emMeta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   otpBox: {
     backgroundColor: NEUTRAL.surfaceAlt,
     borderRadius: 10,

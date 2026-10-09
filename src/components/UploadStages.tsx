@@ -2,6 +2,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Check } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import { CARD } from "@/theme/cardSizes";
 
 type StepState = "pending" | "active" | "done";
 
@@ -54,7 +55,7 @@ export function UploadStages({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: NEUTRAL.surface, borderRadius: 14, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 12, marginBottom: 14 },
+  card: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: CARD.padding, marginBottom: CARD.gap },
   title: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
   bar: { height: 6, borderRadius: 3, backgroundColor: NEUTRAL.surfaceAlt, overflow: "hidden", marginTop: 9, marginBottom: 8 },
   fill: { height: "100%", borderRadius: 3 },

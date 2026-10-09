@@ -9,6 +9,7 @@ import { NEUTRAL } from "@/theme/themes";
 import { getHealthSummary } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function HealthSummaryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -62,11 +63,11 @@ export function HealthSummaryScreen() {
 const styles = StyleSheet.create({
   tileRow: { flexDirection: "row", gap: 8, marginTop: 4 },
   tile: { flex: 1 },
-  tileLabel: { fontSize: 9.5, color: NEUTRAL.textMuted, marginBottom: 4 },
-  tileValue: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  sectionLabel: { fontSize: 10.5, fontWeight: "600", color: NEUTRAL.textMuted, letterSpacing: 0.4, marginTop: 14, marginBottom: 8 },
+  tileLabel: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textMuted, marginBottom: 4 },
+  tileValue: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  sectionLabel: { fontSize: CARD_TEXT.tiny, fontWeight: "600", color: NEUTRAL.textMuted, letterSpacing: 0.4, marginTop: 14, marginBottom: 8 },
   diagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   diagPill: { backgroundColor: NEUTRAL.surfaceAlt, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  diagText: { fontSize: 11, color: NEUTRAL.textPrimary },
-  empty: { fontSize: 12, color: NEUTRAL.textMuted },
+  diagText: { fontSize: CARD_TEXT.body, color: NEUTRAL.textPrimary },
+  empty: { fontSize: CARD_TEXT.body, color: NEUTRAL.textMuted },
 });

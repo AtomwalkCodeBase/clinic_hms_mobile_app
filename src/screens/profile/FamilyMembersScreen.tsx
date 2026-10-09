@@ -14,6 +14,7 @@ import { getFamily, removeFamilyMember } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { FamilyMember } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function FamilyMembersScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -102,9 +103,9 @@ function relationshipLabel(value: string): string {
 
 const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addLink: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary, marginRight: 16 },
-  empty: { fontSize: 12, color: NEUTRAL.textMuted },
-  name: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  meta: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 3 },
+  addLink: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary, marginRight: 16 },
+  empty: { fontSize: CARD_TEXT.body, color: NEUTRAL.textMuted },
+  name: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  meta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   actionsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 10 },
 });

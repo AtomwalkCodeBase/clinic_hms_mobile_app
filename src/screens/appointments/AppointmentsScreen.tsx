@@ -24,6 +24,7 @@ import { MetalHero } from "@/components/MetalHero";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { IconBadge } from "@/components/IconBadge";
 import { CheckCircle2, ChevronRight } from "lucide-react-native";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 // "3 days ago" reads faster than a raw ISO date in a past-visits list — the
 // date is still shown alongside it, this is just a scannable headline.
@@ -336,13 +337,13 @@ const styles = StyleSheet.create({
   bannerBtnText: { fontSize: 12.5, fontWeight: "700" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   trailingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  hospitalName: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  doctorLine: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 4, marginBottom: 8 },
-  dateLine: { fontSize: 12, fontWeight: "600" },
-  tokenLine: { fontSize: 11, color: NEUTRAL.textMuted },
+  hospitalName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  doctorLine: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 4, marginBottom: 8 },
+  dateLine: { fontSize: CARD_TEXT.body, fontWeight: "600" },
+  tokenLine: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textMuted },
   compactActionsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 10 },
   pastCard: { paddingVertical: 14 },
   pastRow: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 4 },
-  pastTimeAgo: { fontSize: 11, fontWeight: "700", color: NEUTRAL.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
+  pastTimeAgo: { fontSize: CARD_TEXT.tiny, fontWeight: "700", color: NEUTRAL.textMuted, textTransform: "uppercase", letterSpacing: 0.3 },
   loadMoreBtn: { marginTop: 6, marginBottom: 4 },
 });

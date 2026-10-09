@@ -1,19 +1,21 @@
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
-import { FileText, Image as ImageIcon } from "lucide-react-native";
+import { FileText, Image as ImageIcon, Trash2 } from "lucide-react-native";
 import type { PatientDocument } from "@/api/types";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { isEdited, isReviewable, currentType, ReviewEntry } from "@/utils/reviewDraft";
+import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
 
 /**
  * One uploaded file on the Bulk Upload screen.
- *   Needs Review   the file, what the system made of it ("Classified as Lab Report" + its score, or "Your selection:
- *                  Prescription" once changed) and two captioned buttons on the right: Confirm / Change.
+ *   Needs Review   the file, what the system made of it ("Classified as Lab Report" or "Your selection: Prescription"
+ *                  once changed, "Not classified" when the rules couldn't tell) and, under it, Confirm / Change.
  *   Ready to Submit the file and its final type, with a "Move back" link.
- * A file that is still being read, or could not be read, shows that instead of the buttons.
+ * A file that is still being read shows that instead of any buttons, and has no delete icon: the server is still using
+ * it. Every file that has been read, and every file that failed, has a red delete icon at the right.
  */
 export function ReviewRow({
-  doc, entry, mode, labelOf, onView, onConfirm, onChange, onMoveBack, onRetry, onDismiss,
+  doc, entry, mode, labelOf, onView, onConfirm, onChange, onMoveBack, onRetry, onDelete,
 }: {
   doc: PatientDocument;
   entry?: ReviewEntry;
@@ -24,8 +26,8 @@ export function ReviewRow({
   onChange: () => void;
   onMoveBack: () => void;
   onRetry: () => void;
-  /** remove a file that failed (only offered for a failed file) */
-  onDismiss?: () => void;
+  /** delete the file for good (asks first); offered once the file has been read, and for a file that failed */
+  onDelete: () => void;
 }) {
   const { theme } = useAppTheme();
   const isImage = doc.mime_type?.startsWith("image/");
@@ -58,37 +60,42 @@ export function ReviewRow({
 
   return (
     <View style={styles.row}>
-      <Pressable onPress={onView} style={styles.left}>
-        <View style={[styles.icon, { backgroundColor: NEUTRAL.surfaceAlt }]}>
-          {working ? <ActivityIndicator size="small" color={theme.fill} /> : <Icon size={18} color={NEUTRAL.textSecondary} strokeWidth={2} />}
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.name} numberOfLines={1}>{doc.file_name || doc.title}</Text>
-          {line}
-        </View>
-      </Pressable>
+      <View style={styles.top}>
+        <Pressable onPress={onView} style={styles.left}>
+          <View style={[styles.icon, { backgroundColor: NEUTRAL.surfaceAlt }]}>
+            {working ? <ActivityIndicator size="small" color={theme.fill} /> : <Icon size={20} color={NEUTRAL.textSecondary} strokeWidth={2} />}
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.name} numberOfLines={1}>{doc.file_name || doc.title}</Text>
+            {line}
+            {failed && (
+              <Pressable onPress={onRetry} hitSlop={8} style={styles.sideLink}>
+                <Text style={[styles.sideLinkText, { color: theme.text }]}>Try again</Text>
+              </Pressable>
+            )}
+            {!failed && !working && mode === "ready" && (
+              <Pressable onPress={onMoveBack} hitSlop={8} style={styles.sideLink}>
+                <Text style={[styles.sideLinkText, { color: theme.text }]}>Move back</Text>
+              </Pressable>
+            )}
+          </View>
+        </Pressable>
 
-      {failed ? (
-        <View style={styles.failActions}>
-          <Pressable onPress={onRetry} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: theme.text }]}>Try again</Text></Pressable>
-          {onDismiss && <Pressable onPress={onDismiss} hitSlop={8} style={styles.retry}><Text style={[styles.retryText, { color: NEUTRAL.danger }]}>Remove</Text></Pressable>}
-        </View>
-      ) : working ? null : mode === "ready" ? (
-        <Pressable onPress={onMoveBack} hitSlop={8}><Text style={[styles.moveBack, { color: theme.text }]}>Move back</Text></Pressable>
-      ) : (
+        {!working && (
+          <Pressable onPress={onDelete} hitSlop={6} style={styles.del} accessibilityRole="button" accessibilityLabel="Delete this file">
+            <Trash2 size={19} color={NEUTRAL.danger} strokeWidth={2} />
+          </Pressable>
+        )}
+      </View>
+
+      {!failed && !working && mode === "review" && (
         <View style={styles.buttons}>
-          <View style={styles.btnCol}>
-            <Text style={styles.caption}>Looks right</Text>
-            <Pressable onPress={onConfirm} style={[styles.btn, { backgroundColor: theme.fill }, !type && { opacity: 0.45 }]}>
-              <Text style={[styles.btnText, { color: theme.on }]}>Confirm</Text>
-            </Pressable>
-          </View>
-          <View style={styles.btnCol}>
-            <Text style={styles.caption}>Not right</Text>
-            <Pressable onPress={onChange} style={[styles.btn, styles.btnOutline]}>
-              <Text style={[styles.btnText, { color: NEUTRAL.textPrimary }]}>Change</Text>
-            </Pressable>
-          </View>
+          <Pressable onPress={onConfirm} style={[styles.btn, { backgroundColor: theme.fill }, !type && { opacity: 0.45 }]}>
+            <Text style={[styles.btnText, { color: theme.on }]}>Confirm</Text>
+          </Pressable>
+          <Pressable onPress={onChange} style={[styles.btn, styles.btnOutline]}>
+            <Text style={[styles.btnText, { color: NEUTRAL.textPrimary }]}>Change</Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -96,22 +103,20 @@ export function ReviewRow({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.surface, borderRadius: 14, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 10, marginBottom: 8 },
-  left: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 9 },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  name: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
+  row: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: CARD.padding, marginBottom: CARD.gap },
+  top: { flexDirection: "row", alignItems: "center", gap: 10 },
+  left: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12 },
+  icon: { width: CARD_ICON, height: CARD_ICON, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  name: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
   lineRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 3 },
-  sub: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 3 },
+  sub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   subStrong: { fontWeight: "700", color: NEUTRAL.textPrimary },
-  edited: { fontSize: 10.5, color: NEUTRAL.warning, backgroundColor: NEUTRAL.warningBg, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, marginLeft: 6, overflow: "hidden" },
-  buttons: { flexDirection: "row", gap: 6 },
-  btnCol: { width: 66, alignItems: "stretch" },
-  caption: { fontSize: 10.5, color: NEUTRAL.textMuted, textAlign: "center", marginBottom: 3 },
-  btn: { paddingVertical: 7, borderRadius: 9, alignItems: "center" },
+  edited: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.warning, backgroundColor: NEUTRAL.warningBg, paddingHorizontal: 7, paddingVertical: 1, borderRadius: 8, marginLeft: 6, overflow: "hidden" },
+  sideLink: { alignSelf: "flex-start", marginTop: 6 },
+  sideLinkText: { fontSize: CARD_TEXT.body, fontWeight: "600" },
+  del: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: NEUTRAL.dangerBg, borderWidth: 0.5, borderColor: NEUTRAL.danger },
+  buttons: { flexDirection: "row", gap: 10, marginTop: 12 },
+  btn: { flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: "center" },
   btnOutline: { borderWidth: 0.5, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface },
-  btnText: { fontSize: 11.5, fontWeight: "700" },
-  moveBack: { fontSize: 12, fontWeight: "600" },
-  failActions: { alignItems: "flex-end", gap: 6 },
-  retry: { paddingHorizontal: 4 },
-  retryText: { fontSize: 12, fontWeight: "700" },
+  btnText: { fontSize: CARD_TEXT.body, fontWeight: "700" },
 });

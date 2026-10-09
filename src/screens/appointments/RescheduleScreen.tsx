@@ -14,6 +14,7 @@ import { useNetwork } from "@/context/NetworkContext";
 import { SlotEntry } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { MessageDialog } from "@/components/MessageDialog";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 function dateOffsetLabel(daysFromToday: number): { key: string; label: string } {
   const d = new Date();
@@ -144,8 +145,8 @@ export function RescheduleScreen() {
 }
 
 const styles = StyleSheet.create({
-  doctor: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  hospital: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 3 },
+  doctor: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  hospital: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   slotsLoading: { fontSize: 12, color: NEUTRAL.textMuted, marginTop: 4, marginBottom: 8 },
   slotGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   slot: { borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: NEUTRAL.surface },

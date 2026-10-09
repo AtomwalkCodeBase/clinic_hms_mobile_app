@@ -19,6 +19,7 @@ import { apiErrorMessage } from "@/api/client";
 import { getRecordsPrivacy, toggleRecordPrivacy, updateRecordsPrivacy, revealForShare, RecordsPrivacyQuery } from "@/api/portal";
 import { RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
 
 const CATEGORY_LABELS: Record<string, string> = {
   cbc: "Complete Blood Count", lipid: "Lipid Profile", lft: "Liver Function Test",
@@ -491,10 +492,10 @@ const styles = StyleSheet.create({
   grpPill: { borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 20, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface },
   grpPillText: { fontSize: 9.5, fontWeight: "600", color: NEUTRAL.textMuted },
 
-  rec: { flexDirection: "row", alignItems: "center", gap: 11, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 12, marginBottom: 8 },
-  tile: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  recTitle: { fontSize: 12.5, fontWeight: "500", color: NEUTRAL.textPrimary },
-  recSub: { fontSize: 10.5, color: NEUTRAL.textMuted, marginTop: 2 },
+  rec: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: CARD.radius, paddingVertical: CARD.padding - 2, paddingHorizontal: CARD.padding, marginBottom: CARD.gap },
+  tile: { width: CARD_ICON, height: CARD_ICON, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  recTitle: { fontSize: CARD_TEXT.title, fontWeight: "500", color: NEUTRAL.textPrimary },
+  recSub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, marginTop: 2 },
   pill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 76, borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface },
   pillDot: { width: 5, height: 5, borderRadius: 3 },
   pillText: { fontSize: 9.5, fontWeight: "600" },

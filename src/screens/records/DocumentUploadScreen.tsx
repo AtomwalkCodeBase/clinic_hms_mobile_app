@@ -135,8 +135,8 @@ export function DocumentUploadScreen() {
   const visible = docs.filter((d) => revealed.has(d.id));
   const waitingToShow = docs.length - visible.length;
 
-  const inReview = visible.filter((d) => stageOf(draft[d.id]) === "review");
-  const ready = visible.filter((d) => stageOf(draft[d.id]) === "ready" && isReviewable(d));
+  const inReview = visible.filter((d) => stageOf(d, draft[d.id]) === "review");
+  const ready = visible.filter((d) => stageOf(d, draft[d.id]) === "ready" && isReviewable(d));
   const shown = tab === "review" ? inReview : ready;
   const submittable = visible.filter(isReviewable).length;
 
@@ -215,7 +215,7 @@ export function DocumentUploadScreen() {
       queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
     } catch (err) {
       setDismissing(null);
-      setActionError(apiErrorMessage(err, "Couldn't remove that file."));
+      setActionError(apiErrorMessage(err, "Couldn't delete that file."));
     } finally {
       setRemoving(false);
     }
@@ -359,7 +359,7 @@ export function DocumentUploadScreen() {
             onChange={() => setPicker({ doc, thenConfirm: false })}
             onMoveBack={() => moveBack(doc.id)}
             onRetry={() => retry(doc)}
-            onDismiss={() => setDismissing(doc)}
+            onDelete={() => setDismissing(doc)}
           />
           </FadeIn>
         ))
@@ -376,10 +376,15 @@ export function DocumentUploadScreen() {
 
       <ConfirmDialog
         visible={!!dismissing}
-        title="Remove this file?"
-        message={`${dismissing?.file_name || dismissing?.title || "This file"} couldn't be read. Removing it deletes it for good; you can upload it again any time.`}
-        confirmLabel="Remove"
+        title="Delete this file?"
+        message={
+          dismissing?.processing_status === "failed"
+            ? `${dismissing.file_name || dismissing.title || "This file"} couldn't be read. Deleting it removes it for good; you can upload it again any time.`
+            : `${dismissing?.file_name || dismissing?.title || "This file"} will be deleted for good. This can't be undone.`
+        }
+        confirmLabel="Delete"
         cancelLabel="Keep"
+        danger
         loading={removing}
         onConfirm={doDismiss}
         onCancel={() => setDismissing(null)}

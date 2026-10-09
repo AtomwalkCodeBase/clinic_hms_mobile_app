@@ -4,6 +4,7 @@ import { IconBadge } from "@/components/IconBadge";
 import { NEUTRAL } from "@/theme/themes";
 import { WHISPER_GREEN } from "@/theme/gadgetSurface";
 import type { LucideIcon } from "@/theme/icons";
+import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
 
 /**
  * A tinted structural shape for the per-person colours in theme/familyColors.ts (age/gender-derived tints used on the
@@ -26,9 +27,9 @@ export function GadgetCard({
   subtitle,
   onPress,
   disabled,
-  iconSize = 36,
-  radius = 16,
-  cardPadding = 14,
+  iconSize = CARD_ICON,
+  radius = CARD.radius,
+  cardPadding = CARD.padding,
   badge,
   style,
 }: {
@@ -92,10 +93,10 @@ const styles = StyleSheet.create({
   // flex: 1 so the visible gradient card fills whatever height the outer Pressable ends up with when a 2-up grid row
   // stretches it to match a taller sibling — without it, the shadow (attached to the taller, stretched Pressable) sat
   // below an invisible gap under the shorter visible card, reading as a misaligned floating shadow.
-  card: { flex: 1, borderRadius: 16, padding: 14, borderWidth: 1, overflow: "hidden" },
+  card: { flex: 1, borderRadius: CARD.radius, padding: CARD.padding, borderWidth: 1, overflow: "hidden" },
   content: { position: "relative" },
   badge: { position: "absolute", top: 10, right: 10, backgroundColor: "#F2B544", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1.5, zIndex: 2 },
   badgeText: { fontSize: 10.5, fontWeight: "700", color: "#3B2A05" },
-  title: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 10 },
-  sub: { fontSize: 10.5, color: NEUTRAL.textSecondary, marginTop: 4, lineHeight: 14 },
+  title: { fontSize: CARD_TEXT.title, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 10 },
+  sub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 4, lineHeight: 17 },
 });

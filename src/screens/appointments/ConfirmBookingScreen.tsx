@@ -15,6 +15,7 @@ import { ConsentRequired } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CheckCircle2 } from "lucide-react-native";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 // This screen exists specifically so booking a slot is never one tap —
 // the patient reviews doctor/hospital/date here and must explicitly confirm
@@ -207,9 +208,9 @@ const styles = StyleSheet.create({
   iconWrap: { alignItems: "center", marginTop: 4, marginBottom: 8 },
   title: { fontSize: 16, fontWeight: "600", textAlign: "center", color: NEUTRAL.textPrimary },
   subtitle: { fontSize: 12, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 4, marginBottom: 16, paddingHorizontal: 8 },
-  doctor: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  hospital: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 3 },
-  dateLine: { fontSize: 12.5, fontWeight: "600", marginTop: 8 },
+  doctor: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  hospital: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
+  dateLine: { fontSize: CARD_TEXT.body, fontWeight: "600", marginTop: 8 },
   feeRow: {
     flexDirection: "row",
     alignItems: "center",

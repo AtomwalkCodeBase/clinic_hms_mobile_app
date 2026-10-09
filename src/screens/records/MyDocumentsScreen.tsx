@@ -35,6 +35,7 @@ import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { pickDocuments, downloadDataUri, openInExternalApp } from "@/utils/fileHelpers";
 import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
 
 const PAGE = 15;
 
@@ -900,11 +901,11 @@ const styles = StyleSheet.create({
 
   grpLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: NEUTRAL.textMuted, marginTop: 6, marginBottom: 8 },
 
-  rec: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 13, padding: 11, marginBottom: 8 },
-  bdg: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  recT: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  recS: { fontSize: 10.5, color: NEUTRAL.textMuted, marginTop: 2 },
-  recDt: { fontSize: 10, color: NEUTRAL.textMuted },
+  rec: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: CARD.radius, padding: CARD.padding, marginBottom: CARD.gap },
+  bdg: { width: CARD_ICON, height: CARD_ICON, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  recT: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  recS: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, marginTop: 2 },
+  recDt: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textMuted },
   tag: { fontSize: 8.5, fontWeight: "700", letterSpacing: 0.4, color: NEUTRAL.textSecondary, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
 
   count: { textAlign: "center", fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 4 },

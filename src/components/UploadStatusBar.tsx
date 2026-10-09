@@ -3,6 +3,7 @@ import { Check, X } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { ReadyState, useDocumentUpload } from "@/context/DocumentUploadContext";
+import { CARD } from "@/theme/cardSizes";
 
 /**
  * A slim bar for files just sent, from the moment the upload starts: its progress while the photo or file goes up (the
@@ -77,7 +78,7 @@ export function UploadStatusBar({ onReview }: { onReview: (ready: ReadyState) =>
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: NEUTRAL.surface, borderRadius: 14, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 12, marginBottom: 12 },
+  card: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: CARD.padding, marginBottom: CARD.gap },
   readyCard: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11 },
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   title: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },

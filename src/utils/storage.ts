@@ -11,7 +11,6 @@ const REFRESH_KEY = "aw_refresh_token";
 const BIOMETRIC_LOCK_KEY = "aw_biometric_lock_enabled";
 const WELCOME_SEEN_KEY = "aw_welcome_seen";
 const BIOMETRIC_PROMPT_SEEN_KEY = "aw_biometric_prompt_seen";
-const HOME_CHECKLIST_DISMISSED_KEY = "aw_home_checklist_dismissed";
 const isWeb = Platform.OS === "web";
 
 async function setItem(key: string, value: string) {
@@ -91,15 +90,4 @@ export async function getBiometricPromptSeen(): Promise<boolean> {
 
 export async function setBiometricPromptSeen() {
   await setItem(BIOMETRIC_PROMPT_SEEN_KEY, "1");
-}
-
-// The Home "Get started" checklist — purely a first-run nudge, never a
-// gate. Dismissing it is permanent on this device; nothing it points at
-// stops being reachable through the normal tabs either way.
-export async function getHomeChecklistDismissed(): Promise<boolean> {
-  return (await getItem(HOME_CHECKLIST_DISMISSED_KEY)) === "1";
-}
-
-export async function setHomeChecklistDismissed() {
-  await setItem(HOME_CHECKLIST_DISMISSED_KEY, "1");
 }

@@ -11,6 +11,7 @@ import { getNotifications, markNotificationRead } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { NotificationItem } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 const TYPE_LABEL: Record<NotificationItem["type"], string> = {
   appointment_reminder: "Appointment",
@@ -79,6 +80,6 @@ const styles = StyleSheet.create({
   unreadCard: { borderWidth: 1, borderColor: NEUTRAL.success },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: NEUTRAL.success },
-  body: { fontSize: 12.5, color: NEUTRAL.textPrimary, marginTop: 8 },
-  meta: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: 6 },
+  body: { fontSize: CARD_TEXT.body, color: NEUTRAL.textPrimary, marginTop: 8 },
+  meta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, marginTop: 6 },
 });

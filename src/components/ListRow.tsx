@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { WHISPER_GREEN } from "@/theme/gadgetSurface";
 import { Pill } from "./Pill";
 import { IconBadge } from "./IconBadge";
+import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
 
 type Tone = "success" | "warning" | "danger" | "neutral";
 
@@ -44,10 +45,10 @@ export function ListRow({
           colors={WHISPER_GREEN.bg}
           start={{ x: 0.05, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+          style={[StyleSheet.absoluteFill, { borderRadius: CARD.radius }]}
         />
       )}
-      <IconBadge icon={icon} size={30} colors={iconColors} shadowColor={iconShadowColor} />
+      <IconBadge icon={icon} size={CARD_ICON} colors={iconColors} shadowColor={iconShadowColor} />
       <View style={styles.mid}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -74,18 +75,18 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     backgroundColor: NEUTRAL.surface,
     borderWidth: 0.5,
     borderColor: NEUTRAL.border,
-    borderRadius: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    borderRadius: CARD.radius,
+    paddingVertical: CARD.padding - 2,
+    paddingHorizontal: CARD.padding,
+    marginBottom: CARD.gap,
   },
   rowTinted: { borderColor: WHISPER_GREEN.border, borderWidth: 1, overflow: "hidden", backgroundColor: "#F2FAF6" },
   mid: { flex: 1, minWidth: 0 },
-  title: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  subtitle: { fontSize: 11, color: NEUTRAL.textSecondary, marginTop: 2 },
+  title: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  subtitle: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 2 },
   chev: { marginLeft: 2 },
 });

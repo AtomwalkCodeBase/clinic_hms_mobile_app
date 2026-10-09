@@ -13,6 +13,7 @@ import { getFamily } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { RELATIONSHIP_OPTIONS } from "@/constants/options";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 function relationshipLabel(value: string): string {
   return RELATIONSHIP_OPTIONS.find((o) => o.value === value)?.label || value;
@@ -103,13 +104,13 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, color: NEUTRAL.textSecondary, marginBottom: 16 },
   optionRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   iconWrap: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
-  optionTitle: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  optionSub: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 2 },
+  optionTitle: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  optionSub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 2 },
   familySection: { marginTop: 4 },
   loading: { fontSize: 12, color: NEUTRAL.textMuted, textAlign: "center", marginVertical: 8 },
   memberRow: { paddingVertical: 12 },
-  memberName: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  memberMeta: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 3 },
+  memberName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  memberMeta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   addLinkWrap: { alignSelf: "center", marginTop: 6, marginBottom: 4 },
-  addLink: { fontSize: 12.5, fontWeight: "600" },
+  addLink: { fontSize: CARD_TEXT.body, fontWeight: "600" },
 });

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Animated, Easing, View, StyleSheet, ViewStyle, DimensionValue } from "react-native";
 import { NEUTRAL } from "@/theme/themes";
+import {  } from "@/theme/cardSizes";
 
 /**
  * Shimmer placeholders for a screen's TRUE first load (no cached data at
@@ -73,6 +74,6 @@ export function SkeletonRow({ style }: { style?: ViewStyle }) {
 }
 
 const styles = StyleSheet.create({
-  gadgetCard: { backgroundColor: NEUTRAL.surface, borderRadius: 20, padding: 16, height: 96 },
+  gadgetCard: { backgroundColor: NEUTRAL.surface, borderRadius: 20, padding: 16, height: 112 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 11 },
 });

@@ -12,6 +12,7 @@ import { apiErrorMessage } from "@/api/client";
 import { DoctorCard, Hospital, Specialty } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function FindDoctorsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -238,12 +239,12 @@ const styles = StyleSheet.create({
   specItem: { width: "25%", alignItems: "center", marginBottom: 14 },
   specCircle: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", marginBottom: 6 },
   specLabel: { fontSize: 10, color: NEUTRAL.textSecondary, textAlign: "center" },
-  hospitalHeading: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary, marginTop: 10, marginBottom: 8 },
+  hospitalHeading: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary, marginTop: 10, marginBottom: 8 },
   docRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: NEUTRAL.border },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   avatarText: { fontWeight: "700", fontSize: 13 },
-  docName: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  docSpec: { fontSize: 11, color: NEUTRAL.textSecondary, marginTop: 1 },
-  docMeta: { fontSize: 10, color: NEUTRAL.textMuted, marginTop: 2 },
+  docName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  docSpec: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 1 },
+  docMeta: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textMuted, marginTop: 2 },
   bookBtn: { paddingHorizontal: 16, paddingVertical: 9, flexShrink: 0 },
 });

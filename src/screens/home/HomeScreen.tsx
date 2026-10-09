@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -8,7 +8,7 @@ import { SkeletonBlock, SkeletonGadgetCard } from "@/components/Skeleton";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { CalendarDays, ClipboardList, HeartPulse, FileText, QrCode, Bell, ChevronRight, Users, X, Upload } from "lucide-react-native";
+import { CalendarDays, ClipboardList, FileText, QrCode, Bell, ChevronRight, Upload } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
@@ -20,19 +20,12 @@ import { GadgetCard } from "@/components/GadgetCard";
 import type { LucideIcon } from "@/theme/icons";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
 import { NEUTRAL } from "@/theme/themes";
-import { useAppTheme } from "@/context/ThemeContext";
 import { getStats, getMyBookings, getNotifications, getProfile, getDocumentCounts } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
 import { AppTabsParamList } from "@/navigation/types";
 import { useExitOnDoubleBack } from "@/utils/useExitOnDoubleBack";
-import { getHomeChecklistDismissed, setHomeChecklistDismissed } from "@/utils/storage";
-
-const GET_STARTED_ITEMS: { key: string; label: string; icon: LucideIcon }[] = [
-  { key: "book", label: "Book your first appointment", icon: CalendarDays },
-  { key: "family", label: "Add a family member", icon: Users },
-  { key: "health", label: "Complete your health profile", icon: HeartPulse },
-];
+import { CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<AppTabsParamList, "Home">,
@@ -67,8 +60,6 @@ function greetingForHour(hour: number): string {
 export function HomeScreen() {
   useExitOnDoubleBack();
   const navigation = useNavigation<Nav>();
-  const { theme } = useAppTheme();
-  const [checklistDismissed, setChecklistDismissed] = useState(true);
   // Recomputed every minute so "Good morning"/the date roll over on their
   // own while the app is sitting open, not just on the next full reload.
   const [now, setNow] = useState(new Date());
@@ -95,12 +86,6 @@ export function HomeScreen() {
   useRefreshOnFocus([statsQ, bookingsQ, notifsQ, profileQ, docCountsQ]);
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
-  useFocusEffect(
-    useCallback(() => {
-      getHomeChecklistDismissed().then(setChecklistDismissed);
-    }, [])
-  );
-
   const stats = statsQ.data ?? null;
   const upcoming = (bookingsQ.data?.results ?? []).filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status));
   const unreadCount = notifsQ.data?.unread_count ?? 0;
@@ -117,16 +102,6 @@ export function HomeScreen() {
     else if (key === "documentUpload") navigation.navigate("DocumentUpload");
   };
   const onBookVisit = () => navigation.navigate("BookingFor", undefined);
-
-  const onDismissChecklist = () => {
-    setChecklistDismissed(true);
-    setHomeChecklistDismissed();
-  };
-  const onChecklistItem = (key: string) => {
-    if (key === "book") onBookVisit();
-    else if (key === "family") navigation.navigate("FamilyMembers");
-    else if (key === "health") navigation.navigate("HealthSummary");
-  };
 
   const nextUp = upcoming[0];
   // "Your bookings" used to show the next 2 upcoming appointments regardless
@@ -240,33 +215,6 @@ export function HomeScreen() {
         </View>
       </Pressable>
 
-      {!checklistDismissed && !!bookingsQ.data && upcoming.length === 0 && (
-        <Card style={styles.checklistCard}>
-          <View style={styles.checklistHeader}>
-            <Text style={styles.checklistTitle}>Get started</Text>
-            <Pressable onPress={onDismissChecklist} hitSlop={8}>
-              <X size={15} color={NEUTRAL.textMuted} strokeWidth={2.2} />
-            </Pressable>
-          </View>
-          {GET_STARTED_ITEMS.map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <Pressable
-                key={item.key}
-                onPress={() => onChecklistItem(item.key)}
-                style={[styles.checklistItem, i > 0 && styles.checklistItemBorder]}
-              >
-                <View style={[styles.checklistDot, { backgroundColor: theme.bg }]}>
-                  <Icon size={13} color={theme.text} strokeWidth={2.2} />
-                </View>
-                <Text style={styles.checklistText}>{item.label}</Text>
-                <ChevronRight size={15} color={NEUTRAL.textMuted} strokeWidth={2.2} />
-              </Pressable>
-            );
-          })}
-        </Card>
-      )}
-
       <Text style={styles.sectionTitle}>Quick access</Text>
       <View style={styles.grid}>
         {QUICK_ACTIONS.map((qa) => (
@@ -276,7 +224,7 @@ export function HomeScreen() {
             title={qa.label}
             subtitle={qa.sub}
             badge={qa.key === "documentUpload" && awaitingReview > 0 ? `${awaitingReview} to review` : undefined}
-            iconSize={34}
+            iconSize={CARD_ICON}
             radius={22}
             cardPadding={16}
             onPress={() => onQuickAction(qa.key)}
@@ -354,8 +302,8 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-  remTitle: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  remSub: { fontSize: 11, color: NEUTRAL.textSecondary, marginTop: 3 },
+  remTitle: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  remSub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   bookCta: {
     position: "relative",
     overflow: "hidden",
@@ -373,26 +321,19 @@ const styles = StyleSheet.create({
   },
   bookGlow: { position: "absolute", top: -30, right: -30, width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.14)" },
   bookIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
-  bookTitle: { fontWeight: "700", fontSize: 14.5, color: "#FFFFFF" },
-  bookSub: { fontSize: 11, color: "rgba(255,255,255,0.82)", marginTop: 2 },
+  bookTitle: { fontWeight: "700", fontSize: CARD_TEXT.title + 1, color: "#FFFFFF" },
+  bookSub: { fontSize: CARD_TEXT.meta, color: "rgba(255,255,255,0.82)", marginTop: 2 },
   bookArrow: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
   remChev: { fontSize: 18, color: NEUTRAL.textMuted },
-  checklistCard: { marginBottom: 16 },
-  checklistHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  checklistTitle: { fontSize: 11, fontWeight: "700", color: NEUTRAL.textSecondary, textTransform: "uppercase", letterSpacing: 0.3 },
-  checklistItem: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-  checklistItemBorder: { borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
-  checklistDot: { width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  checklistText: { flex: 1, fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8, marginTop: 4 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 4 },
   qa: { width: "47%" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  hospitalName: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  doctorLine: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 4 },
-  emptyText: { fontSize: 12.5, color: NEUTRAL.textMuted },
+  hospitalName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  doctorLine: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 4 },
+  emptyText: { fontSize: CARD_TEXT.body, color: NEUTRAL.textMuted },
   bookingCard: { borderWidth: 1 },
   bookingLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, marginRight: 8 },
   bookingIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  reasonLine: { fontSize: 11, fontWeight: "600", marginTop: 8 },
+  reasonLine: { fontSize: CARD_TEXT.meta, fontWeight: "600", marginTop: 8 },
 });

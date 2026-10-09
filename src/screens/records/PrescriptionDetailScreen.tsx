@@ -9,6 +9,7 @@ import { useAppTheme } from "@/context/ThemeContext";
 import { getPrescriptionReceipt } from "@/api/portal";
 import { downloadDataUri } from "@/utils/fileHelpers";
 import { AppStackParamList } from "@/navigation/types";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 export function PrescriptionDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -105,19 +106,19 @@ export function PrescriptionDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  hospital: { fontSize: 13.5, fontWeight: "600" },
-  doctorDate: { fontSize: 11.5, marginTop: 3 },
+  hospital: { fontSize: CARD_TEXT.title, fontWeight: "600" },
+  doctorDate: { fontSize: CARD_TEXT.meta, marginTop: 3 },
   diagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
   diagPill: { backgroundColor: NEUTRAL.warningBg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  diagText: { fontSize: 11.5, color: NEUTRAL.warning, fontWeight: "600" },
+  diagText: { fontSize: CARD_TEXT.body, color: NEUTRAL.warning, fontWeight: "600" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between" },
-  drugName: { fontSize: 13, fontWeight: "600", color: NEUTRAL.textPrimary },
-  duration: { fontSize: 11, color: NEUTRAL.textMuted },
-  dosage: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 4 },
-  warnTitle: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.warning },
-  warnBody: { fontSize: 11.5, color: NEUTRAL.warning, marginTop: 3 },
-  adviceTitle: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  adviceBody: { fontSize: 11.5, color: NEUTRAL.textSecondary, marginTop: 3 },
-  followUp: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: 6 },
-  vital: { fontSize: 12, color: NEUTRAL.textSecondary, marginBottom: 3 },
+  drugName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  duration: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted },
+  dosage: { fontSize: CARD_TEXT.body, color: NEUTRAL.textSecondary, marginTop: 4 },
+  warnTitle: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.warning },
+  warnBody: { fontSize: CARD_TEXT.body, color: NEUTRAL.warning, marginTop: 3 },
+  adviceTitle: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary },
+  adviceBody: { fontSize: CARD_TEXT.body, color: NEUTRAL.textSecondary, marginTop: 3 },
+  followUp: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, marginTop: 6 },
+  vital: { fontSize: CARD_TEXT.body, color: NEUTRAL.textSecondary, marginBottom: 3 },
 });
