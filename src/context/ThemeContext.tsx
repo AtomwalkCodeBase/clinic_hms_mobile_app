@@ -1,39 +1,16 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DEFAULT_THEME_KEY, NEUTRAL, THEMES, ThemeColors } from "@/theme/themes";
-
-const STORAGE_KEY = "aw_theme_key";
+import React, { createContext, useContext } from "react";
+import { NEUTRAL, THEME, ThemeColors } from "@/theme/themes";
 
 interface ThemeContextValue {
   theme: ThemeColors;
   neutral: typeof NEUTRAL;
-  setThemeKey: (key: string) => void;
-  allThemes: ThemeColors[];
 }
 
+const value: ThemeContextValue = { theme: THEME, neutral: NEUTRAL };
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeKey, setThemeKeyState] = useState(DEFAULT_THEME_KEY);
-
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((saved) => {
-      if (saved && THEMES.some((t) => t.key === saved)) setThemeKeyState(saved);
-    });
-  }, []);
-
-  const setThemeKey = (key: string) => {
-    setThemeKeyState(key);
-    AsyncStorage.setItem(STORAGE_KEY, key);
-  };
-
-  const theme = useMemo(() => THEMES.find((t) => t.key === themeKey) || THEMES[0], [themeKey]);
-
-  return (
-    <ThemeContext.Provider value={{ theme, neutral: NEUTRAL, setThemeKey, allThemes: THEMES }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useAppTheme() {

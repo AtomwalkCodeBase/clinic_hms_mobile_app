@@ -90,7 +90,7 @@ export function LoginScreen() {
           </View>
         </MetalHero>
         <View style={styles.header}>
-          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.title}>Let’s get you signed in</Text>
           <Text style={styles.subtitle}>Sign in to view your appointments and records</Text>
         </View>
 

@@ -1,0 +1,66 @@
+import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { X } from "lucide-react-native";
+import { NEUTRAL } from "@/theme/themes";
+import { useAppTheme } from "@/context/ThemeContext";
+import type { LucideIcon } from "@/theme/icons";
+
+export interface HelpItem { icon: LucideIcon; title: string; text: string }
+
+/** The sheet behind a screen's "?" button: what the screen can do, including the actions that aren't labelled. */
+export function HelpSheet({ visible, onClose, items, title = "What you can do here" }: { visible: boolean; onClose: () => void; items: HelpItem[]; title?: string }) {
+  const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(18, insets.bottom + 10) }]} onStartShouldSetResponder={() => true}>
+          <View style={styles.handle} />
+          <View style={styles.head}>
+            <Text style={styles.title}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close"><X size={18} color={NEUTRAL.textMuted} strokeWidth={2.2} /></Pressable>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {items.map((it) => (
+              <View key={it.title} style={styles.item}>
+                <it.icon size={20} color={theme.fill} strokeWidth={2} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itemTitle}>{it.title}</Text>
+                  <Text style={styles.itemText}>{it.text}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+          <Pressable onPress={onClose} style={[styles.done, { backgroundColor: theme.fill }]}>
+            <Text style={[styles.doneText, { color: theme.on }]}>Got it</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/** The round "?" that opens a HelpSheet, for the top right of a screen header. */
+export function HelpButton({ onPress }: { onPress: () => void }) {
+  const { theme } = useAppTheme();
+  return (
+    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel="Help" style={[styles.q, { borderColor: theme.fill }]}>
+      <Text style={[styles.qText, { color: theme.fill }]}>?</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 8, maxHeight: "86%" },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: NEUTRAL.border, alignSelf: "center", marginBottom: 10 },
+  head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title: { fontSize: 15.5, fontWeight: "700", color: NEUTRAL.textPrimary },
+  item: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  itemTitle: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
+  itemText: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 2, lineHeight: 17 },
+  done: { marginTop: 4, paddingVertical: 13, borderRadius: 24, alignItems: "center" },
+  doneText: { fontSize: 14, fontWeight: "700" },
+  q: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: NEUTRAL.surface },
+  qText: { fontSize: 15, fontWeight: "700", marginTop: -1 },
+});

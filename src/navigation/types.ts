@@ -45,6 +45,8 @@ export type AppStackParamList = {
   // mode "instant" = one document on the fast lane (QR scan or one photo); "bulk" = several photos at once
   DocumentCapture: { mode: "instant" | "bulk"; patientAwpid?: string };
   DocumentUpload: { patientAwpid?: string } | undefined;
+  // The full-screen viewer: the files of the list it was opened from (ids), which one to open (index), whose they are.
+  DocumentViewer: { ids: number[]; index: number; patientAwpid?: string };
   Notifications: undefined;
   Reschedule: { bookingId: number; tenantId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
   // patientGender/patientDob: raw fields for theme/familyColors.ts's
@@ -64,7 +66,6 @@ export type AppStackParamList = {
   HealthSummary: undefined;
   FamilyMembers: undefined;
   LinkedHospitals: undefined;
-  ThemePicker: undefined;
   Support: undefined;
   ShareRecords: undefined;
   SharedRecordsPrivacy: undefined;

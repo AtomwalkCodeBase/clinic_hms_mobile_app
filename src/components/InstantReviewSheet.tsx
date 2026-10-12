@@ -1,26 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, X } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
+import { CARD_TEXT } from "@/theme/cardSizes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
 import { dismissDocument, getDocumentDetail, retryDocument, submitDecisions } from "@/api/portal";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { ReviewRow } from "@/components/ReviewRow";
+import { PrimaryButton } from "@/components/Buttons";
+import { FileItem, RowActions } from "@/components/FileItem";
+import { TypeTag } from "@/components/TypeAvatar";
+import { useViewMode } from "@/context/ViewModeContext";
+import { AppStackParamList } from "@/navigation/types";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
 import { currentType, isReviewable } from "@/utils/reviewDraft";
-import { openInExternalApp } from "@/utils/fileHelpers";
 
 const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
 
 /**
- * Add Document (one file): once the file has been uploaded, this follows it while the server reads it, then shows
- * "This document needs review. Please confirm." with the suggested type. Confirm saves it under that type; Change opens
- * the category list. A final "Confirm or Edit" dialog guards the save, because a confirmed document is locked.
- * Closing without confirming leaves the file in Needs Review on the Bulk Upload screen.
+ * Add Document (one file): once the file has been uploaded, this follows it while the server reads it, then shows the
+ * suggested type. Change (or Classify, when there is none) opens the category list; Submit saves the file under its type.
+ * A final "Submit or Edit" dialog guards the save, because a submitted document is locked.
+ * Closing without submitting leaves the file in the Files list on the Bulk Upload screen.
  */
 export function InstantReviewSheet({
   documentId,
@@ -31,10 +37,14 @@ export function InstantReviewSheet({
   documentId: number | null;
   patientAwpid?: string;
   onClose: () => void;
-  /** called once the document is confirmed, with its final type */
+  /** called once the document is submitted, with its final type */
   onSubmitted: (type: string) => void;
 }) {
   const { theme } = useAppTheme();
+  const { mode } = useViewMode();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const [viewing, setViewing] = useState(false);
+  useEffect(() => navigation.addListener("focus", () => setViewing(false)), [navigation]);
   const insets = useSafeAreaInsets();
   const { labelOf } = useDocumentTypes();
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -82,15 +92,11 @@ export function InstantReviewSheet({
     }
   }
 
-  async function view() {
+  /** Opens the file in the viewer; this sheet steps aside until the patient comes back. */
+  function openViewer() {
     if (!doc) return;
-    try {
-      const full = await getDocumentDetail(doc.id, { patientAwpid });
-      const src = (full as any).file_data as string;
-      if (src) await openInExternalApp(full.file_name || full.title || "document", src, full.mime_type);
-    } catch (err) {
-      setError(apiErrorMessage(err, "Couldn't open the file."));
-    }
+    setViewing(true);
+    navigation.navigate("DocumentViewer", { ids: [doc.id], index: 0, ...(patientAwpid ? { patientAwpid } : {}) });
   }
 
   async function retry() {
@@ -122,7 +128,7 @@ export function InstantReviewSheet({
 
   return (
     <>
-      <Modal visible={documentId != null} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
+      <Modal visible={documentId != null && !viewing} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
         <Pressable style={styles.backdrop} onPress={close}>
           <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
             <View style={styles.handle} />
@@ -148,21 +154,24 @@ export function InstantReviewSheet({
               <>
                 <View style={styles.notice}>
                   <AlertCircle size={15} color={NEUTRAL.warning} strokeWidth={2.2} />
-                  <Text style={styles.noticeText}>This document needs review. Please confirm.</Text>
+                  <Text style={styles.noticeText}>Check the type below, then submit.</Text>
                 </View>
-                <ReviewRow
+                <FileItem
                   doc={doc}
-                  entry={entry}
-                  mode="review"
-                  labelOf={labelOf}
-                  onView={view}
-                  onConfirm={() => (type ? setAsking(true) : setPicking(true))}
-                  onChange={() => setPicking(true)}
-                  onMoveBack={() => {}}
-                  onRetry={retry}
-                  onDelete={() => setDeleting(true)}
+                  layout={mode === "grid" ? "wide" : "list"}
+                  order={0}
+                  patientAwpid={patientAwpid}
+                  typeCode={type}
+                  line={
+                    type
+                      ? <View style={styles.lineRow}>{mode === "list" && <TypeTag code={type} label={labelOf(type)} />}</View>
+                      : <Text style={[styles.lineText, { color: NEUTRAL.warning }]}>Not classified — choose a type</Text>
+                  }
+                  actions={<RowActions hasType={!!type} onChange={() => setPicking(true)} onDelete={() => setDeleting(true)} row={mode === "grid"} />}
+                  onOpen={openViewer}
                 />
-                <Text style={styles.foot}>If you close this, the document stays in Bulk Upload until you confirm it.</Text>
+                <PrimaryButton label="Submit" onPress={() => setAsking(true)} disabled={!type} style={{ marginTop: 6, marginBottom: 8 }} />
+                <Text style={styles.foot}>If you close this, the document stays in Bulk Upload until you submit it.</Text>
               </>
             ) : null}
             {!!error && <Text style={styles.error}>{error}</Text>}
@@ -189,9 +198,9 @@ export function InstantReviewSheet({
 
       <ConfirmDialog
         visible={asking}
-        title="Confirm this document?"
+        title="Submit this document?"
         message={`It will be saved as ${labelOf(type)} and the type can't be changed afterwards.`}
-        confirmLabel="Confirm"
+        confirmLabel="Submit"
         cancelLabel="Edit"
         loading={saving}
         onConfirm={save}
@@ -216,5 +225,7 @@ const styles = StyleSheet.create({
   notice: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, padding: 10, marginBottom: 10 },
   noticeText: { flex: 1, fontSize: 12.5, fontWeight: "600", color: NEUTRAL.warning },
   foot: { fontSize: 11, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 2 },
+  lineRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  lineText: { fontSize: CARD_TEXT.meta, marginTop: 3 },
   error: { fontSize: 12, color: NEUTRAL.danger, textAlign: "center", marginTop: 10 },
 });

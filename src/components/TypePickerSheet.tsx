@@ -1,12 +1,13 @@
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, X } from "lucide-react-native";
+import { X } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
-import { useAppTheme } from "@/context/ThemeContext";
+import { docTypeStyle } from "@/theme/docTypes";
+import { TypeAvatar } from "@/components/TypeAvatar";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 
 /**
- * "Select document type" — the one list of categories (from the server) as a bottom sheet. Used wherever a patient
+ * "Select document type" — the one list of categories (from the server) as a bottom sheet, a coloured two-column grid. Used wherever a patient
  * changes a document's type: the review tabs, and the instant-upload confirmation.
  */
 export function TypePickerSheet({
@@ -21,7 +22,6 @@ export function TypePickerSheet({
   onSelect: (code: string) => void;
   onClose: () => void;
 }) {
-  const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { types } = useDocumentTypes();
   return (
@@ -34,15 +34,22 @@ export function TypePickerSheet({
             <Pressable onPress={onClose} hitSlop={10}><X size={18} color={NEUTRAL.textMuted} strokeWidth={2.2} /></Pressable>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            {types.map((t) => {
-              const on = t.code === selected;
-              return (
-                <Pressable key={t.code} onPress={() => onSelect(t.code)} style={[styles.opt, on && { backgroundColor: NEUTRAL.successBg }]}>
-                  <Text style={[styles.optText, on && { color: NEUTRAL.success, fontWeight: "700" }]}>{t.label}</Text>
-                  {on && <Check size={16} color={theme.fill} strokeWidth={2.6} />}
-                </Pressable>
-              );
-            })}
+            <View style={styles.grid}>
+              {types.map((t) => {
+                const on = t.code === selected;
+                const st = docTypeStyle(t.code);
+                return (
+                  <Pressable
+                    key={t.code}
+                    onPress={() => onSelect(t.code)}
+                    style={[styles.cell, { backgroundColor: st.tint, borderColor: on ? st.ink : "transparent" }]}
+                  >
+                    <TypeAvatar code={t.code} size={34} selected={on} onTint />
+                    <Text style={[styles.cellText, { color: st.ink }]} numberOfLines={2}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </ScrollView>
         </View>
       </Pressable>
@@ -56,6 +63,7 @@ const styles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: NEUTRAL.border, alignSelf: "center", marginBottom: 10 },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6, paddingHorizontal: 4 },
   title: { fontSize: 15, fontWeight: "700", color: NEUTRAL.textPrimary },
-  opt: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, paddingHorizontal: 12, borderRadius: 10 },
-  optText: { fontSize: 14, color: NEUTRAL.textPrimary },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingBottom: 6 },
+  cell: { width: "47.5%", flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, borderWidth: 1.5 },
+  cellText: { flex: 1, fontSize: 13.5, fontWeight: "700" },
 });

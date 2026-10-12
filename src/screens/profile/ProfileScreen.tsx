@@ -7,7 +7,7 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Camera, IdCard, HeartPulse, Users, Building2, Palette, Headphones, Droplet, AlertTriangle, Lock } from "lucide-react-native";
+import { Camera, IdCard, HeartPulse, Users, Building2, Headphones, Droplet, AlertTriangle, Lock } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
@@ -17,6 +17,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
+import { useDocumentUpload } from "@/context/DocumentUploadContext";
 import { getProfile, getHealthSummary, getFamily, updateProfile } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { pickImage, pickImageFromCamera, fileToDataUri } from "@/utils/fileHelpers";
@@ -27,6 +28,7 @@ export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useAppTheme();
   const { logout } = useAuth();
+  const { uploading } = useDocumentUpload();
   const queryClient = useQueryClient();
   const [showPhotoSheet, setShowPhotoSheet] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -141,79 +143,88 @@ export function ProfileScreen() {
   }
 
   return (
-    <Screen onRefresh={pullRefresh} refreshing={pulling} backgroundLoading={isFetchingAny && !pulling} topColor="#249c57" bottomInset={false}>
-      {profile && (
-        <MetalHero style={styles.hero} curved underStatusBar>
-          <View style={styles.heroContent}>
-            <View style={styles.avwrap}>
-              <View style={styles.avatar}>
-                {profile.photo ? (
-                  <Image source={{ uri: profile.photo }} style={styles.avatarImg} />
-                ) : (
-                  <Text style={styles.avatarText}>{profile.full_name?.[0] || "?"}</Text>
-                )}
+    <Screen
+      onRefresh={pullRefresh}
+      refreshing={pulling}
+      backgroundLoading={isFetchingAny && !pulling}
+      topColor="#249c57"
+      bottomInset={false}
+      header={
+        <>
+          {profile && (
+            <MetalHero style={styles.hero} curved underStatusBar>
+              <View style={styles.heroContent}>
+                <View style={styles.avwrap}>
+                  <View style={styles.avatar}>
+                    {profile.photo ? (
+                      <Image source={{ uri: profile.photo }} style={styles.avatarImg} />
+                    ) : (
+                      <Text style={styles.avatarText}>{profile.full_name?.[0] || "?"}</Text>
+                    )}
+                  </View>
+                  <Pressable
+                    onPress={() => setShowPhotoSheet(true)}
+                    style={styles.camBtn}
+                    hitSlop={8}
+                    disabled={uploadingPhoto}
+                  >
+                    {uploadingPhoto ? <Text style={styles.camIcon}>…</Text> : <Camera size={13} color="#146334" strokeWidth={2.4} />}
+                  </Pressable>
+                </View>
+                <Pill label="Verified account" tone="neutral" />
+                <Text style={styles.name}>{profile.full_name}</Text>
+                <Text style={styles.awpid}>AWPID: {profile.awpid}</Text>
               </View>
-              <Pressable
-                onPress={() => setShowPhotoSheet(true)}
-                style={styles.camBtn}
-                hitSlop={8}
-                disabled={uploadingPhoto}
-              >
-                {uploadingPhoto ? <Text style={styles.camIcon}>…</Text> : <Camera size={13} color="#146334" strokeWidth={2.4} />}
-              </Pressable>
+            </MetalHero>
+          )}
+
+          <Modal visible={showPhotoSheet} transparent animationType="fade" onRequestClose={() => setShowPhotoSheet(false)}>
+            <Pressable style={styles.sheetBackdrop} onPress={() => setShowPhotoSheet(false)}>
+              <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+                <Text style={styles.sheetTitle}>Update profile photo</Text>
+                <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("camera")}>
+                  <Text style={styles.sheetOptText}>Take photo</Text>
+                </Pressable>
+                <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("gallery")}>
+                  <Text style={styles.sheetOptText}>Choose from gallery</Text>
+                </Pressable>
+                {!!profile?.photo && (
+                  <Pressable style={styles.sheetOpt} onPress={onRemovePhoto}>
+                    <Text style={[styles.sheetOptText, { color: NEUTRAL.danger }]}>Remove photo</Text>
+                  </Pressable>
+                )}
+                <Pressable style={styles.sheetCancel} onPress={() => setShowPhotoSheet(false)}>
+                  <Text style={styles.sheetCancelText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Modal>
+
+          {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
+          {!!mutationError && <ErrorBanner message={mutationError} />}
+
+          {summary && (
+            <View style={styles.statCard}>
+              <View style={styles.statCol}>
+                <Droplet size={16} color={NEUTRAL.danger} strokeWidth={2.2} />
+                <Text style={styles.statLabel}>Blood group</Text>
+                <Text style={[styles.statValue, { color: NEUTRAL.danger }]}>{summary.blood_group || "Not set"}</Text>
+              </View>
+              <View style={[styles.statCol, styles.statBorder]}>
+                <AlertTriangle size={16} color="#993556" strokeWidth={2.2} />
+                <Text style={styles.statLabel}>Allergies</Text>
+                <Text style={styles.statValue}>{allergyCount ? `${allergyCount} known` : "None"}</Text>
+              </View>
+              <View style={styles.statCol}>
+                <Users size={16} color="#0C447C" strokeWidth={2.2} />
+                <Text style={styles.statLabel}>Family</Text>
+                <Text style={styles.statValue}>{family.length}</Text>
+              </View>
             </View>
-            <Pill label="Verified account" tone="neutral" />
-            <Text style={styles.name}>{profile.full_name}</Text>
-            <Text style={styles.awpid}>AWPID: {profile.awpid}</Text>
-          </View>
-        </MetalHero>
-      )}
-
-      <Modal visible={showPhotoSheet} transparent animationType="fade" onRequestClose={() => setShowPhotoSheet(false)}>
-        <Pressable style={styles.sheetBackdrop} onPress={() => setShowPhotoSheet(false)}>
-          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-            <Text style={styles.sheetTitle}>Update profile photo</Text>
-            <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("camera")}>
-              <Text style={styles.sheetOptText}>Take photo</Text>
-            </Pressable>
-            <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("gallery")}>
-              <Text style={styles.sheetOptText}>Choose from gallery</Text>
-            </Pressable>
-            {!!profile?.photo && (
-              <Pressable style={styles.sheetOpt} onPress={onRemovePhoto}>
-                <Text style={[styles.sheetOptText, { color: NEUTRAL.danger }]}>Remove photo</Text>
-              </Pressable>
-            )}
-            <Pressable style={styles.sheetCancel} onPress={() => setShowPhotoSheet(false)}>
-              <Text style={styles.sheetCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
-      {!!mutationError && <ErrorBanner message={mutationError} />}
-
-      {summary && (
-        <View style={styles.statCard}>
-          <View style={styles.statCol}>
-            <Droplet size={16} color={NEUTRAL.danger} strokeWidth={2.2} />
-            <Text style={styles.statLabel}>Blood group</Text>
-            <Text style={[styles.statValue, { color: NEUTRAL.danger }]}>{summary.blood_group || "Not set"}</Text>
-          </View>
-          <View style={[styles.statCol, styles.statBorder]}>
-            <AlertTriangle size={16} color="#993556" strokeWidth={2.2} />
-            <Text style={styles.statLabel}>Allergies</Text>
-            <Text style={styles.statValue}>{allergyCount ? `${allergyCount} known` : "None"}</Text>
-          </View>
-          <View style={styles.statCol}>
-            <Users size={16} color="#0C447C" strokeWidth={2.2} />
-            <Text style={styles.statLabel}>Family</Text>
-            <Text style={styles.statValue}>{family.length}</Text>
-          </View>
-        </View>
-      )}
-
+          )}
+        </>
+      }
+    >
       <SectionTitle>Account</SectionTitle>
       <ListRow
         icon={IdCard}
@@ -268,13 +279,6 @@ export function ProfileScreen() {
         }
       />
       <ListRow
-        icon={Palette}
-        title="Theme"
-        subtitle={theme.label}
-        onPress={() => navigation.navigate("ThemePicker")}
-        tinted
-      />
-      <ListRow
         icon={Headphones}
         title="Support"
         onPress={() => navigation.navigate("Support")}
@@ -287,7 +291,11 @@ export function ProfileScreen() {
         visible={signOutConfirmVisible}
         danger
         title="Sign out?"
-        message="You'll need to sign in again to view your appointments and records."
+        message={
+          uploading
+            ? "Files are still uploading and will stop if you sign out. Wait for them to finish, or sign out anyway. You'll need to sign in again to view your appointments and records."
+            : "You'll need to sign in again to view your appointments and records."
+        }
         confirmLabel="Sign out"
         cancelLabel="Stay signed in"
         loading={signingOut}

@@ -1,24 +1,13 @@
 export interface ThemeColors {
-  key: string;
-  label: string;
   fill: string;
   bg: string;
   text: string;
   on: string;
 }
 
-// Green is the default per the latest design decision — the toggle lets a
-// patient pick any of these as their personal accent color; the brand mark
-// (logo) itself stays a fixed dark green regardless of this choice.
-export const THEMES: ThemeColors[] = [
-  { key: "green", label: "Clinical green", fill: "#15803D", bg: "#E8F5EC", text: "#166534", on: "#FFFFFF" },
-  { key: "blue", label: "Clinical blue", fill: "#185FA5", bg: "#E6F1FB", text: "#0C447C", on: "#FFFFFF" },
-  { key: "plum", label: "Plum", fill: "#993556", bg: "#FBEAF0", text: "#72243E", on: "#FFFFFF" },
-  { key: "purple", label: "Purple", fill: "#534AB7", bg: "#EEEDFE", text: "#3C3489", on: "#FFFFFF" },
-  { key: "coral", label: "Coral", fill: "#993C1D", bg: "#FAECE7", text: "#712B13", on: "#FFFFFF" },
-];
-
-export const DEFAULT_THEME_KEY = "green";
+// The app's one accent colour (clinical green): buttons, links, selected tabs and ticks. The brand mark (logo) is a
+// fixed dark green, separate from this.
+export const THEME: ThemeColors = { fill: "#15803D", bg: "#E8F5EC", text: "#166534", on: "#FFFFFF" };
 
 export const NEUTRAL = {
   bg: "#F4F8FC",

@@ -22,7 +22,18 @@ export interface ReviewEntry {
 export type ReviewDraft = Record<string, ReviewEntry>;
 
 const FINISHED = new Set(["completed", "review_required"]);
-const key = (awpid: string) => `aw_review_draft:${awpid}`;
+const KEY_PREFIX = "aw_review_draft:";
+const key = (awpid: string) => `${KEY_PREFIX}${awpid}`;
+
+/** Forgets every saved review draft on this phone. Called when the person signs out. */
+export async function clearAllDrafts(): Promise<void> {
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(KEY_PREFIX));
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {
+    /* nothing to clean if storage cannot be read */
+  }
+}
 
 export async function loadDraft(awpid: string): Promise<ReviewDraft> {
   try {
@@ -42,11 +53,11 @@ export async function saveDraft(awpid: string, draft: ReviewDraft): Promise<void
 }
 
 /**
- * Where a file is. Until the patient moves it, a file the system classified starts as confirmed ("ready") and only a file
- * it could not classify starts in Needs Review. What the patient does (Confirm, Move back) is kept in the draft and wins.
+ * Which list a file is in: "review" is the Files list (every file starts there, classified or not) and "ready" is Ready
+ * to Submit, which a file reaches only when the patient moves it there. A file is already confirmed by default; the
+ * patient only changes its type if it is wrong, or gives one to a file the rules could not classify.
  */
-export const stageOf = (doc: PatientDocument, entry?: ReviewEntry): ReviewStage =>
-  entry?.stage ?? (doc.suggested_type ? "ready" : "review");
+export const stageOf = (_doc: PatientDocument, entry?: ReviewEntry): ReviewStage => entry?.stage ?? "review";
 export const isEdited = (entry?: ReviewEntry): boolean => !!entry?.selectedType;
 
 /** The type this file would be submitted under: the patient's pick, else the system's suggestion, else none. */
@@ -57,6 +68,9 @@ export function currentType(doc: PatientDocument, entry?: ReviewEntry): string |
 /** A file is only reviewable once it has been read (the others are still working, or failed). */
 export const isReviewable = (doc: PatientDocument): boolean => FINISHED.has(doc.processing_status);
 
+/** A file can be selected and moved to Ready once it has been read and has a type (suggested, or chosen by the patient). */
+export const canSelect = (doc: PatientDocument, entry?: ReviewEntry): boolean => isReviewable(doc) && !!currentType(doc, entry);
+
 /** Picking the system's own suggestion again is not an edit. */
 export function withSelectedType(draft: ReviewDraft, doc: PatientDocument, type: string): ReviewDraft {
   const stage = stageOf(doc, draft[doc.id]);
@@ -66,6 +80,13 @@ export function withSelectedType(draft: ReviewDraft, doc: PatientDocument, type:
 
 export function withStage(draft: ReviewDraft, id: number, stage: ReviewStage): ReviewDraft {
   return { ...draft, [id]: { selectedType: draft[id]?.selectedType ?? null, stage } };
+}
+
+/** Move several files to `stage` in one go (the selected files to Ready to Submit). */
+export function withStageMany(draft: ReviewDraft, ids: number[], stage: ReviewStage): ReviewDraft {
+  const next = { ...draft };
+  for (const id of ids) next[id] = { selectedType: draft[id]?.selectedType ?? null, stage };
+  return next;
 }
 
 /** Forget what the patient did for files that are no longer waiting (submitted, or gone). */
@@ -97,4 +118,15 @@ export function buildDecisions(
     else decisions.push({ document_id: doc.id, document_type: type });
   }
   return { decisions, missing };
+}
+
+/** How many read files of each type, biggest first; a file with no type counts under "not_classified". The patient's pick wins over the suggestion. */
+export function typeCounts(docs: PatientDocument[], draft: ReviewDraft): { code: string; count: number }[] {
+  const by = new Map<string, number>();
+  for (const doc of docs) {
+    if (!isReviewable(doc)) continue;
+    const code = currentType(doc, draft[doc.id]) ?? "not_classified";
+    by.set(code, (by.get(code) ?? 0) + 1);
+  }
+  return [...by.entries()].map(([code, count]) => ({ code, count })).sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
 }

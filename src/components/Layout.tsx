@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
@@ -18,8 +18,23 @@ export function Screen({
   bottomInset = true,
   accentColor,
   backgroundLoading = false,
+  footer,
+  header,
+  pinnedBelow,
+  stickyHeaderIndices,
 }: {
   children: React.ReactNode;
+  /** A block pinned at the top while `children` scroll beneath it. Pull-to-refresh lives up here: pulling the pinned
+   * block refreshes, the scrolling part below has no refresh. Without it the whole screen is one scrolling page. */
+  header?: React.ReactNode;
+  /** A strip kept fixed between the pinned `header` and the scrolling body, e.g. the "3 selected · Select all · Cancel"
+   * bar while files are selected. It takes no part in pull-to-refresh and never scrolls. */
+  pinnedBelow?: React.ReactNode;
+  /** Which of `children` (as a flat array) stick to the top of the scrolling part while their group scrolls past,
+   * like a month label above its list. Every child before the last index must be a direct, non-null child. */
+  stickyHeaderIndices?: number[];
+  /** A bar pinned below the scrolling content (e.g. "Move 3 to Ready to Submit"); it stays put while the list scrolls. */
+  footer?: React.ReactNode;
   scroll?: boolean;
   onRefresh?: () => void;
   /** Only true while a MANUAL pull gesture is in flight — see
@@ -57,6 +72,7 @@ export function Screen({
 }) {
   const Body = scroll ? ScrollView : View;
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { theme } = useAppTheme();
   const tint = accentColor || theme.fill;
   const edges = (topColor ? ["bottom"] : ["top", "bottom"]).filter(
@@ -89,6 +105,16 @@ export function Screen({
     }, [topColor])
   );
 
+  const refreshControl = onRefresh ? (
+    <RefreshControl
+      refreshing={!!refreshing}
+      onRefresh={onRefresh}
+      colors={[tint]}
+      tintColor={tint}
+      progressBackgroundColor={NEUTRAL.surface}
+    />
+  ) : undefined;
+
   return (
     <View style={styles.safe}>
       <StatusBar style={topColor ? "light" : "dark"} />
@@ -96,23 +122,31 @@ export function Screen({
       <SafeAreaView style={styles.safeInner} edges={edges}>
         <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
           <TopProgressBar visible={backgroundLoading} color={tint} />
+          {!!header && (
+            // The pinned block is a ScrollView only so it can carry the pull-to-refresh; its content normally fits, and
+            // when it is taller than 55% of the screen (a small phone) it scrolls inside itself so the body keeps room.
+            <ScrollView
+              style={[styles.pinned, { maxHeight: windowHeight * 0.55 }]}
+              contentContainerStyle={styles.pinnedContent}
+              refreshControl={refreshControl}
+              alwaysBounceVertical
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {header}
+            </ScrollView>
+          )}
+          {!!pinnedBelow && <View style={styles.pinnedBelow}>{pinnedBelow}</View>}
           <Body
             style={styles.body}
-            contentContainerStyle={scroll ? styles.scrollContent : undefined}
-            refreshControl={
-              onRefresh ? (
-                <RefreshControl
-                  refreshing={!!refreshing}
-                  onRefresh={onRefresh}
-                  colors={[tint]}
-                  tintColor={tint}
-                  progressBackgroundColor={NEUTRAL.surface}
-                />
-              ) : undefined
-            }
+            stickyHeaderIndices={scroll ? stickyHeaderIndices : undefined}
+            contentContainerStyle={scroll ? (header ? styles.scrollContentUnderHeader : styles.scrollContent) : undefined}
+            refreshControl={header ? undefined : refreshControl}
+            keyboardShouldPersistTaps={header ? "handled" : undefined}
           >
             {children}
           </Body>
+          {footer}
         </Animated.View>
       </SafeAreaView>
     </View>
@@ -123,9 +157,12 @@ export function BackHeader({
   title,
   onBack,
   tint,
+  right,
 }: {
   title: string;
   onBack: () => void;
+  /** Buttons at the right end of the header (an Upload pill, a "?"). */
+  right?: React.ReactNode;
   /** A dependent's family-accent colors (familyAccentFor), when this screen
    * is currently showing their data instead of the account owner's own —
    * so a detail screen reached from a colored family member card doesn't
@@ -143,6 +180,7 @@ export function BackHeader({
         <ArrowLeft size={19} color={tint?.text ?? NEUTRAL.textPrimary} strokeWidth={2.3} />
       </Pressable>
       <Text style={[styles.backTitle, tint && { color: tint.text }]}>{title}</Text>
+      {right ? <View style={styles.backRight}>{right}</View> : null}
     </View>
   );
 }
@@ -178,6 +216,10 @@ const styles = StyleSheet.create({
   safeInner: { flex: 1 },
   body: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
+  pinned: { flexGrow: 0, flexShrink: 1 },
+  pinnedBelow: { paddingHorizontal: 16, paddingTop: 4 },
+  pinnedContent: { padding: 16, paddingBottom: 0 },
+  scrollContentUnderHeader: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
   backRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 16 },
   backBtn: {
     width: 34,
@@ -189,6 +231,7 @@ const styles = StyleSheet.create({
   },
   backBtnPressed: { opacity: 0.7 },
   backTitle: { fontWeight: "600", fontSize: 15, color: NEUTRAL.textPrimary },
+  backRight: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginTop: 14, marginBottom: 8 },
   empty: { padding: 24, alignItems: "center" },
   emptyText: { color: NEUTRAL.textMuted, fontSize: 13, textAlign: "center" },

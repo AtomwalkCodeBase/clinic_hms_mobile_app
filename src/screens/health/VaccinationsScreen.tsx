@@ -168,48 +168,56 @@ export function VaccinationsScreen() {
   }
 
   return (
-    <Screen onRefresh={pullRefresh} refreshing={pulling} backgroundLoading={isFetching && !pulling} accentColor={vaxColor}>
-      <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
+    <Screen
+      onRefresh={pullRefresh}
+      refreshing={pulling}
+      backgroundLoading={isFetching && !pulling}
+      accentColor={vaxColor}
+      header={
+        <>
+          <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
 
-      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
+          {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {vax && (
-        <View style={styles.statsRow}>
-          <StatTile value={String(vax.completed_count)} label="Completed" color={accentText} />
-          <StatTile value={vax.next_recommended?.vaccine_name || "—"} label="Next due" color={NEUTRAL.warning} />
-          <StatTile value={String(roadmap.filter((r) => r.status === "pending_review").length)} label="Pending review" color={NEUTRAL.textPrimary} />
-        </View>
-      )}
+          {vax && (
+            <View style={styles.statsRow}>
+              <StatTile value={String(vax.completed_count)} label="Completed" color={accentText} />
+              <StatTile value={vax.next_recommended?.vaccine_name || "—"} label="Next due" color={NEUTRAL.warning} />
+              <StatTile value={String(roadmap.filter((r) => r.status === "pending_review").length)} label="Pending review" color={NEUTRAL.textPrimary} />
+            </View>
+          )}
 
-      <SegmentedControl
-        options={[
-          { key: "all", label: "All", color: filterOptionColor },
-          { key: "completed", label: "Completed", color: filterOptionColor },
-          { key: "not_completed", label: "Not completed", color: filterOptionColor },
-        ]}
-        value={filter}
-        onChange={setFilter}
-      />
+          <SegmentedControl
+            options={[
+              { key: "all", label: "All", color: filterOptionColor },
+              { key: "completed", label: "Completed", color: filterOptionColor },
+              { key: "not_completed", label: "Not completed", color: filterOptionColor },
+            ]}
+            value={filter}
+            onChange={setFilter}
+          />
 
-      <View style={styles.viewModeRow}>
-        <Text style={styles.viewModeLabel}>Show</Text>
-        <SegmentedControl
-          options={[
-            { key: "age", label: "By age" },
-            { key: "date", label: "By due date" },
-          ]}
-          value={viewMode}
-          onChange={setViewMode}
-        />
-      </View>
+          <View style={styles.viewModeRow}>
+            <Text style={styles.viewModeLabel}>Show</Text>
+            <SegmentedControl
+              options={[
+                { key: "age", label: "By age" },
+                { key: "date", label: "By due date" },
+              ]}
+              value={viewMode}
+              onChange={setViewMode}
+            />
+          </View>
 
-      <SecondaryButton
-        label="+ Report a vaccination from outside"
-        onPress={() => navigation.navigate("ReportVaccination", { patientAwpid, patientName })}
-        style={{ marginBottom: 12 }}
-        color={vaxColor}
-      />
-
+          <SecondaryButton
+            label="+ Report a vaccination from outside"
+            onPress={() => navigation.navigate("ReportVaccination", { patientAwpid, patientName })}
+            style={{ marginBottom: 12 }}
+            color={vaxColor}
+          />
+        </>
+      }
+    >
       {shown.length === 0 ? (
         <EmptyState text={roadmap.length === 0 ? "No vaccination roadmap available yet." : "Nothing in this filter."} />
       ) : groups ? (

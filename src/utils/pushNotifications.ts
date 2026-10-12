@@ -1,7 +1,6 @@
 import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { requireOptionalNativeModule } from "expo";
-import { registerPushToken } from "@/api/portal";
 
 /**
  * True only where `expo-notifications` can actually be loaded.
@@ -43,23 +42,18 @@ export async function notifyDocumentsReady(ready: number, failed: number): Promi
 }
 
 /**
- * Asks for notification permission (a real OS prompt the first time), gets
- * this device's Expo push token, and registers it with the server so a
- * finished background upload can reach the patient even with the app
- * closed. Returns null — and quietly does nothing — if push isn't available
- * here, permission is denied, this isn't a real device (simulators can't
- * receive push), or anything else goes wrong: push is a bonus on top of the
- * in-app status, never something the rest of the app should depend on.
+ * Gets the phone ready for the notification above: asks for notification permission (a real OS prompt the first
+ * time), shows notifications as a banner even while the app is open, and creates the Android channel. Nothing is
+ * sent to the server; the backend has no push service. Quietly does nothing if notifications aren't available here
+ * or permission is denied: a notification is a bonus on top of the in-app status, never something the rest of the
+ * app depends on.
  */
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function setUpNotifications(): Promise<void> {
   try {
-    if (!pushIsAvailable()) return null;
+    if (!pushIsAvailable()) return;
 
     const Notifications = await import("expo-notifications");
 
-    // Foreground behavior: show the banner + play the sound even while the app
-    // is open, so a "bulk upload complete" push isn't silently swallowed just
-    // because the patient happened to still have the app in front.
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
@@ -77,21 +71,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     const existing = await Notifications.getPermissionsAsync();
-    let granted = existing.granted;
-    if (!granted) {
-      const asked = await Notifications.requestPermissionsAsync();
-      granted = asked.granted;
-    }
-    if (!granted) return null;
-
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
-    const tokenRes = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
-    const token = tokenRes.data;
-    if (!token) return null;
-
-    await registerPushToken(token, Platform.OS);
-    return token;
+    if (!existing.granted) await Notifications.requestPermissionsAsync();
   } catch {
-    return null;
+    /* a notification is a convenience; nothing to do if the phone can't show one */
   }
 }

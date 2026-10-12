@@ -577,11 +577,6 @@ export async function dismissDocument(id: number, patientAwpid?: string): Promis
   await api.delete(`/portal/documents/${id}/`, { params: patientAwpid ? { patient_awpid: patientAwpid } : {} });
 }
 
-/** Registers this device's Expo push token with the server, against the logged-in account. */
-export async function registerPushToken(token: string, platform: string): Promise<void> {
-  await api.post("/portal/push-token/", { token, platform });
-}
-
 /** PortalLabOrderListView returns a raw object, not the {success,data} envelope. */
 export async function getLabOrders(patientAwpid?: string) {
   const res = await api.get<{ results: LabOrder[]; pagination: any }>("/portal/lab-orders/", {

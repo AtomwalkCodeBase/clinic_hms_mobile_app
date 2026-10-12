@@ -11,6 +11,7 @@ import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailSc
 import { MyDocumentsScreen } from "@/screens/records/MyDocumentsScreen";
 import { CaptureScreen } from "@/screens/records/CaptureScreen";
 import { DocumentUploadScreen } from "@/screens/records/DocumentUploadScreen";
+import { DocumentViewerScreen } from "@/screens/records/DocumentViewerScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
 import { VaccinationsScreen } from "@/screens/health/VaccinationsScreen";
@@ -23,7 +24,6 @@ import { PersonalDetailsScreen } from "@/screens/profile/PersonalDetailsScreen";
 import { HealthSummaryScreen } from "@/screens/profile/HealthSummaryScreen";
 import { FamilyMembersScreen } from "@/screens/profile/FamilyMembersScreen";
 import { LinkedHospitalsScreen } from "@/screens/profile/LinkedHospitalsScreen";
-import { ThemeScreen } from "@/screens/profile/ThemeScreen";
 import { SupportScreen } from "@/screens/profile/SupportScreen";
 import { ShareRecordsScreen } from "@/screens/profile/ShareRecordsScreen";
 import { SharedRecordsPrivacyScreen } from "@/screens/profile/SharedRecordsPrivacyScreen";
@@ -60,6 +60,7 @@ export function AppStack() {
       <Stack.Screen name="MyDocuments" component={MyDocumentsScreen} />
       <Stack.Screen name="DocumentCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
       <Stack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+      <Stack.Screen name="DocumentViewer" component={DocumentViewerScreen} options={{ presentation: "fullScreenModal", animation: "fade", contentStyle: { backgroundColor: "#0B0F14" } }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
       <Stack.Screen name="Vaccinations" component={VaccinationsScreen} />
@@ -72,7 +73,6 @@ export function AppStack() {
       <Stack.Screen name="HealthSummary" component={HealthSummaryScreen} />
       <Stack.Screen name="FamilyMembers" component={FamilyMembersScreen} />
       <Stack.Screen name="LinkedHospitals" component={LinkedHospitalsScreen} />
-      <Stack.Screen name="ThemePicker" component={ThemeScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
       <Stack.Screen name="ShareRecords" component={ShareRecordsScreen} />
       <Stack.Screen name="SharedRecordsPrivacy" component={SharedRecordsPrivacyScreen} />

@@ -5,13 +5,13 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import {
-  Clock, Lock, Search, FlaskConical, FileText,
+  Clock, Lock, Search,
   ChevronDown, ChevronLeft, ChevronRight,
-  ClipboardPlus,
 } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
+import { TypeAvatar } from "@/components/TypeAvatar";
 import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -19,7 +19,7 @@ import { apiErrorMessage } from "@/api/client";
 import { getRecordsPrivacy, toggleRecordPrivacy, updateRecordsPrivacy, revealForShare, RecordsPrivacyQuery } from "@/api/portal";
 import { RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
-import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
+import { CARD, CARD_TEXT } from "@/theme/cardSizes";
 
 const CATEGORY_LABELS: Record<string, string> = {
   cbc: "Complete Blood Count", lipid: "Lipid Profile", lft: "Liver Function Test",
@@ -34,11 +34,6 @@ const KIND_LABEL: Record<string, string> = {
   discharge_summary: "Discharge summaries", consultation_note: "Consultation notes", medical_bill: "Medical bills",
   vaccination_record: "Vaccination records", referral_letter: "Referral letters", medical_certificate: "Medical certificates",
   other: "Other documents", not_classified: "Other documents",
-};
-const KIND_TILE: Record<string, { bg: string; fg: string; Icon: any }> = {
-  lab_report: { bg: "#F8EAC8", fg: "#8A5A12", Icon: FlaskConical },
-  prescription: { bg: "#EAE7FB", fg: "#4A3FB0", Icon: ClipboardPlus },
-  other: { bg: "#E4EAF1", fg: "#3B4A5A", Icon: FileText },
 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dOf = (d: RecordsPrivacyDoc) => d.document_date || d.created_at || "";
@@ -361,13 +356,10 @@ export function SharedRecordsPrivacyScreen() {
                   </View>
                   {g.list.map((d) => {
                     const st = stateOf(d);
-                    const tile = KIND_TILE[d.doc_type] || KIND_TILE.other;
                     const on = st !== "off";
                     return (
                       <View key={d.id} style={styles.rec}>
-                        <View style={[styles.tile, { backgroundColor: tile.bg }]}>
-                          <tile.Icon size={15} color={tile.fg} strokeWidth={2} />
-                        </View>
+                        <TypeAvatar code={d.doc_type} />
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text style={[styles.recTitle, st === "off" && { color: NEUTRAL.textSecondary }]} numberOfLines={1}>
                             {d.title}
@@ -493,7 +485,6 @@ const styles = StyleSheet.create({
   grpPillText: { fontSize: 9.5, fontWeight: "600", color: NEUTRAL.textMuted },
 
   rec: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: CARD.radius, paddingVertical: CARD.padding - 2, paddingHorizontal: CARD.padding, marginBottom: CARD.gap },
-  tile: { width: CARD_ICON, height: CARD_ICON, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   recTitle: { fontSize: CARD_TEXT.title, fontWeight: "500", color: NEUTRAL.textPrimary },
   recSub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, marginTop: 2 },
   pill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 76, borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface },

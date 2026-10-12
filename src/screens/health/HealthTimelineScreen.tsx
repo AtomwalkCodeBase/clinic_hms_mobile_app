@@ -63,14 +63,20 @@ export function HealthTimelineScreen() {
   const shown = month ? timeline.filter((e) => monthKey(e.date) === month) : timeline;
 
   return (
-    <Screen onRefresh={refetch} refreshing={isFetching}>
-      <BackHeader title={`Health timeline — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
-      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
+    <Screen
+      onRefresh={refetch}
+      refreshing={isFetching}
+      header={
+        <>
+          <BackHeader title={`Health timeline — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
+          {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
-      {timeline.length > 0 && (
-        <SelectField label="Filter by month" value={month} onChange={setMonth} options={monthOptions} placeholder="All months" clearLabel="All months" />
-      )}
-
+          {timeline.length > 0 && (
+            <SelectField label="Filter by month" value={month} onChange={setMonth} options={monthOptions} placeholder="All months" clearLabel="All months" />
+          )}
+        </>
+      }
+    >
       {shown.length === 0 ? (
         <EmptyState text={timeline.length === 0 ? "No health history recorded yet." : "Nothing in this month."} />
       ) : (

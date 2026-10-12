@@ -3,7 +3,6 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import * as IntentLauncher from "expo-intent-launcher";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export interface PickedFile {
@@ -15,6 +14,22 @@ export interface PickedFile {
 }
 
 const UPLOAD_STAGING_DIR = `${FileSystem.documentDirectory}pending-uploads/`;
+/** Where downloaded / shared copies of a person's documents are written, so sign-out can delete exactly these. */
+const SHARE_DIR = `${FileSystem.cacheDirectory}aw-shared/`;
+
+/** Where PDFs are saved while the in-app viewer shows them (see PdfViewer); wiped with the other private files. */
+export const VIEW_DIR = `${FileSystem.cacheDirectory}aw-view/`;
+
+/**
+ * Deletes every copy of a person's documents the app has left on the phone: files made for sharing or saving, files
+ * staged for upload, and the pickers' temporary copies. Called on sign-out and sign-in so the next person using the
+ * phone does not inherit them. Only the app's own folders; the gallery and Downloads are never touched.
+ */
+export async function wipePrivateFiles(): Promise<void> {
+  const cache = FileSystem.cacheDirectory ?? "";
+  const dirs = [UPLOAD_STAGING_DIR, SHARE_DIR, VIEW_DIR, `${cache}ImagePicker/`, `${cache}DocumentPicker/`, `${cache}Camera/`];
+  await Promise.all(dirs.map((d) => FileSystem.deleteAsync(d, { idempotent: true }).catch(() => {})));
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -207,7 +222,8 @@ async function saveOrShare(fileName: string, mimeType: string, base64Content: st
       // SAF itself failed (not just a user cancel) — fall through to share.
     }
   }
-  const path = `${FileSystem.cacheDirectory}${fileName}`;
+  await FileSystem.makeDirectoryAsync(SHARE_DIR, { intermediates: true }).catch(() => {});
+  const path = `${SHARE_DIR}${fileName}`;
   await FileSystem.writeAsStringAsync(path, base64Content, { encoding: FileSystem.EncodingType.Base64 });
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error("Couldn't save this file — no folder was chosen and sharing isn't available on this device.");
@@ -226,7 +242,8 @@ async function saveOrShare(fileName: string, mimeType: string, base64Content: st
  */
 export async function downloadDataUri(fileName: string, source: string): Promise<SaveOutcome> {
   if (!source.startsWith("data:")) {
-    const dest = `${FileSystem.cacheDirectory}${fileName}`;
+    await FileSystem.makeDirectoryAsync(SHARE_DIR, { intermediates: true }).catch(() => {});
+    const dest = `${SHARE_DIR}${fileName}`;
     const result = await FileSystem.downloadAsync(source, dest);
     const mime = result.mimeType || result.headers?.["Content-Type"]?.split(";")[0] || "application/octet-stream";
     const base64 = await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
@@ -234,62 +251,4 @@ export async function downloadDataUri(fileName: string, source: string): Promise
   }
   const { mime, base64 } = base64FromDataUri(source);
   return saveOrShare(fileName, mime, base64);
-}
-
-/**
- * Hands a file off to the OS's own "open with" chooser — the mobile
- * equivalent of tapping a PDF attachment in Gmail or a Files app. Always
- * writes to the cache dir only (never a persisted save), and always shows
- * the OS picker, every single call — no "silently reuse the last granted
- * folder" shortcut, since the point here is picking an app to open the
- * file in, not saving a copy.
- *
- * Android goes through expo-intent-launcher's ACTION_VIEW — this is
- * deliberately NOT Sharing.shareAsync, which fires ACTION_SEND ("Share
- * via…": messaging/social apps) rather than ACTION_VIEW ("Open with…":
- * viewer apps for this file type) — visually similar chooser, different
- * app list and intent semantics; ACTION_VIEW is the one that matches "open
- * this like a normal PDF attachment". Needs a content:// URI (not a bare
- * file:// path) so the receiving app is actually granted read access.
- * iOS has no such split — its share sheet already doubles as "open in…" —
- * so Sharing.shareAsync is used there and as the Android fallback if
- * nothing can handle ACTION_VIEW (IntentLauncher rejects with no installed
- * activity instead of showing an empty/broken chooser).
- */
-export async function openInExternalApp(fileName: string, source: string, mimeTypeHint?: string): Promise<void> {
-  let localUri: string;
-  let mimeType = mimeTypeHint || "application/octet-stream";
-
-  if (source.startsWith("data:")) {
-    const { mime, base64 } = base64FromDataUri(source);
-    mimeType = mimeTypeHint || mime;
-    localUri = `${FileSystem.cacheDirectory}${fileName}`;
-    await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-  } else {
-    const dest = `${FileSystem.cacheDirectory}${fileName}`;
-    const result = await FileSystem.downloadAsync(source, dest);
-    mimeType = result.mimeType || result.headers?.["Content-Type"]?.split(";")[0] || mimeType;
-    localUri = result.uri;
-  }
-
-  if (Platform.OS === "android") {
-    try {
-      const contentUri = await FileSystem.getContentUriAsync(localUri);
-      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-        data: contentUri,
-        flags: 1, // FLAG_GRANT_READ_URI_PERMISSION — required for a content:// URI handed to another app
-        type: mimeType,
-      });
-      return;
-    } catch {
-      // No app registered for ACTION_VIEW on this mime type (or the intent
-      // itself failed) — fall through to the share sheet rather than
-      // leaving the user with no options at all.
-    }
-  }
-
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error("No app available to open this file on this device.");
-  }
-  await Sharing.shareAsync(localUri, { mimeType, dialogTitle: fileName });
 }

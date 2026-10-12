@@ -4,7 +4,11 @@ import { IconBadge } from "@/components/IconBadge";
 import { NEUTRAL } from "@/theme/themes";
 import { WHISPER_GREEN } from "@/theme/gadgetSurface";
 import type { LucideIcon } from "@/theme/icons";
-import { CARD, CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
+import { CARD } from "@/theme/cardSizes";
+
+/** The gadget tiles are deliberately smaller than the shared card size (cardSizes.ts): a compact grid on Home and Health. */
+const GADGET_ICON = 34;
+const GADGET_TEXT = { title: 13, sub: 10.5, subLine: 14 };
 
 /**
  * A tinted structural shape for the per-person colours in theme/familyColors.ts (age/gender-derived tints used on the
@@ -27,7 +31,7 @@ export function GadgetCard({
   subtitle,
   onPress,
   disabled,
-  iconSize = CARD_ICON,
+  iconSize = GADGET_ICON,
   radius = CARD.radius,
   cardPadding = CARD.padding,
   badge,
@@ -97,6 +101,6 @@ const styles = StyleSheet.create({
   content: { position: "relative" },
   badge: { position: "absolute", top: 10, right: 10, backgroundColor: "#F2B544", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1.5, zIndex: 2 },
   badgeText: { fontSize: 10.5, fontWeight: "700", color: "#3B2A05" },
-  title: { fontSize: CARD_TEXT.title, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 10 },
-  sub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 4, lineHeight: 17 },
+  title: { fontSize: GADGET_TEXT.title, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 10 },
+  sub: { fontSize: GADGET_TEXT.sub, color: NEUTRAL.textSecondary, marginTop: 4, lineHeight: GADGET_TEXT.subLine },
 });

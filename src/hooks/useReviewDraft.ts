@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PatientDocument } from "@/api/types";
-import { loadDraft, prune, ReviewDraft, saveDraft, withSelectedType, withStage } from "@/utils/reviewDraft";
+import { loadDraft, prune, ReviewDraft, saveDraft, withSelectedType, withStage, withStageMany } from "@/utils/reviewDraft";
 
 const EMPTY: ReviewDraft = {};
 
@@ -40,7 +40,7 @@ export function useReviewDraft(owner: string) {
     draft,
     loaded,
     setType: useCallback((doc: PatientDocument, type: string) => update((d) => withSelectedType(d, doc, type)), [update]),
-    confirm: useCallback((id: number) => update((d) => withStage(d, id, "ready")), [update]),
+    moveToReady: useCallback((ids: number[]) => update((d) => withStageMany(d, ids, "ready")), [update]),
     moveBack: useCallback((id: number) => update((d) => withStage(d, id, "review")), [update]),
     keepOnly: useCallback((pendingIds: number[]) => update((d) => prune(d, pendingIds)), [update]),
   };

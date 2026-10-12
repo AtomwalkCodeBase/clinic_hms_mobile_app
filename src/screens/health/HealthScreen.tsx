@@ -18,7 +18,6 @@ import { getFamily, getProfile, getHealthSummary, getVaccinations } from "@/api/
 import { apiErrorMessage } from "@/api/client";
 import { FamilyMember } from "@/api/types";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
-import { CARD_ICON } from "@/theme/cardSizes";
 
 type Nav = CompositeNavigationProp<BottomTabNavigationProp<AppTabsParamList, "Health">, NativeStackNavigationProp<AppStackParamList>>;
 
@@ -191,7 +190,6 @@ export function HealthScreen() {
           subtitle={vax ? `${vax.completed_count} of ${vax.total_count} completed` : "—"}
           onPress={() => openGadget("Vaccinations")}
           style={styles.gadgetSize}
-          iconSize={CARD_ICON}
           radius={22}
           cardPadding={16}
         />
@@ -201,7 +199,6 @@ export function HealthScreen() {
           subtitle="Visits, vaccinations, growth, and more"
           onPress={() => openGadget("HealthTimeline")}
           style={styles.gadgetSize}
-          iconSize={CARD_ICON}
           radius={22}
           cardPadding={16}
         />
@@ -211,7 +208,6 @@ export function HealthScreen() {
           subtitle={summary?.last_hospital ? `Last: ${summary.last_hospital}` : "No visits yet"}
           onPress={() => openGadget("HealthVisits")}
           style={styles.gadgetSize}
-          iconSize={CARD_ICON}
           radius={22}
           cardPadding={16}
         />
@@ -221,7 +217,6 @@ export function HealthScreen() {
           subtitle="Prescriptions, lab reports and more"
           onPress={openRecords}
           style={styles.gadgetSize}
-          iconSize={CARD_ICON}
           radius={22}
           cardPadding={16}
         />

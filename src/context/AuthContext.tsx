@@ -3,8 +3,11 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens, getBiometricLockEnabled } from "@/utils/storage";
 import { loginPatient, logout as apiLogout } from "@/api/auth";
 import { setSessionExpiredHandler } from "@/api/client";
-import { registerForPushNotifications } from "@/utils/pushNotifications";
+import { setUpNotifications } from "@/utils/pushNotifications";
 import { queryClient } from "@/api/queryClient";
+import { clearPreviewCache } from "@/utils/previewQueue";
+import { wipePrivateFiles } from "@/utils/fileHelpers";
+import { clearAllDrafts } from "@/utils/reviewDraft";
 
 interface AuthContextValue {
   isLoading: boolean; // true only during the initial "do we have a saved session" check
@@ -68,16 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setNeedsUnlock(false);
       // Whoever signs in next must never be shown this person's saved screens.
       queryClient.clear();
+      clearPreviewCache();
     });
   }, []);
 
-  // Once there's a real, unlocked session, register this device for push
-  // (bulk-upload-complete notifications). Only prompts for OS permission the
-  // very first time — later launches just re-register the same token, which
-  // the server upserts. Never blocks or errors the rest of the app.
+  // Once there's a real, unlocked session, get the phone ready for the "documents are ready" notification. Only
+  // prompts for OS permission the very first time. Never blocks or errors the rest of the app.
   useEffect(() => {
     if (isAuthenticated && !needsUnlock) {
-      registerForPushNotifications();
+      setUpNotifications();
     }
   }, [isAuthenticated, needsUnlock]);
 
@@ -85,6 +87,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const tokens = await loginPatient(mobile, password);
     await saveTokens(tokens.access, tokens.refresh);
     queryClient.clear();   // saved screens from a previous account must not appear under this one
+    clearPreviewCache();
+    wipePrivateFiles().catch(() => {});   // so must document copies left behind by an earlier session
     setNeedsUnlock(false);
     setIsAuthenticated(true);
   }, []);
@@ -92,6 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithTokens = useCallback(async (access: string, refresh: string) => {
     await saveTokens(access, refresh);
     queryClient.clear();   // same as login: start this account with an empty cache
+    clearPreviewCache();
+    wipePrivateFiles().catch(() => {});
     setNeedsUnlock(false);
     setIsAuthenticated(true);
   }, []);
@@ -113,6 +119,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Drop every saved screen (profile, family, documents...) so the next person to sign in on this phone starts
     // clean. Cleared after the app has switched to the login screens, so nothing still mounted refetches without a token.
     queryClient.clear();
+    clearPreviewCache();
+    // Signing out on purpose also forgets what is stored on the phone: unfinished review picks and document copies.
+    // (A session that merely expires keeps the picks, so a timeout never costs the person their work.)
+    await Promise.all([clearAllDrafts(), wipePrivateFiles().catch(() => {})]);
   }, []);
 
   return (

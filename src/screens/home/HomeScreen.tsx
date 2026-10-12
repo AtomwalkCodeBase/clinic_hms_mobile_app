@@ -25,7 +25,7 @@ import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
 import { AppTabsParamList } from "@/navigation/types";
 import { useExitOnDoubleBack } from "@/utils/useExitOnDoubleBack";
-import { CARD_ICON, CARD_TEXT } from "@/theme/cardSizes";
+import { CARD_TEXT } from "@/theme/cardSizes";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<AppTabsParamList, "Home">,
@@ -140,82 +140,86 @@ export function HomeScreen() {
       backgroundLoading={isFetchingAny && !pulling}
       topColor="#249c57"
       bottomInset={false}
-    >
-      <MetalHero compact curved underStatusBar style={styles.hero}>
-        <View style={styles.heroTop}>
-          <LogoPill size={40} />
-          <View style={styles.heroActions}>
-            <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
-              <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
-                </View>
+      header={
+        <>
+          <MetalHero compact curved underStatusBar style={styles.hero}>
+            <View style={styles.heroTop}>
+              <LogoPill size={40} />
+              <View style={styles.heroActions}>
+                <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
+                  <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
+                  {unreadCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+            <Text style={styles.greeting}>
+              {greetingForHour(now.getHours())}
+              {firstName ? `, ${firstName}` : ""}
+            </Text>
+            <Text style={styles.greetingDate}>{now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text>
+            <Text style={styles.greetingSub}>
+              {stats ? `${stats.hospitals} hospital${stats.hospitals === 1 ? "" : "s"} · ${stats.doctors}+ doctors on the platform` : "Here's your health at a glance"}
+            </Text>
+          </MetalHero>
+
+          {!!error && <ErrorBanner message={apiErrorMessage(error, "Couldn't load your dashboard.")} onRetry={refetchAll} />}
+
+          <Pressable
+            onPress={() => navigation.navigate("Tabs" as any, { screen: "Appointments" } as any)}
+            style={styles.reminderCard}
+          >
+            <IconBadge icon={Bell} size={32} />
+            <View style={{ flex: 1 }}>
+              {nextUp ? (
+                <>
+                  <Text style={styles.remTitle}>
+                    {upcoming.length} upcoming appointment{upcoming.length === 1 ? "" : "s"}
+                  </Text>
+                  <Text style={styles.remSub}>
+                    {nextUp.doctor} · {nextUp.hospital} · {nextUp.date}
+                    {nextUp.time ? `, ${nextUp.time}` : ""}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.remTitle}>No upcoming appointments</Text>
+                  <Text style={styles.remSub}>Tap Book an appointment below to see a doctor</Text>
+                </>
               )}
-            </Pressable>
-          </View>
-        </View>
-        <Text style={styles.greeting}>
-          {greetingForHour(now.getHours())}
-          {firstName ? `, ${firstName}` : ""}
-        </Text>
-        <Text style={styles.greetingDate}>{now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text>
-        <Text style={styles.greetingSub}>
-          {stats ? `${stats.hospitals} hospital${stats.hospitals === 1 ? "" : "s"} · ${stats.doctors}+ doctors on the platform` : "Here's your health at a glance"}
-        </Text>
-      </MetalHero>
+            </View>
+            <Text style={styles.remChev}>›</Text>
+          </Pressable>
 
-      {!!error && <ErrorBanner message={apiErrorMessage(error, "Couldn't load your dashboard.")} onRetry={refetchAll} />}
+          {/* Promoted out of the quick-access grid — booking is what this app
+              is actually for, not one tile among several. */}
+          <Pressable onPress={onBookVisit} style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.92 }]}>
+            <LinearGradient
+              colors={["#249c57", "#15803D", "#0f5c2e"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.bookGlow} pointerEvents="none" />
+            <View style={styles.bookIcon}>
+              <CalendarDays size={22} color="#FFFFFF" strokeWidth={2.2} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bookTitle}>Book an appointment</Text>
+              <Text style={styles.bookSub}>Find a doctor and a slot</Text>
+            </View>
+            <View style={styles.bookArrow}>
+              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
+            </View>
+          </Pressable>
 
-      <Pressable
-        onPress={() => navigation.navigate("Tabs" as any, { screen: "Appointments" } as any)}
-        style={styles.reminderCard}
-      >
-        <IconBadge icon={Bell} size={32} />
-        <View style={{ flex: 1 }}>
-          {nextUp ? (
-            <>
-              <Text style={styles.remTitle}>
-                {upcoming.length} upcoming appointment{upcoming.length === 1 ? "" : "s"}
-              </Text>
-              <Text style={styles.remSub}>
-                {nextUp.doctor} · {nextUp.hospital} · {nextUp.date}
-                {nextUp.time ? `, ${nextUp.time}` : ""}
-              </Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.remTitle}>No upcoming appointments</Text>
-              <Text style={styles.remSub}>Tap Book an appointment below to see a doctor</Text>
-            </>
-          )}
-        </View>
-        <Text style={styles.remChev}>›</Text>
-      </Pressable>
-
-      {/* Promoted out of the quick-access grid — booking is what this app
-          is actually for, not one tile among several. */}
-      <Pressable onPress={onBookVisit} style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.92 }]}>
-        <LinearGradient
-          colors={["#249c57", "#15803D", "#0f5c2e"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.bookGlow} pointerEvents="none" />
-        <View style={styles.bookIcon}>
-          <CalendarDays size={22} color="#FFFFFF" strokeWidth={2.2} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bookTitle}>Book an appointment</Text>
-          <Text style={styles.bookSub}>Find a doctor and a slot</Text>
-        </View>
-        <View style={styles.bookArrow}>
-          <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
-        </View>
-      </Pressable>
-
-      <Text style={styles.sectionTitle}>Quick access</Text>
+          <Text style={styles.sectionTitle}>Quick access</Text>
+        </>
+      }
+    >
       <View style={styles.grid}>
         {QUICK_ACTIONS.map((qa) => (
           <GadgetCard
@@ -224,7 +228,6 @@ export function HomeScreen() {
             title={qa.label}
             subtitle={qa.sub}
             badge={qa.key === "documentUpload" && awaitingReview > 0 ? `${awaitingReview} to review` : undefined}
-            iconSize={CARD_ICON}
             radius={22}
             cardPadding={16}
             onPress={() => onQuickAction(qa.key)}

@@ -2,7 +2,7 @@
   "expo": {
     "name": "HealthNet",
     "slug": "atomwalk-patient-app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -54,7 +54,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF"
         }
-      ]
+      ],
+      "expo-image"
     ],
     "owner": "atomwalk",
     "runtimeVersion": {

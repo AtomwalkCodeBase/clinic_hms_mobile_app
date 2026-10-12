@@ -47,18 +47,27 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+/**
+ * Gets a new access token, sharing one refresh call between everyone who asks at the same moment. Used by the
+ * interceptor below and by callers that make their own requests outside axios (the document preview pictures).
+ * Returns null when the refresh token is gone or rejected; it does NOT sign the person out, the caller decides.
+ */
+export function refreshSessionToken(): Promise<string | null> {
+  if (!refreshing) {
+    refreshing = refreshAccessToken().finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const original = error.config as any;
     if (error.response?.status === 401 && original && !original._retried && !isPublicAuthCall(original.url)) {
       original._retried = true;
-      if (!refreshing) {
-        refreshing = refreshAccessToken().finally(() => {
-          refreshing = null;
-        });
-      }
-      const newAccess = await refreshing;
+      const newAccess = await refreshSessionToken();
       if (newAccess) {
         original.headers.Authorization = `Bearer ${newAccess}`;
         return api(original);
@@ -69,6 +78,20 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/**
+ * True when the failure is a lost/again-unreachable connection or a timeout
+ * rather than a real answer from the server — i.e. the request may never
+ * have been processed (or its response was lost on the way back). Callers
+ * that mutate data (booking, rescheduling) use this to decide whether a
+ * blind retry is safe or whether they should re-check server state first.
+ */
+export function isLikelyNetworkError(err: unknown): boolean {
+  const e = err as AxiosError;
+  if (!e?.isAxiosError) return false;
+  if (e.response) return false; // the server did answer — not a transport failure
+  return e.code === "ECONNABORTED" || e.message === "Network Error" || !!e.message?.includes("timeout");
+}
 
 /**
  * Standardized error message extraction — most views return the standard
@@ -85,20 +108,6 @@ api.interceptors.response.use(
  * "Sharing isn't available on this device.") reach the user instead of
  * collapsing into the generic fallback.
  */
-/**
- * True when the failure is a lost/again-unreachable connection or a timeout
- * rather than a real answer from the server — i.e. the request may never
- * have been processed (or its response was lost on the way back). Callers
- * that mutate data (booking, rescheduling) use this to decide whether a
- * blind retry is safe or whether they should re-check server state first.
- */
-export function isLikelyNetworkError(err: unknown): boolean {
-  const e = err as AxiosError;
-  if (!e?.isAxiosError) return false;
-  if (e.response) return false; // the server did answer — not a transport failure
-  return e.code === "ECONNABORTED" || e.message === "Network Error" || !!e.message?.includes("timeout");
-}
-
 export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
   const e = err as AxiosError<any>;
   const data = e?.response?.data;
