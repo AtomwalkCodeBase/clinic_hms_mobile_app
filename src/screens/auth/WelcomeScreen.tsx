@@ -17,13 +17,17 @@ export function WelcomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
 
   const proceed = async (screen: "Register" | "Login") => {
-    await setWelcomeSeen();
+    try {
+      await setWelcomeSeen();
+    } catch {
+      // the welcome page may show once more; going on matters more
+    }
     navigation.replace(screen);
   };
 
   return (
-    <Screen topColor="#249c57">
-      <MetalHero style={styles.hero} decorative curved underStatusBar>
+    <Screen>
+      <MetalHero style={styles.hero} curved>
         <View style={styles.heroInner}>
           <LogoPill size={64} />
         </View>

@@ -29,12 +29,12 @@ export function FindDoctorsScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const preselectedTenant = route.params?.tenantId;
+  const preselectedHospital = route.params?.hospitalId;
   // "Browse hospitals" (the always-populated /portal/hospitals/ list) is the
   // default view — /portal/search/ deliberately returns nothing on an empty
   // query/specialty/city (avoids an unfiltered full-table scan), so falling
   // back to it here instead of a real endpoint used to just show nothing.
-  const browsingHospitals = !preselectedTenant && !specialty && query.trim().length < 2;
+  const browsingHospitals = !preselectedHospital && !specialty && query.trim().length < 2;
   // A real text search (e.g. "lake") returns matching hospitals in the
   // response too — a query that only matches a hospital name and no
   // doctor's name/specialty (like "Lakeview Clinic") used to show "No
@@ -52,8 +52,8 @@ export function FindDoctorsScreen() {
     setLoading(true);
     setError("");
     try {
-      if (preselectedTenant) {
-        const results = await getDoctors(preselectedTenant);
+      if (preselectedHospital) {
+        const results = await getDoctors(preselectedHospital);
         setDoctors(results.map((d) => ({ ...d, hospital: route.params?.hospitalName })));
       } else if (browsingHospitals) {
         setHospitals(await getHospitals());
@@ -67,9 +67,9 @@ export function FindDoctorsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [preselectedTenant, query, specialty, browsingHospitals, route.params]);
+  }, [preselectedHospital, query, specialty, browsingHospitals, route.params]);
 
-  // Re-runs on specialty/tenant changes immediately, and on typing with a
+  // Re-runs on specialty/hospital changes immediately, and on typing with a
   // short debounce — previously `query` wasn't a dependency at all, so
   // typing "lake" did nothing until the keyboard's submit/return key was
   // pressed (onSubmitEditing), which isn't how live search is expected to
@@ -78,13 +78,13 @@ export function FindDoctorsScreen() {
   useEffect(() => {
     const t = setTimeout(() => load(), query ? 350 : 0);
     return () => clearTimeout(t);
-  }, [query, specialty, preselectedTenant]);
+  }, [query, specialty, preselectedHospital]);
 
   // /portal/hospitals/<id>/doctors/ always returns every doctor at that
   // hospital regardless of specialty — the search bar/specialty picker are
   // hidden in this mode, so filtering has to happen client-side here
-  // instead of round-tripping to /portal/search/ (which isn't tenant-scoped).
-  const visibleDoctors = preselectedTenant && specialty ? doctors.filter((d) => d.specialisation === specialty) : doctors;
+  // instead of round-tripping to /portal/search/ (which isn't hospital-scoped).
+  const visibleDoctors = preselectedHospital && specialty ? doctors.filter((d) => d.specialisation === specialty) : doctors;
 
   const grouped = visibleDoctors.reduce<Record<string, DoctorCard[]>>((acc, d) => {
     const key = d.hospital || "Results";
@@ -102,7 +102,7 @@ export function FindDoctorsScreen() {
         </View>
       )}
 
-      {!preselectedTenant && (
+      {!preselectedHospital && (
         <View style={styles.searchRow}>
           <TextInput
             value={query}
@@ -152,7 +152,7 @@ export function FindDoctorsScreen() {
           // always adds a real new entry, so back correctly steps back
           // through each hospital drill-down one at a time.
           hospitals.map((h) => (
-            <Pressable key={h.tenant_id} onPress={() => navigation.push("FindDoctors", { tenantId: h.tenant_id, hospitalName: h.name })}>
+            <Pressable key={h.hospital_id} onPress={() => navigation.push("FindDoctors", { hospitalId: h.hospital_id, hospitalName: h.name })}>
               <Card>
                 <Text style={styles.docName}>{h.name}</Text>
                 <Text style={styles.docSpec}>{h.city || h.state || "—"}</Text>
@@ -165,7 +165,7 @@ export function FindDoctorsScreen() {
       ) : (
         <>
           {searchedHospitals.map((h) => (
-            <Pressable key={h.tenant_id} onPress={() => navigation.push("FindDoctors", { tenantId: h.tenant_id, hospitalName: h.name })}>
+            <Pressable key={h.hospital_id} onPress={() => navigation.push("FindDoctors", { hospitalId: h.hospital_id, hospitalName: h.name })}>
               <Card>
                 <Text style={styles.docName}>{h.name}</Text>
                 <Text style={styles.docSpec}>{h.city || h.state || "—"}</Text>
@@ -176,8 +176,8 @@ export function FindDoctorsScreen() {
           <View key={hospital}>
             <Pressable
               onPress={() =>
-                docs[0]?.tenant_id &&
-                navigation.push("FindDoctors", { tenantId: docs[0].tenant_id, hospitalName: hospital })
+                docs[0]?.hospital_id &&
+                navigation.push("FindDoctors", { hospitalId: docs[0].hospital_id, hospitalName: hospital })
               }
             >
               <Text style={[styles.hospitalHeading, { color: theme.text }]}>{hospital} →</Text>
@@ -199,9 +199,9 @@ export function FindDoctorsScreen() {
                 <PrimaryButton
                   label="Book"
                   onPress={() =>
-                    (doc.tenant_id || preselectedTenant) &&
+                    (doc.hospital_id || preselectedHospital) &&
                     navigation.navigate("DoctorDetail", {
-                      tenantId: (doc.tenant_id || preselectedTenant)!,
+                      hospitalId: (doc.hospital_id || preselectedHospital)!,
                       doctorId: doc.id,
                       initialComplaint,
                       patientAwpid,

@@ -7,19 +7,8 @@ import type { LucideIcon } from "@/theme/icons";
 import { CARD } from "@/theme/cardSizes";
 
 /** The gadget tiles are deliberately smaller than the shared card size (cardSizes.ts): a compact grid on Home and Health. */
-const GADGET_ICON = 34;
-const GADGET_TEXT = { title: 13, sub: 10.5, subLine: 14 };
-
-/**
- * A tinted structural shape for the per-person colours in theme/familyColors.ts (age/gender-derived tints used on the
- * Health detail screens' list rows) — not used by GadgetCard itself any more.
- */
-export interface GadgetTint {
-  bg: readonly [string, string, string];
-  icon: readonly [string, string, string];
-  shadow: string;
-  border: string;
-}
+const GADGET_ICON = 46;
+const GADGET_TITLE = 16.5;
 
 /**
  * The gadget tile used on the Home and Health tabs. Every tile has the same Whisper green surface and the same emerald
@@ -28,7 +17,6 @@ export interface GadgetTint {
 export function GadgetCard({
   icon,
   title,
-  subtitle,
   onPress,
   disabled,
   iconSize = GADGET_ICON,
@@ -39,7 +27,6 @@ export function GadgetCard({
 }: {
   icon: LucideIcon;
   title: string;
-  subtitle: string;
   onPress: () => void;
   disabled?: boolean;
   iconSize?: number;
@@ -77,9 +64,6 @@ export function GadgetCard({
         <View style={styles.content}>
           <IconBadge icon={icon} size={iconSize} />
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.sub} numberOfLines={2}>
-            {subtitle}
-          </Text>
         </View>
       </LinearGradient>
     </Pressable>
@@ -97,10 +81,9 @@ const styles = StyleSheet.create({
   // flex: 1 so the visible gradient card fills whatever height the outer Pressable ends up with when a 2-up grid row
   // stretches it to match a taller sibling — without it, the shadow (attached to the taller, stretched Pressable) sat
   // below an invisible gap under the shorter visible card, reading as a misaligned floating shadow.
-  card: { flex: 1, borderRadius: CARD.radius, padding: CARD.padding, borderWidth: 1, overflow: "hidden" },
+  card: { flex: 1, borderRadius: CARD.radius, padding: CARD.padding, borderWidth: 1, overflow: "hidden", minHeight: 132, justifyContent: "center" },
   content: { position: "relative" },
   badge: { position: "absolute", top: 10, right: 10, backgroundColor: "#F2B544", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1.5, zIndex: 2 },
   badgeText: { fontSize: 10.5, fontWeight: "700", color: "#3B2A05" },
-  title: { fontSize: GADGET_TEXT.title, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 10 },
-  sub: { fontSize: GADGET_TEXT.sub, color: NEUTRAL.textSecondary, marginTop: 4, lineHeight: GADGET_TEXT.subLine },
+  title: { fontSize: GADGET_TITLE, fontWeight: "800", color: NEUTRAL.textPrimary, marginTop: 14 },
 });

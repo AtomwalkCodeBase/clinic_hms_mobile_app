@@ -1,6 +1,6 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Check, X } from "lucide-react-native";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { ReadyState, useDocumentUpload } from "@/context/DocumentUploadContext";
 import { CARD } from "@/theme/cardSizes";
@@ -63,7 +63,7 @@ export function UploadStatusBar({ onReview }: { onReview: (ready: ReadyState) =>
     return (
       <View style={[styles.card, styles.readyCard]}>
         <View style={[styles.tick, { backgroundColor: n ? theme.fill : NEUTRAL.warning }]}>
-          <Check size={12} color="#fff" strokeWidth={3} />
+          <Check size={12} color={n ? ON_BRAND : "#fff"} strokeWidth={3} />
         </View>
         <Text style={styles.readyText}>{text}</Text>
         <Pressable onPress={() => { clearReady(); onReview(ready); }} hitSlop={8}>

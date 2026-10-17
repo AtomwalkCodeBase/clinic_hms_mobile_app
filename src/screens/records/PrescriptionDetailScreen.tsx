@@ -19,7 +19,7 @@ export function PrescriptionDetailScreen() {
 
   const downloadReceipt = async () => {
     if (!record.prescription_id) return;
-    const receipt = await getPrescriptionReceipt(record.tenant_db, record.prescription_id);
+    const receipt = await getPrescriptionReceipt(record.hospital_db, record.prescription_id);
     await downloadDataUri(receipt.file_name, receipt.file_data);
   };
 

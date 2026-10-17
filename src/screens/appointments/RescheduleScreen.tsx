@@ -27,7 +27,7 @@ function dateOffsetLabel(daysFromToday: number): { key: string; label: string } 
 export function RescheduleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "Reschedule">>();
-  const { bookingId, tenantId, doctorId, doctorName, hospitalName, patientName } = route.params;
+  const { bookingId, hospitalId, doctorId, doctorName, hospitalName, patientName } = route.params;
   const { theme } = useAppTheme();
   const { isOffline } = useNetwork();
 
@@ -48,11 +48,11 @@ export function RescheduleScreen() {
     // real doctor) just means no suggested slots, not a reschedule failure;
     // the empty state below already says so. A visible error banner here
     // would contradict that and read as broken when it isn't.
-    getSlots(tenantId, doctorId, selectedDate)
+    getSlots(hospitalId, doctorId, selectedDate)
       .then(setSlots)
       .catch(() => {})
       .finally(() => setSlotsLoading(false));
-  }, [tenantId, doctorId, selectedDate]);
+  }, [hospitalId, doctorId, selectedDate]);
 
   const onConfirm = async () => {
     setError("");

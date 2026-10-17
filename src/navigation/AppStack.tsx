@@ -9,16 +9,16 @@ import { ConfirmBookingScreen } from "@/screens/appointments/ConfirmBookingScree
 import { BookingSuccessScreen } from "@/screens/appointments/BookingSuccessScreen";
 import { PrescriptionDetailScreen } from "@/screens/records/PrescriptionDetailScreen";
 import { MyDocumentsScreen } from "@/screens/records/MyDocumentsScreen";
+import { DocumentDayScreen } from "@/screens/records/DocumentDayScreen";
 import { CaptureScreen } from "@/screens/records/CaptureScreen";
 import { DocumentUploadScreen } from "@/screens/records/DocumentUploadScreen";
 import { DocumentViewerScreen } from "@/screens/records/DocumentViewerScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
 import { VaccinationsScreen } from "@/screens/health/VaccinationsScreen";
-import { ReportVaccinationScreen } from "@/screens/health/ReportVaccinationScreen";
+import { AddVaccineScreen } from "@/screens/health/AddVaccineScreen";
 import { HealthTimelineScreen } from "@/screens/health/HealthTimelineScreen";
 import { HealthVisitsScreen } from "@/screens/health/HealthVisitsScreen";
-import { GrowthScreen } from "@/screens/health/GrowthScreen";
 import { AddFamilyMemberScreen } from "@/screens/health/AddFamilyMemberScreen";
 import { PersonalDetailsScreen } from "@/screens/profile/PersonalDetailsScreen";
 import { HealthSummaryScreen } from "@/screens/profile/HealthSummaryScreen";
@@ -58,16 +58,16 @@ export function AppStack() {
       <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       <Stack.Screen name="MyDocuments" component={MyDocumentsScreen} />
+      <Stack.Screen name="DocumentDay" component={DocumentDayScreen} />
       <Stack.Screen name="DocumentCapture" component={CaptureScreen} options={{ presentation: "fullScreenModal", animation: "fade" }} />
       <Stack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
       <Stack.Screen name="DocumentViewer" component={DocumentViewerScreen} options={{ presentation: "fullScreenModal", animation: "fade", contentStyle: { backgroundColor: "#0B0F14" } }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
       <Stack.Screen name="Vaccinations" component={VaccinationsScreen} />
-      <Stack.Screen name="ReportVaccination" component={ReportVaccinationScreen} />
+      <Stack.Screen name="AddVaccine" component={AddVaccineScreen} />
       <Stack.Screen name="HealthTimeline" component={HealthTimelineScreen} />
       <Stack.Screen name="HealthVisits" component={HealthVisitsScreen} />
-      <Stack.Screen name="Growth" component={GrowthScreen} />
       <Stack.Screen name="AddFamilyMember" component={AddFamilyMemberScreen} />
       <Stack.Screen name="PersonalDetails" component={PersonalDetailsScreen} />
       <Stack.Screen name="HealthSummary" component={HealthSummaryScreen} />

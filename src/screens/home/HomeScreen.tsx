@@ -19,7 +19,7 @@ import { IconBadge } from "@/components/IconBadge";
 import { GadgetCard } from "@/components/GadgetCard";
 import type { LucideIcon } from "@/theme/icons";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP, HEADER_GRADIENT } from "@/theme/themes";
 import { getStats, getMyBookings, getNotifications, getProfile, getDocumentCounts } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
@@ -42,11 +42,11 @@ type Nav = CompositeNavigationProp<
 // was a dead extra step, not a shortcut to anything the grid itself
 // couldn't reach. Freed up for a visitor-management tile a teammate is
 // building.
-const QUICK_ACTIONS: { key: string; label: string; sub: string; icon: LucideIcon }[] = [
-  { key: "appointments", label: "Appointments", sub: "Upcoming and past visits", icon: ClipboardList },
-  { key: "records", label: "My Documents", sub: "Prescriptions, lab reports and more", icon: FileText },
-  { key: "shareRecords", label: "Share Records", sub: "Let any doctor view your records", icon: QrCode },
-  { key: "documentUpload", label: "Bulk Upload", sub: "Add many files at once", icon: Upload },
+const QUICK_ACTIONS: { key: string; label: string; icon: LucideIcon }[] = [
+  { key: "appointments", label: "Appointments", icon: ClipboardList },
+  { key: "records", label: "My Documents", icon: FileText },
+  { key: "shareRecords", label: "Share Records", icon: QrCode },
+  { key: "documentUpload", label: "Bulk Upload", icon: Upload },
 ];
 
 function greetingForHour(hour: number): string {
@@ -112,8 +112,8 @@ export function HomeScreen() {
 
   if (isInitialLoading) {
     return (
-      <Screen topColor="#249c57" bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, height: 150, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+      <Screen bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
           <View style={styles.heroTop}>
             <LogoPill size={40} />
           </View>
@@ -138,16 +138,15 @@ export function HomeScreen() {
       onRefresh={pullRefresh}
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
-      topColor="#249c57"
       bottomInset={false}
       header={
         <>
-          <MetalHero compact curved underStatusBar style={styles.hero}>
+          <MetalHero compact curved style={styles.hero}>
             <View style={styles.heroTop}>
               <LogoPill size={40} />
               <View style={styles.heroActions}>
                 <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
-                  <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
+                  <Bell size={18} color={ON_BRAND} strokeWidth={2.2} />
                   {unreadCount > 0 && (
                     <View style={styles.badge}>
                       <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
@@ -198,21 +197,21 @@ export function HomeScreen() {
               is actually for, not one tile among several. */}
           <Pressable onPress={onBookVisit} style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.92 }]}>
             <LinearGradient
-              colors={["#249c57", "#15803D", "#0f5c2e"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              colors={HEADER_GRADIENT}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}
             />
             <View style={styles.bookGlow} pointerEvents="none" />
             <View style={styles.bookIcon}>
-              <CalendarDays size={22} color="#FFFFFF" strokeWidth={2.2} />
+              <CalendarDays size={22} color={ON_BRAND} strokeWidth={2.2} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.bookTitle}>Book an appointment</Text>
               <Text style={styles.bookSub}>Find a doctor and a slot</Text>
             </View>
             <View style={styles.bookArrow}>
-              <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.4} />
+              <ChevronRight size={16} color={ON_BRAND} strokeWidth={2.4} />
             </View>
           </Pressable>
 
@@ -226,10 +225,9 @@ export function HomeScreen() {
             key={qa.key}
             icon={qa.icon}
             title={qa.label}
-            subtitle={qa.sub}
             badge={qa.key === "documentUpload" && awaitingReview > 0 ? `${awaitingReview} to review` : undefined}
             radius={22}
-            cardPadding={16}
+            cardPadding={20}
             onPress={() => onQuickAction(qa.key)}
             style={styles.qa}
           />
@@ -288,9 +286,9 @@ const styles = StyleSheet.create({
   bellBtn: { position: "relative", padding: 4 },
   badge: { position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: "#B23A3A", alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
   badgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },
-  greeting: { fontSize: 16, fontWeight: "600", color: "#FFFFFF", marginTop: 12 },
-  greetingDate: { fontSize: 11, color: "#EAF3DE", marginTop: 2, opacity: 0.9 },
-  greetingSub: { fontSize: 11.5, color: "#EAF3DE", marginTop: 6 },
+  greeting: { fontSize: 16, fontWeight: "600", color: ON_BRAND, marginTop: 12 },
+  greetingDate: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 2 },
+  greetingSub: { fontSize: 11.5, color: "rgba(4,38,28,0.78)", marginTop: 6 },
   reminderCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -299,7 +297,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     marginBottom: 12,
-    shadowColor: "#0a4020",
+    shadowColor: BRAND_DEEP,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
     shadowRadius: 12,
@@ -316,17 +314,17 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 14,
     marginBottom: 18,
-    shadowColor: "#0f5c2e",
+    shadowColor: BRAND_DEEP,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 6,
   },
   bookGlow: { position: "absolute", top: -30, right: -30, width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.14)" },
-  bookIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
-  bookTitle: { fontWeight: "700", fontSize: CARD_TEXT.title + 1, color: "#FFFFFF" },
-  bookSub: { fontSize: CARD_TEXT.meta, color: "rgba(255,255,255,0.82)", marginTop: 2 },
-  bookArrow: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
+  bookIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" },
+  bookTitle: { fontWeight: "700", fontSize: CARD_TEXT.title + 1, color: ON_BRAND },
+  bookSub: { fontSize: CARD_TEXT.meta, color: "rgba(4,38,28,0.75)", marginTop: 2 },
+  bookArrow: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" },
   remChev: { fontSize: 18, color: NEUTRAL.textMuted },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8, marginTop: 4 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 4 },

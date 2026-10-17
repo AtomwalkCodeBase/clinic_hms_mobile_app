@@ -81,8 +81,8 @@ export function OTPLoginScreen() {
   };
 
   return (
-    <Screen topColor="#249c57">
-      <MetalHero compact style={styles.hero} decorative curved underStatusBar onBack={onBack}>
+    <Screen>
+      <MetalHero compact style={styles.hero} curved onBack={onBack}>
         <View style={styles.heroInner}>
           <LogoPill size={44} />
         </View>

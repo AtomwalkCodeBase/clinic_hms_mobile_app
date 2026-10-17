@@ -24,7 +24,11 @@ export function BiometricPrimingScreen({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
 
   const finish = async () => {
-    await setBiometricPromptSeen();
+    try {
+      await setBiometricPromptSeen();
+    } catch {
+      // not being able to remember "seen" only means the question may be asked once more
+    }
     onDone();
   };
 
@@ -36,6 +40,8 @@ export function BiometricPrimingScreen({ onDone }: { onDone: () => void }) {
       if (hasHardware && isEnrolled) {
         await setBiometricLockEnabled(true);
       }
+    } catch {
+      // no usable fingerprint or face unlock: carry on without it
     } finally {
       setBusy(false);
       await finish();

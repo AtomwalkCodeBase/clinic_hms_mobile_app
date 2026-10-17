@@ -6,6 +6,7 @@ export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
+  large = false,
 }: {
   /** `color`, when given, replaces the shared theme accent for THIS option
    * only — e.g. each family member's own age/gender-derived color, so every
@@ -15,6 +16,8 @@ export function SegmentedControl<T extends string>({
   options: { key: T; label: string; color?: { fill: string; on: string } }[];
   value: T;
   onChange: (key: T) => void;
+  /** Bigger pills and text, for the main switch of a page (Upcoming / Past visits). */
+  large?: boolean;
 }) {
   const { theme } = useAppTheme();
   return (
@@ -29,10 +32,11 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(opt.key)}
             style={[
               styles.pill,
+              large && styles.pillLarge,
               { borderColor: active ? fill : (opt.color ? fill : NEUTRAL.border), backgroundColor: active ? fill : NEUTRAL.surface },
             ]}
           >
-            <Text style={[styles.label, { color: active ? on : (opt.color ? fill : NEUTRAL.textPrimary) }]}>{opt.label}</Text>
+            <Text style={[styles.label, large && styles.labelLarge, { color: active ? on : (opt.color ? fill : NEUTRAL.textPrimary) }]}>{opt.label}</Text>
           </Pressable>
         );
       })}
@@ -44,5 +48,7 @@ const styles = StyleSheet.create({
   scroll: { marginBottom: 12 },
   row: { gap: 6, paddingRight: 8 },
   pill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 0.5 },
+  pillLarge: { paddingHorizontal: 20, paddingVertical: 11, borderRadius: 24, borderWidth: 1 },
   label: { fontSize: 11.5, fontWeight: "500" },
+  labelLarge: { fontSize: 15, fontWeight: "700" },
 });

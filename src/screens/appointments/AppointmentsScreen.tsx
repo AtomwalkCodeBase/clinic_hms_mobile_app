@@ -13,7 +13,7 @@ import { Pill, statusTone, toneColor } from "@/components/Pill";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP, HEADER_GRADIENT } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getMyBookings, getMyRecords, cancelBooking } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
@@ -124,8 +124,8 @@ export function AppointmentsScreen() {
 
   if (isInitialLoading) {
     return (
-      <Screen topColor="#249c57" bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, height: 118, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+      <Screen bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, height: 118, backgroundColor: BRAND, borderRadius: 24 }]}>
           <SkeletonBlock width={180} height={16} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={220} height={11} style={{ marginTop: 8, backgroundColor: "rgba(255,255,255,0.25)" }} />
         </View>
@@ -142,10 +142,9 @@ export function AppointmentsScreen() {
       onRefresh={pullRefresh}
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
-      topColor="#249c57"
       bottomInset={false}
     >
-      <MetalHero compact curved underStatusBar style={styles.hero}>
+      <MetalHero compact curved style={styles.hero} onBack={() => navigation.navigate("Home")}>
         <Text style={styles.bannerTitle}>Find a doctor instantly</Text>
         <Text style={styles.bannerSub}>Book across every hospital on the platform</Text>
         <Pressable onPress={() => navigation.navigate("BookingFor", undefined)} style={styles.bannerBtn}>
@@ -164,6 +163,7 @@ export function AppointmentsScreen() {
         ]}
         value={segment}
         onChange={setSegment}
+        large
       />
 
       {shown.length === 0 ? (
@@ -176,7 +176,7 @@ export function AppointmentsScreen() {
               <Pressable key={b.id} onPress={() => setDetailBooking(b)}>
                 <Card style={styles.pastCard}>
                   <View style={styles.pastRow}>
-                    <IconBadge icon={CheckCircle2} size={34} colors={["#2eb166", "#15803D", "#0d4b26"]} shadowColor="#0a4020" />
+                    <IconBadge icon={CheckCircle2} size={34} colors={HEADER_GRADIENT} shadowColor={BRAND_DEEP} iconColor={ON_BRAND} />
                     <View style={{ flex: 1 }}>
                       <View style={styles.rowBetween}>
                         <Text style={styles.pastTimeAgo}>{timeAgo(b.date)}</Text>
@@ -203,7 +203,7 @@ export function AppointmentsScreen() {
                           compact
                           onPress={() =>
                             navigation.navigate("DoctorDetail", {
-                              tenantId: b.tenant_id,
+                              hospitalId: b.hospital_id,
                               doctorId: b.doctor_id!,
                               patientAwpid: b.patient_awpid || undefined,
                               patientName: b.patient_name || undefined,
@@ -248,7 +248,7 @@ export function AppointmentsScreen() {
                         onPress={() =>
                           navigation.navigate("Reschedule", {
                             bookingId: b.id,
-                            tenantId: b.tenant_id,
+                            hospitalId: b.hospital_id,
                             doctorId: b.doctor_id!,
                             doctorName: b.doctor,
                             hospitalName: b.hospital,
@@ -331,8 +331,8 @@ export function AppointmentsScreen() {
 
 const styles = StyleSheet.create({
   hero: { marginBottom: 18 },
-  bannerTitle: { fontSize: 14, fontWeight: "600", color: "#FFFFFF" },
-  bannerSub: { fontSize: 11.5, color: "#EAF3DE", marginTop: 2, marginBottom: 10 },
+  bannerTitle: { fontSize: 14, fontWeight: "600", color: ON_BRAND },
+  bannerSub: { fontSize: 11.5, color: "rgba(4,38,28,0.78)", marginTop: 2, marginBottom: 10 },
   bannerBtn: { alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: "#FFFFFF" },
   bannerBtnText: { fontSize: 12.5, fontWeight: "700" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

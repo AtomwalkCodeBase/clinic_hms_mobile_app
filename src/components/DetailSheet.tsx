@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable, Modal, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
 
 /**
@@ -29,9 +29,7 @@ export function DetailSheet({
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <Text style={styles.title}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <X size={16} color={NEUTRAL.textMuted} strokeWidth={2.2} />
-            </Pressable>
+            <CloseButton onPress={onClose} />
           </View>
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {children}

@@ -14,7 +14,7 @@ interface Tokens {
 export type LoginResponse = Tokens;
 
 export interface Hospital {
-  tenant_id: number;
+  hospital_id: number;
   name: string;
   city: string;
   state: string;
@@ -35,7 +35,7 @@ export interface DoctorCard {
   known_for: string;
   hospital?: string;
   hospital_city?: string;
-  tenant_id?: number;
+  hospital_id?: number;
 }
 
 export interface DoctorDetail extends DoctorCard {
@@ -61,7 +61,7 @@ export interface Pagination {
 
 export interface Booking {
   id: number;
-  tenant_id: number;
+  hospital_id: number;
   hospital: string;
   doctor: string;
   doctor_id: number | null;
@@ -134,7 +134,7 @@ export interface BookingResult {
 
 export interface MedicalRecord {
   hospital: string;
-  tenant_db: string;
+  hospital_db: string;
   date: string;
   time: string | null;
   doctor: string;
@@ -150,7 +150,7 @@ export interface MedicalRecord {
     instructions: string;
   }[];
   // Set only once a prescription actually exists for this record (PortalMyRecordsView) —
-  // PortalPrescriptionReceiptPDFView takes exactly (tenant_db, prescription_id).
+  // PortalPrescriptionReceiptPDFView takes exactly (hospital_db, prescription_id).
   prescription_id: string | null;
   rx_number: string | null;
   investigations: string;
@@ -180,7 +180,7 @@ export interface PatientDocument {
   created_at: string;
   document_date?: string | null;
   public_document_id?: string;
-  source_tenant_id?: number | string | null;
+  source_hospital_id?: number | string | null;
   processing_status: ProcessingStatus;
   /** The rule engine's points (not a percentage); only meaningful once the document has been read. */
   score?: number | null;
@@ -195,6 +195,10 @@ export interface PatientDocument {
   batch_id?: number | null;
   /** the typeset prescription's handwritten sibling, if any */
   handwritten_doc_id?: number | null;
+  /** The doctor named on the document, without "Dr." (read from its text, or typed by the patient). "" when unknown. */
+  doctor_name?: string;
+  /** True for the patient's own upload that is no longer being read: the one rule for showing Delete. */
+  deletable?: boolean;
 }
 
 /** One row on the Shared-records privacy screen — the vault annotated with
@@ -280,7 +284,7 @@ interface LabReportItem {
 
 export interface LabOrder {
   id: number;
-  tenant_db: string;
+  hospital_db: string;
   hospital: string;
   test_name: string;
   price: string | null;
@@ -309,7 +313,7 @@ export interface LabOrder {
 // same in-house/outside choice tracking LabOrder already has.
 export interface PrescriptionOrder {
   id: string;
-  tenant_db: string;
+  hospital_db: string;
   hospital: string;
   rx_number: string | null;
   doctor_name: string | null;
@@ -326,6 +330,8 @@ export interface Profile {
   full_name: string;
   email: string;
   mobile: string;
+  /** the server keeps the number to itself: true when the account has one, even if `mobile` comes back empty */
+  mobile_on_file?: boolean;
   gender: string;
   date_of_birth: string | null;
   created_at: string;
@@ -344,47 +350,82 @@ export interface HealthSummary {
   active_diagnoses: { description: string; onset_date: string }[];
   last_visit: string | null;
   last_hospital: string | null;
-  linked_hospitals: { hospital_name: string; tenant_id: number; last_visit: string }[];
+  linked_hospitals: { hospital_name: string; hospital_id: number; last_visit: string }[];
 }
 
-export interface VaccinationRoadmapItem {
-  vaccine_name: string;
-  scheduled_label?: string;
-  administered_date: string | null;
-  status: string;
-  record_id?: number;
-  has_certificate?: boolean;
-  // Only set on unrecorded ("unknown") items — see build_roadmap() in
-  // apps/registry/vaccine_schedule.py. `timing` is the source of truth for
-  // due_now/past_window; `min_age_days` is planning metadata a client can
-  // combine with date_of_birth to estimate a calendar due date.
-  timing?: "upcoming" | "due_now" | "past_window" | null;
-  min_age_days?: number | null;
+// The pediatric health endpoints (apps/documents/views_timeline.py). They return raw objects, not the {success,data} envelope.
+export type TimelineSeverity = "NORMAL" | "MILD" | "ABNORMAL" | "CRITICAL";
+
+export interface TimelineEpisode {
+  start: string;
+  end: string | null;
+  peak_severity: TimelineSeverity;
+  peak_severity_label: string;
+  onset_age: string;
+  event_count: number;
 }
 
-export interface VaccinationSummary {
-  date_of_birth: string | null;
-  roadmap: VaccinationRoadmapItem[];
-  completed_count: number;
-  total_count: number;
-  // The backend returns the full roadmap item due next, not a name string.
-  next_recommended: VaccinationRoadmapItem | null;
-  stats: Record<string, number>;
+export type TimelineLane =
+  | { id: string; type: "birth"; label: string; items: { gestation_weeks: number | null; birth_weight_kg: number | null; nicu_admission: boolean; nicu_days: number | null; preterm: boolean }[] }
+  | { id: string; type: "growth"; label: string; series: Record<string, { date: string; value: number; percentile: number | null; flag: string | null }[]>; alerts: { from: string; to: string; drop: number }[] }
+  | { id: string; type: "immunization"; label: string; items: ImmunizationRow[] }
+  | { id: string; type: "chronic"; label: string; episode: TimelineEpisode & { events: { date: string; severity: TimelineSeverity; text: string; age_label: string }[] } }
+  | { id: string; type: "acute"; label: string; is_recurrent: boolean; episodes: TimelineEpisode[] }
+  | { id: string; type: "hospital"; label: string; items: { kind: "ADMISSION" | "LAB"; start: string; end: string | null; ward?: string; reason?: string; analyte?: string; value?: number; direction?: string; is_critical: boolean; label: string; age_label: string }[] };
+
+export interface HealthTimeline {
+  patient: { dob: string; sex: string; age_label: string; uses_corrected_age: boolean };
+  period: { from: string; to: string };
+  summary: {
+    chronic_conditions: number;
+    acute_episodes: number;
+    recurrent_conditions: number;
+    hospital_stays: number;
+    growth_flags: number;
+    vaccines_overdue: number;
+  };
+  lanes: TimelineLane[];
 }
 
-export interface TimelineEntry {
+export type GrowthIndicator = "weight_kg" | "height_cm" | "head_circ_cm";
+
+export interface GrowthReading {
   date: string;
-  type: "visit" | "vaccination" | "growth" | "lab" | "document";
-  icon_hint: string;
-  title: string;
-  subtitle: string | null;
-  detail: Record<string, any> | null;
+  age_months: number;
+  value: number;
+  percentile: number | null;
+  flag: string | null;
 }
 
-export interface GrowthPoint {
+export interface GrowthSeries {
+  uses_corrected_age: boolean;
+  /** centile curves by z-score ("-3", "-2", "0", "2", "3"): [age in months, value] pairs */
+  reference: Record<string, [number, number][]>;
+  reference_note: string;
+  points: GrowthReading[];
+}
+
+export type ImmunizationStatus = "GIVEN" | "OVERDUE" | "DUE" | "UPCOMING" | "SCHEDULED";
+
+export interface ImmunizationRow {
+  code: string;
+  vaccine: string;
+  dose: number;
+  due_on: string;
+  due_age: string;
+  status: ImmunizationStatus;
+  status_label: string;
+  given_on: string | null;
   date: string;
-  height_cm: number | null;
-  weight_kg: number | null;
+  late: boolean;
+  document_id: number | null;
+}
+
+export interface Immunization {
+  summary: { given: number; overdue: number; due: number; upcoming: number; coverage_pct: number | null };
+  rows: ImmunizationRow[];
+  next_due: ImmunizationRow | null;
+  source: string;
 }
 
 export interface FamilyMember {
@@ -397,7 +438,7 @@ export interface FamilyMember {
 
 // Confirmed against PortalNotificationsView's actual return
 // (apps/patients/portal_views.py:2487) — "id" is a composite string
-// ("<tenant_db>:<log_id>" for real reminders, "vaccine:<label>" for
+// ("<hospital_db>:<log_id>" for real reminders, "vaccine:<label>" for
 // vaccination-due ones, which have no backing row and can't be marked read).
 export interface NotificationItem {
   id: string;

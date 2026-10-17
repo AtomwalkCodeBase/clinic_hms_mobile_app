@@ -69,21 +69,6 @@ async function stageForUpload(sourceUri: string, name: string): Promise<string> 
   return dest;
 }
 
-/** Opens the system file picker restricted to PDFs. Returns null if the user cancels. */
-export async function pickPdf(): Promise<PickedFile | null> {
-  // copyToCacheDirectory: false — DocumentPicker's own cache copy lands in the app's raw
-  // context.cacheDir, not the per-experience sandboxed folder Expo Go's FileSystem module reads
-  // from, so a subsequent copyAsync/uploadAsync on that path throws "isn't readable" even though
-  // the bytes are genuinely there. Staging straight from the picker's original content:// URI into
-  // our own documentDirectory (which IS in the sandboxed folder) avoids that mismatch entirely.
-  const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: false });
-  if (result.canceled || !result.assets?.[0]) return null;
-  const asset = result.assets[0];
-  const name = asset.name || "report.pdf";
-  const uri = await stageForUpload(asset.uri, name);
-  return { uri, name, mimeType: asset.mimeType || "application/pdf" };
-}
-
 /**
  * Opens the system file picker for PDFs / images — several in one pick by default (Bulk Upload), or exactly one
  * (Add Document: `pickDocuments(false)`). Returns [] if the user cancels.
@@ -98,7 +83,11 @@ function readableName(name: string): string {
 }
 
 export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
-  // See pickPdf() above for why copyToCacheDirectory is false, not true.
+  // copyToCacheDirectory: false — DocumentPicker's own cache copy lands in the app's raw
+  // context.cacheDir, not the per-experience sandboxed folder Expo Go's FileSystem module reads
+  // from, so a subsequent copyAsync/uploadAsync on that path throws "isn't readable" even though
+  // the bytes are genuinely there. Staging straight from the picker's original content:// URI into
+  // our own documentDirectory (which IS in the sandboxed folder) avoids that mismatch entirely.
   const result = await DocumentPicker.getDocumentAsync({
     type: ["application/pdf", "image/*"],
     multiple,

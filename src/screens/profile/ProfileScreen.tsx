@@ -1,31 +1,35 @@
 import { useCallback, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Modal, Switch } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Modal } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Camera, IdCard, HeartPulse, Users, Building2, Headphones, Droplet, AlertTriangle, Lock } from "lucide-react-native";
+import { Camera, IdCard, HeartPulse, Users, Building2, Headphones, Droplet, AlertTriangle, Lock, Fingerprint } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
 import { MetalHero } from "@/components/MetalHero";
 import { ListRow } from "@/components/ListRow";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
 import { getProfile, getHealthSummary, getFamily, updateProfile } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { pickImage, pickImageFromCamera, fileToDataUri } from "@/utils/fileHelpers";
+import { Toggle } from "@/components/Toggle";
 import { getBiometricLockEnabled, setBiometricLockEnabled } from "@/utils/storage";
-import { AppStackParamList } from "@/navigation/types";
+import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
 
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  // The back arrow in the hero goes to the Home tab, same as the phone's own back button does from a tab.
+  const tabs = useNavigation<BottomTabNavigationProp<AppTabsParamList>>();
   const { theme } = useAppTheme();
   const { logout } = useAuth();
   const { uploading } = useDocumentUpload();
@@ -73,25 +77,26 @@ export function ProfileScreen() {
     }, [])
   );
 
-  const onToggleBiometric = async (next: boolean) => {
+  // One tap moves the switch once: it flips immediately, then the check runs, and it flips back only if that fails.
+  const onToggleBiometric = async () => {
+    if (biometricBusy) return;
+    const next = !biometricEnabled;
     setMutationError("");
-    if (!next) {
-      setBiometricBusy(true);
-      await setBiometricLockEnabled(false);
-      setBiometricEnabled(false);
-      setBiometricBusy(false);
-      return;
-    }
+    setBiometricEnabled(next);
     setBiometricBusy(true);
     try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
-      if (!hasHardware || !isEnrolled) {
-        setMutationError("Your phone doesn't have a fingerprint or face unlock set up yet — add one in your phone's Settings first.");
-        return;
+      if (next) {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+        if (!isEnrolled) {
+          setBiometricEnabled(false);
+          setMutationError("Your phone doesn't have a fingerprint or face unlock set up yet — add one in your phone's Settings first.");
+          return;
+        }
       }
-      await setBiometricLockEnabled(true);
-      setBiometricEnabled(true);
+      await setBiometricLockEnabled(next);
+    } catch {
+      setBiometricEnabled(!next);
     } finally {
       setBiometricBusy(false);
     }
@@ -130,8 +135,8 @@ export function ProfileScreen() {
 
   if (isInitialLoading) {
     return (
-      <Screen topColor="#249c57" bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, alignItems: "center", height: 150, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+      <Screen bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, alignItems: "center", height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
           <SkeletonBlock width={72} height={72} radius={36} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={130} height={16} style={{ marginTop: 12, backgroundColor: "rgba(255,255,255,0.25)" }} />
         </View>
@@ -147,12 +152,11 @@ export function ProfileScreen() {
       onRefresh={pullRefresh}
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
-      topColor="#249c57"
       bottomInset={false}
       header={
         <>
           {profile && (
-            <MetalHero style={styles.hero} curved underStatusBar>
+            <MetalHero style={styles.hero} curved onBack={() => tabs.navigate("Home")}>
               <View style={styles.heroContent}>
                 <View style={styles.avwrap}>
                   <View style={styles.avatar}>
@@ -168,7 +172,7 @@ export function ProfileScreen() {
                     hitSlop={8}
                     disabled={uploadingPhoto}
                   >
-                    {uploadingPhoto ? <Text style={styles.camIcon}>…</Text> : <Camera size={13} color="#146334" strokeWidth={2.4} />}
+                    {uploadingPhoto ? <Text style={styles.camIcon}>…</Text> : <Camera size={13} color={BRAND_DEEP} strokeWidth={2.4} />}
                   </Pressable>
                 </View>
                 <Pill label="Verified account" tone="neutral" />
@@ -243,7 +247,7 @@ export function ProfileScreen() {
       <ListRow
         icon={Users}
         title="Family members"
-        subtitle={family.length ? family.map((f) => f.full_name).join(", ") : "No family members added yet"}
+        subtitle={family.length ? "Tap to view your family members" : "No family members added yet"}
         pillLabel={family.length ? String(family.length) : undefined}
         onPress={() => navigation.navigate("FamilyMembers")}
         tinted
@@ -265,17 +269,12 @@ export function ProfileScreen() {
 
       <SectionTitle>Preferences</SectionTitle>
       <ListRow
-        icon={Lock}
+        icon={Fingerprint}
         title="Biometric unlock"
         subtitle={biometricEnabled ? "On — pick fingerprint or password at sign-in" : "Off — sign in with your password"}
         tinted
         trailing={
-          <Switch
-            value={biometricEnabled}
-            onValueChange={onToggleBiometric}
-            disabled={biometricBusy}
-            trackColor={{ true: theme.fill }}
-          />
+          <Toggle on={biometricEnabled} color={theme.fill} onPress={onToggleBiometric} disabled={biometricBusy} />
         }
       />
       <ListRow
@@ -312,7 +311,7 @@ const styles = StyleSheet.create({
   avwrap: { position: "relative", marginBottom: 8 },
   avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImg: { width: "100%", height: "100%" },
-  avatarText: { fontSize: 20, fontWeight: "700", color: "#fff" },
+  avatarText: { fontSize: 20, fontWeight: "700", color: ON_BRAND },
   camBtn: {
     position: "absolute",
     right: -2,
@@ -322,7 +321,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     backgroundColor: "#FFFFFF",
     borderWidth: 2,
-    borderColor: "#146334",
+    borderColor: BRAND_DEEP,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -334,8 +333,8 @@ const styles = StyleSheet.create({
   sheetOptText: { fontSize: 13, color: NEUTRAL.textPrimary, fontWeight: "500" },
   sheetCancel: { paddingVertical: 13, alignItems: "center", marginTop: 4 },
   sheetCancelText: { fontSize: 13, color: NEUTRAL.textSecondary, fontWeight: "600" },
-  name: { fontWeight: "600", fontSize: 15, marginTop: 8, color: "#FFFFFF" },
-  awpid: { fontSize: 11, color: "#EAF3DE", marginTop: 2 },
+  name: { fontWeight: "600", fontSize: 15, marginTop: 8, color: ON_BRAND },
+  awpid: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 2 },
   statCard: {
     flexDirection: "row",
     backgroundColor: NEUTRAL.surface,
@@ -343,7 +342,7 @@ const styles = StyleSheet.create({
     marginTop: -34,
     marginBottom: 18,
     paddingVertical: 12,
-    shadowColor: "#0f2819",
+    shadowColor: ON_BRAND,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
     shadowRadius: 12,

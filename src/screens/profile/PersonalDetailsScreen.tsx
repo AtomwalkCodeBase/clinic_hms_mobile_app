@@ -10,7 +10,7 @@ import { TextField } from "@/components/TextField";
 import { DateField } from "@/components/DateField";
 import { SelectField } from "@/components/SelectField";
 import { SecondaryButton, PrimaryButton } from "@/components/Buttons";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { GENDER_OPTIONS, RELATIONSHIP_OPTIONS } from "@/constants/options";
 import { getProfile, updateProfile, requestMobileChangeOtp } from "@/api/portal";
 import { verifyContactChangeOtp } from "@/api/auth";
@@ -29,21 +29,24 @@ export function PersonalDetailsScreen() {
 
   return (
     <Screen onRefresh={refetch} refreshing={isFetching}>
-      <View style={styles.headerRow}>
-        <BackHeader title="Personal details" onBack={() => navigation.goBack()} />
-        {profile && !editing && (
-          <Text style={styles.editLink} onPress={() => setEditing(true)}>
-            Edit
-          </Text>
-        )}
-      </View>
+      <BackHeader
+        title="Personal details"
+        onBack={() => navigation.goBack()}
+        right={
+          profile && !editing ? (
+            <Text style={styles.editLink} onPress={() => setEditing(true)}>
+              Edit
+            </Text>
+          ) : undefined
+        }
+      />
 
       {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
 
       {profile && !editing && (
         <>
           <Card>
-            <Row label="Mobile" value={profile.mobile} />
+            <Row label="Mobile" value={profile.mobile || (profile.mobile_on_file ? "On file" : "Not set")} />
             <Row label="Email" value={profile.email || "Not set"} />
             <Row label="Gender" value={genderLabel(profile.gender) || "Not set"} />
             <Row label="Date of birth" value={profile.date_of_birth || "Not set"} last />
@@ -142,13 +145,13 @@ function EditProfileForm({ profile, onSaved, onCancel }: { profile: Profile; onS
     try {
       const updated = await updateProfile({
         full_name: fullName.trim(),
-        mobile: mobile.trim(),
         gender: gender.trim(),
         date_of_birth: dob.trim() || undefined,
         emergency_contact_name: emName.trim(),
         emergency_contact_phone: emPhone.trim(),
         emergency_contact_relation: emRelation.trim(),
-        ...(mobileChanged ? { action_token: actionToken } : {}),
+        // the number is sent only when it is a new one, with the code that proves it (the server may not show it back)
+        ...(mobileChanged ? { mobile: mobile.trim(), action_token: actionToken } : {}),
       });
       onSaved(updated);
     } catch (err) {
@@ -164,6 +167,7 @@ function EditProfileForm({ profile, onSaved, onCancel }: { profile: Profile; onS
       <TextField label="Full name" value={fullName} onChangeText={setFullName} />
       <TextField
         label="Mobile number"
+        placeholder={profile.mobile_on_file && !profile.mobile ? "On file — enter a new number to change it" : undefined}
         value={mobile}
         onChangeText={(t) => {
           setMobile(t);
@@ -230,8 +234,7 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  editLink: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary, marginRight: 16 },
+  editLink: { fontSize: 16, fontWeight: "700", color: ON_BRAND, borderWidth: 1.5, borderColor: ON_BRAND, borderRadius: 19, paddingHorizontal: 16, paddingVertical: 6 },
   sectionLabel: { fontSize: 10.5, fontWeight: "600", color: NEUTRAL.textMuted, letterSpacing: 0.4, marginTop: 6, marginBottom: 8 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 9 },
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: NEUTRAL.border },

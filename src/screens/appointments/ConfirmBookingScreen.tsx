@@ -72,7 +72,7 @@ export function ConfirmBookingScreen() {
     setLoading(true);
     try {
       const result = await book({
-        tenant_id: params.tenantId,
+        hospital_id: params.hospitalId,
         doctor_id: params.doctorId,
         scheduled_date: params.date,
         scheduled_time: params.time,

@@ -1,3 +1,4 @@
+import { BRAND_TEXT, BRAND_TINT } from "./themes";
 import {
   Stethoscope,
   Baby,
@@ -23,7 +24,7 @@ import type { LucideIcon } from "./icons";
 // specialty's color reads as "this app's palette", not an arbitrary
 // rainbow bolted on for this one screen.
 const SWATCHES = [
-  { bg: "#EAF8EF", fg: "#15803D" },
+  { bg: BRAND_TINT, fg: BRAND_TEXT },
   { bg: "#EAF3FC", fg: "#185FA5" },
   { bg: "#FCEFEA", fg: "#993C1D" },
   { bg: "#EFEDFD", fg: "#534AB7" },

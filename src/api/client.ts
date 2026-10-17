@@ -1,3 +1,4 @@
+import { friendlyMessage } from "@/utils/errors";
 import axios, { AxiosError } from "axios";
 import Constants from "expo-constants";
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from "@/utils/storage";
@@ -48,11 +49,10 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 /**
- * Gets a new access token, sharing one refresh call between everyone who asks at the same moment. Used by the
- * interceptor below and by callers that make their own requests outside axios (the document preview pictures).
+ * Gets a new access token, sharing one refresh call between everyone who asks at the same moment.
  * Returns null when the refresh token is gone or rejected; it does NOT sign the person out, the caller decides.
  */
-export function refreshSessionToken(): Promise<string | null> {
+function refreshSessionToken(): Promise<string | null> {
   if (!refreshing) {
     refreshing = refreshAccessToken().finally(() => {
       refreshing = null;
@@ -129,6 +129,8 @@ export function apiErrorMessage(err: unknown, fallback = "Something went wrong. 
     return "The server took too long to respond. Check your connection and try again.";
   }
   if (e?.isAxiosError && e.message === "Network Error") return "Can't reach the server. Check your connection and try again.";
-  if (err instanceof Error && !e?.isAxiosError && err.message) return err.message;
+  // A plain Error: our own sentence ("Sharing isn't available on this device.") is shown; a library's technical one
+  // ("Call to function ... has been rejected") is not.
+  if (err instanceof Error && !e?.isAxiosError && err.message) return friendlyMessage(err.message, fallback);
   return fallback;
 }

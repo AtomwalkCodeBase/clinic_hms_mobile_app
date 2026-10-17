@@ -7,9 +7,12 @@ import type {
   DoctorDetail,
   Envelope,
   FamilyMember,
-  GrowthPoint,
+  GrowthIndicator,
+  GrowthSeries,
   HealthSummary,
+  HealthTimeline,
   Hospital,
+  Immunization,
   LabOrder,
   MedicalRecord,
   NotificationItem,
@@ -26,8 +29,6 @@ import type {
   RescheduleResult,
   SlotEntry,
   Specialty,
-  TimelineEntry,
-  VaccinationSummary,
 } from "./types";
 
 // Note: newer portal views (hospitals/search/doctors/slots/book/my-bookings)
@@ -55,25 +56,25 @@ export async function getSpecialties() {
   return res.data.results;
 }
 
-export async function getDoctors(tenantId: number) {
-  const res = await api.get<{ results: DoctorCard[] }>(`/portal/hospitals/${tenantId}/doctors/`);
+export async function getDoctors(hospitalId: number) {
+  const res = await api.get<{ results: DoctorCard[] }>(`/portal/hospitals/${hospitalId}/doctors/`);
   return res.data.results;
 }
 
-export async function getDoctorDetail(tenantId: number, doctorId: number) {
-  const res = await api.get<DoctorDetail>(`/portal/hospitals/${tenantId}/doctors/${doctorId}/`);
+export async function getDoctorDetail(hospitalId: number, doctorId: number) {
+  const res = await api.get<DoctorDetail>(`/portal/hospitals/${hospitalId}/doctors/${doctorId}/`);
   return res.data;
 }
 
-export async function getSlots(tenantId: number, doctorId: number, date?: string) {
-  const res = await api.get<{ results: SlotEntry[] }>(`/portal/hospitals/${tenantId}/doctors/${doctorId}/slots/`, {
+export async function getSlots(hospitalId: number, doctorId: number, date?: string) {
+  const res = await api.get<{ results: SlotEntry[] }>(`/portal/hospitals/${hospitalId}/doctors/${doctorId}/slots/`, {
     params: date ? { date } : {},
   });
   return res.data.results;
 }
 
 interface BookPayload {
-  tenant_id: number;
+  hospital_id: number;
   doctor_id: number;
   scheduled_date?: string;
   scheduled_time?: string;
@@ -144,7 +145,7 @@ export async function getPrescriptions(patientAwpid?: string) {
 }
 
 export async function choosePrescription(payload: {
-  tenant_db: string;
+  hospital_db: string;
   prescription_id: string;
   patient_choice: "in_house" | "outside";
   payment_preference?: "pay_online" | "pay_at_pharmacy";
@@ -154,13 +155,13 @@ export async function choosePrescription(payload: {
 }
 
 /**
- * GET /portal/prescriptions/<tenant_db>/<prescription_id>/receipt/ — the
+ * GET /portal/prescriptions/<hospital_db>/<prescription_id>/receipt/ — the
  * prescription PDF as a base64-data-URI in the standard envelope; only ever
  * called for a record whose prescription_id is set (see MedicalRecord).
  */
-export async function getPrescriptionReceipt(tenantDb: string, prescriptionId: string) {
+export async function getPrescriptionReceipt(hospitalDb: string, prescriptionId: string) {
   const res = await api.get<Envelope<{ file_data: string; file_name: string; mime_type: string }>>(
-    `/portal/prescriptions/${tenantDb}/${prescriptionId}/receipt/`
+    `/portal/prescriptions/${hospitalDb}/${prescriptionId}/receipt/`
   );
   return res.data.data;
 }
@@ -405,61 +406,28 @@ export async function getHealthSummary(patientAwpid?: string) {
   return res.data.data;
 }
 
-export async function getVaccinations(patientAwpid?: string) {
-  const res = await api.get<Envelope<VaccinationSummary>>("/portal/vaccinations/", {
-    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
-  });
-  return res.data.data;
-}
-
-/**
- * POST /portal/vaccinations/upload/ — a parent self-reports a vaccination
- * given outside the network. Always lands as verification_status
- * "pending_review" server-side until a doctor/nurse confirms it.
- */
-export async function uploadVaccinationRecord(payload: {
-  vaccine_name: string;
-  administered_date: string;
-  scheduled_label?: string;
-  patient_awpid?: string;
-  file_data?: string;
-  file_name?: string;
-  mime_type?: string;
-}) {
-  const res = await api.post<Envelope<{ id: number; vaccine_name: string; administered_date: string; verification_status: string }>>(
-    "/portal/vaccinations/upload/",
-    payload
-  );
+/** GET peds/patients/<awpid>/health-timeline/ — `from` ("2026-04-17") limits the period; leave it out for everything since birth. */
+export async function getHealthTimeline(awpid: string, from?: string) {
+  const res = await api.get<HealthTimeline>(`/peds/patients/${awpid}/health-timeline/`, { params: from ? { from } : {} });
   return res.data;
 }
 
-/** GET /portal/vaccinations/<record_id>/file/ — full certificate content, fetched only when actually downloading (the roadmap list only carries has_certificate). */
-export async function getVaccinationFile(recordId: number) {
-  const res = await api.get<Envelope<{ file_data: string; file_name: string; mime_type: string }>>(`/portal/vaccinations/${recordId}/file/`);
-  return res.data.data;
+/** GET peds/patients/<awpid>/growth/ — every reading of one measure, plus the WHO/IAP centile curves to draw it on. */
+export async function getGrowthSeries(awpid: string, indicator: GrowthIndicator) {
+  const res = await api.get<GrowthSeries>(`/peds/patients/${awpid}/growth/`, { params: { indicator } });
+  return res.data;
 }
 
-/** Confirmed against PortalGrowthView's actual return (apps/patients/portal_views.py:1606). */
-export async function getGrowth(patientAwpid?: string) {
-  const res = await api.get<Envelope<{ date_of_birth: string | null; age_years: number | null; is_minor: boolean; series: GrowthPoint[]; latest: GrowthPoint | null }>>(
-    "/portal/growth/",
-    { params: patientAwpid ? { patient_awpid: patientAwpid } : {} }
-  );
-  return res.data.data;
+/** GET peds/patients/<awpid>/immunization/ — the whole schedule with each dose's status, and the summary counts. */
+export async function getImmunization(awpid: string) {
+  const res = await api.get<Immunization>(`/peds/patients/${awpid}/immunization/`);
+  return res.data;
 }
 
-/**
- * Confirmed against PortalHealthTimelineView's actual return
- * (apps/patients/portal_views.py:2030) — the key is `results`, not `entries`.
- * This was the exact cause of the "Cannot read property 'length' of
- * undefined" crash when opening the Health Timeline tab: the old code read
- * `.entries` (always undefined) and then checked `.length` on it.
- */
-export async function getTimeline(patientAwpid?: string, limit = 30) {
-  const res = await api.get<Envelope<{ results: TimelineEntry[]; count: number }>>("/portal/timeline/", {
-    params: { limit, ...(patientAwpid ? { patient_awpid: patientAwpid } : {}) },
-  });
-  return res.data.data.results;
+/** POST peds/patients/<awpid>/immunization/ — a parent adds a vaccine from the card; it shows at once and a clinic confirms it later. */
+export async function addVaccine(awpid: string, payload: { vaccine_text: string; given_on: string }) {
+  const res = await api.post<{ status: string }>(`/peds/patients/${awpid}/immunization/`, payload);
+  return res.data;
 }
 
 /**
@@ -471,7 +439,11 @@ export async function getTimeline(patientAwpid?: string, limit = 30) {
 export async function getMyDocuments(
   page = 1,
   patientAwpid?: string,
-  opts?: { status?: string; pageSize?: number; review?: "pending" | "confirmed" | "all"; docType?: string },
+  opts?: {
+    status?: string; pageSize?: number; review?: "pending" | "confirmed" | "all"; docType?: string;
+    /** only the files uploaded on this day, "2026-05-12" (India time) - what a day of the By-date view opens */
+    uploadedOn?: string;
+  },
 ) {
   const res = await api.get<{ results: PatientDocument[]; pagination: Pagination }>("/portal/documents/", {
     params: {
@@ -481,6 +453,7 @@ export async function getMyDocuments(
       ...(opts?.pageSize ? { page_size: opts.pageSize } : {}),
       ...(opts?.review ? { review: opts.review } : {}),
       ...(opts?.docType ? { doc_type: opts.docType } : {}),
+      ...(opts?.uploadedOn ? { uploaded_on: opts.uploadedOn } : {}),
     },
   });
   return res.data;
@@ -508,6 +481,16 @@ export type SubmitRejection = {
 export type SubmitResult = { submitted: number[]; rejected: SubmitRejection[]; counts: { awaiting_review: number } };
 export type DocumentCounts = {
   total: number; awaiting_review: number; unclassified: number; by_type: Record<string, number>;
+};
+/** One upload day of the By-date view: `date` is "2026-05-12" (India calendar day), `yours` = uploaded by the patient. */
+export type DocumentDay = {
+  date: string; total: number; yours: number; hospital: number; by_type: Record<string, number>;
+};
+export type DocumentDays = {
+  /** the year `days` belong to (the newest that has files unless one was asked for); null when there are no files */
+  year: number | null;
+  years: { year: number; count: number }[];
+  days: DocumentDay[];
 };
 
 /** GET /api/v1/records/types/ — the categories a document can be filed under (one list for every dropdown). */
@@ -552,6 +535,21 @@ export async function getDocumentCounts(patientAwpid?: string): Promise<Document
 }
 
 /**
+ * GET /api/v1/portal/documents/days/ — the By-date view of My Documents: one entry per upload day of `year` (the
+ * newest year with files when omitted), with the file count of each day, and the years that have files.
+ * A day's files: `getMyDocuments(..., { uploadedOn })`.
+ */
+export async function getDocumentDays(opts: { year?: number; patientAwpid?: string } = {}): Promise<DocumentDays> {
+  const res = await api.get<Envelope<DocumentDays>>("/portal/documents/days/", {
+    params: {
+      ...(opts.year ? { year: opts.year } : {}),
+      ...(opts.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}),
+    },
+  });
+  return res.data.data;
+}
+
+/**
  * POST /api/v1/records/submit/ — the patient's final answer for up to 100 files at once. Each file is judged on its
  * own: the ones that pass get the chosen type and are locked for good (nobody can change them again), the others come
  * back in `rejected` with a reason. Sending the same list twice is safe.
@@ -577,6 +575,19 @@ export async function dismissDocument(id: number, patientAwpid?: string): Promis
   await api.delete(`/portal/documents/${id}/`, { params: patientAwpid ? { patient_awpid: patientAwpid } : {} });
 }
 
+/**
+ * PATCH /api/v1/portal/documents/<id>/ {doctor_name} — the doctor named on one of the patient's own uploads, without
+ * "Dr." ("" removes it). The server also checks letters and spaces only; it answers with the updated row.
+ */
+export async function updateDoctorName(id: number, doctorName: string, patientAwpid?: string): Promise<PatientDocument> {
+  const res = await api.patch<Envelope<PatientDocument>>(
+    `/portal/documents/${id}/`,
+    { doctor_name: doctorName },
+    { params: patientAwpid ? { patient_awpid: patientAwpid } : {} },
+  );
+  return res.data.data;
+}
+
 /** PortalLabOrderListView returns a raw object, not the {success,data} envelope. */
 export async function getLabOrders(patientAwpid?: string) {
   const res = await api.get<{ results: LabOrder[]; pagination: any }>("/portal/lab-orders/", {
@@ -586,7 +597,7 @@ export async function getLabOrders(patientAwpid?: string) {
 }
 
 export async function chooseLabOrder(payload: {
-  tenant_db: string;
+  hospital_db: string;
   request_id: number;
   patient_choice: "in_house" | "outside";
   payment_preference?: "pay_online" | "pay_at_lab";
@@ -596,7 +607,7 @@ export async function chooseLabOrder(payload: {
 }
 
 /**
- * GET /portal/lab-orders/<tenant_db>/<request_id>/report/ — the actual
+ * GET /portal/lab-orders/<hospital_db>/<request_id>/report/ — the actual
  * uploaded in-house lab report file (a short-lived signed URL under
  * file_data, not a data URI — downloadDataUri handles both). Only call this
  * when the order's report.has_file is true and it's been delivered; the
@@ -612,12 +623,12 @@ export async function getNotifications(patientAwpid?: string) {
 
 /**
  * Only real NotificationLog-backed entries can be marked read — their "id"
- * is "<tenant_db>:<log_id>" (see PortalNotificationsView). Vaccination-due
+ * is "<hospital_db>:<log_id>" (see PortalNotificationsView). Vaccination-due
  * entries ("vaccine:<label>") are computed live and have no backing row, so
  * callers must not invoke this for them.
  */
 export async function markNotificationRead(compositeId: string) {
-  const [tenantDb, pk] = compositeId.split(":");
-  const res = await api.post<Envelope<null>>(`/portal/notifications/${tenantDb}/${pk}/read/`);
+  const [hospitalDb, pk] = compositeId.split(":");
+  const res = await api.post<Envelope<null>>(`/portal/notifications/${hospitalDb}/${pk}/read/`);
   return res.data;
 }

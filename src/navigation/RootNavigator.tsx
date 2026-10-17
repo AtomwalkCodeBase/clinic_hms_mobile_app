@@ -24,14 +24,18 @@ export function RootNavigator() {
       return;
     }
     (async () => {
-      const seen = await getBiometricPromptSeen();
-      if (seen) {
-        setNeedsBiometricPrompt(false);
-        return;
+      try {
+        const seen = await getBiometricPromptSeen();
+        if (seen) {
+          setNeedsBiometricPrompt(false);
+          return;
+        }
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+        setNeedsBiometricPrompt(hasHardware && isEnrolled);
+      } catch {
+        setNeedsBiometricPrompt(false);      // never block the app on an optional question
       }
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
-      setNeedsBiometricPrompt(hasHardware && isEnrolled);
     })();
   }, [isAuthenticated, needsUnlock]);
 

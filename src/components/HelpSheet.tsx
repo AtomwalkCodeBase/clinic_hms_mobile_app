@@ -1,6 +1,6 @@
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import type { LucideIcon } from "@/theme/icons";
@@ -18,7 +18,7 @@ export function HelpSheet({ visible, onClose, items, title = "What you can do he
           <View style={styles.handle} />
           <View style={styles.head}>
             <Text style={styles.title}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close"><X size={18} color={NEUTRAL.textMuted} strokeWidth={2.2} /></Pressable>
+            <CloseButton onPress={onClose} />
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             {items.map((it) => (
@@ -40,16 +40,6 @@ export function HelpSheet({ visible, onClose, items, title = "What you can do he
   );
 }
 
-/** The round "?" that opens a HelpSheet, for the top right of a screen header. */
-export function HelpButton({ onPress }: { onPress: () => void }) {
-  const { theme } = useAppTheme();
-  return (
-    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel="Help" style={[styles.q, { borderColor: theme.fill }]}>
-      <Text style={[styles.qText, { color: theme.fill }]}>?</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 8, maxHeight: "86%" },
@@ -61,6 +51,4 @@ const styles = StyleSheet.create({
   itemText: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 2, lineHeight: 17 },
   done: { marginTop: 4, paddingVertical: 13, borderRadius: 24, alignItems: "center" },
   doneText: { fontSize: 14, fontWeight: "700" },
-  q: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: NEUTRAL.surface },
-  qText: { fontSize: 15, fontWeight: "700", marginTop: -1 },
 });

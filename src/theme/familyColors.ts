@@ -1,4 +1,3 @@
-import type { GadgetTint } from "@/components/GadgetCard";
 
 /**
  * Per-family-member identity color, derived from age + gender rather than
@@ -68,69 +67,4 @@ export function familyAccentFor(person: { gender: string; date_of_birth: string 
   const tier = ageTierFromDob(person.date_of_birth);
   if (!g || !tier) return null;
   return ACCENTS[g][tier];
-}
-
-// ── coordinated gadget palette ──────────────────────────────────────────
-// One flat color repeated across all 4 gadget cards read as monochrome next
-// to Self's 4 distinct feature colors (green/blue/coral/purple) — the fix
-// isn't a flat recolor, it's each person getting their OWN 4-color family:
-// one anchor hue (their identity color) plus 3 analogous neighbors, so it
-// still reads as "this is a different person's screen" while keeping the
-// same "4 different colors" liveliness. Literally mixing each feature color
-// with the person's hue (e.g. green + pink) goes muddy, so instead each
-// gender gets a hand-picked 4-anchor family that stays harmonious with its
-// identity hue, and age tier only lightens/darkens those anchors — not a
-// new hue per tier.
-const PALETTE_ANCHORS: Record<"M" | "F", [string, string, string, string]> = {
-  // vaccinations, health timeline, visits, rx & reports
-  M: ["#005eb8", "#0f7a8f", "#3a4fa0", "#4a6580"],
-  F: ["#ae2573", "#c2585f", "#7c2855", "#8a4a7a"],
-};
-
-const TIER_SHIFT: Record<AgeTier, number> = {
-  toddler: 0.35, // lighten toward white
-  school: 0,
-  teen: -0.18, // darken toward black
-};
-
-function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-function rgbToHex(r: number, g: number, b: number): string {
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
-  return `#${c(r)}${c(g)}${c(b)}`;
-}
-/** amount > 0 mixes toward white (lighten), amount < 0 mixes toward black (darken). */
-function shift(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  const target = amount >= 0 ? 255 : 0;
-  const a = Math.abs(amount);
-  return rgbToHex(r + (target - r) * a, g + (target - g) * a, b + (target - b) * a);
-}
-
-function tintFromAnchor(anchor: string): GadgetTint {
-  return {
-    bg: [shift(anchor, 0.88), shift(anchor, 0.72), shift(anchor, 0.52)],
-    icon: [shift(anchor, 0.15), anchor, shift(anchor, -0.28)],
-    shadow: shift(anchor, -0.55),
-    border: shift(anchor, 0.6),
-  };
-}
-
-interface FamilyGadgetPalette {
-  vaccinations: GadgetTint;
-  timeline: GadgetTint;
-  visits: GadgetTint;
-  rx: GadgetTint;
-}
-
-/** null for adults / unrecognised gender — caller falls back to the default per-feature tints. */
-export function familyGadgetPaletteFor(person: { gender: string; date_of_birth: string | null }): FamilyGadgetPalette | null {
-  const g = normaliseGender(person.gender);
-  const tier = ageTierFromDob(person.date_of_birth);
-  if (!g || !tier) return null;
-  const shiftAmt = TIER_SHIFT[tier];
-  const [vax, tl, vis, rx] = PALETTE_ANCHORS[g].map((a) => tintFromAnchor(shiftAmt ? shift(a, shiftAmt) : a));
-  return { vaccinations: vax, timeline: tl, visits: vis, rx };
 }

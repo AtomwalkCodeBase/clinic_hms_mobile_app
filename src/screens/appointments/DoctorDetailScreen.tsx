@@ -24,7 +24,7 @@ function dateOffsetLabel(daysFromToday: number): { key: string; label: string } 
 export function DoctorDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "DoctorDetail">>();
-  const { tenantId, doctorId, initialComplaint, patientAwpid, patientName } = route.params;
+  const { hospitalId, doctorId, initialComplaint, patientAwpid, patientName } = route.params;
   const { theme } = useAppTheme();
 
   const dateOptions = [0, 1, 2, 3, 4, 5, 6].map(dateOffsetLabel);
@@ -33,13 +33,13 @@ export function DoctorDetailScreen() {
   const [availableOnly, setAvailableOnly] = useState(false);
 
   const { data: doctor, error, refetch: loadDoctor, isPending: loading } = useQuery({
-    queryKey: ["doctorDetail", tenantId, doctorId],
-    queryFn: () => getDoctorDetail(tenantId, doctorId),
+    queryKey: ["doctorDetail", hospitalId, doctorId],
+    queryFn: () => getDoctorDetail(hospitalId, doctorId),
   });
 
   const { data: slots = [], isFetching: slotsLoading } = useQuery({
-    queryKey: ["slots", tenantId, doctorId, selectedDate],
-    queryFn: () => getSlots(tenantId, doctorId, selectedDate),
+    queryKey: ["slots", hospitalId, doctorId, selectedDate],
+    queryFn: () => getSlots(hospitalId, doctorId, selectedDate),
   });
 
   return (
@@ -175,7 +175,7 @@ export function DoctorDetailScreen() {
               // booking) — patientAwpid/patientName just ride along from
               // there, same as they already did for "Book follow-up".
               navigation.navigate("ConfirmBooking", {
-                tenantId,
+                hospitalId,
                 doctorId,
                 doctorName: doctor.name,
                 hospitalName: typeof doctor.hospital === "object" ? doctor.hospital.name : String(doctor.hospital || ""),

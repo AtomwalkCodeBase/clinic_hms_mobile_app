@@ -19,7 +19,6 @@ export function ListRow({
   pillLabel,
   pillTone = "neutral",
   onPress,
-  iconColors,
   iconShadowColor,
   trailing,
   tinted,
@@ -30,8 +29,6 @@ export function ListRow({
   pillLabel?: string;
   pillTone?: Tone;
   onPress?: () => void;
-  /** Overrides IconBadge's default green gradient — e.g. giving each row in a grouped list its own category color. */
-  iconColors?: readonly [string, string, string];
   iconShadowColor?: string;
   /** Replaces the pill+chevron with a custom control (e.g. a Switch) — for a settings row that toggles in place instead of navigating. */
   trailing?: React.ReactNode;
@@ -48,13 +45,13 @@ export function ListRow({
           style={[StyleSheet.absoluteFill, { borderRadius: CARD.radius }]}
         />
       )}
-      <IconBadge icon={icon} size={CARD_ICON} colors={iconColors} shadowColor={iconShadowColor} />
+      <IconBadge icon={icon} size={CARD_ICON} shadowColor={iconShadowColor} />
       <View style={styles.mid}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
         {!!subtitle && (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle}>
             {subtitle}
           </Text>
         )}

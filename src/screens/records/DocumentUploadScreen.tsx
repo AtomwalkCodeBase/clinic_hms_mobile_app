@@ -4,37 +4,38 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { Eye, Hand, LayoutGrid, Pencil, RefreshCw, Trash2, Upload } from "lucide-react-native";
+import { CheckCircle2, Hand, ListChecks, MoreVertical, Pencil, RefreshCw, Stethoscope, Trash2, Undo2, Upload } from "lucide-react-native";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { BackHeader, EmptyState, ErrorBanner, Screen } from "@/components/Layout";
-import { SegmentedControl } from "@/components/SegmentedControl";
 import { PrimaryButton } from "@/components/Buttons";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MessageDialog } from "@/components/MessageDialog";
-import { FileItem, FileList, MoveBackButton, RowActions } from "@/components/FileItem";
-import { HelpButton, HelpItem, HelpSheet } from "@/components/HelpSheet";
+import { FileItem, ViewButton, ReadyButton } from "@/components/FileItem";
+import type { MenuItem } from "@/components/CardMenu";
+import { DoctorNameSheet } from "@/components/DoctorNameSheet";
+import { personColours } from "@/utils/personColours";
+import { HelpItem, HelpSheet } from "@/components/HelpSheet";
+import { HelpButton } from "@/components/IconButtons";
 import { SelectionStrip } from "@/components/SelectionBar";
 import { UploadSheet } from "@/components/UploadSheet";
 import { UploadStages } from "@/components/UploadStages";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
-import { TypeTag } from "@/components/TypeAvatar";
 import { BatchSummaryCard } from "@/components/BatchSummaryCard";
-import { TypeChipsRow } from "@/components/TypeChipsRow";
-import { ViewModeToggle } from "@/components/ViewModeToggle";
-import { NEUTRAL } from "@/theme/themes";
+import { FilterPill, FilterSheet } from "@/components/TypeFilter";
+import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { CARD_TEXT } from "@/theme/cardSizes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
-import { useViewMode } from "@/context/ViewModeContext";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { useReviewDraft } from "@/hooks/useReviewDraft";
 import { useSelection } from "@/hooks/useSelection";
 import { apiErrorMessage } from "@/api/client";
-import { dismissDocument, getFamily, getMyDocuments, retryDocument, submitDecisions } from "@/api/portal";
+import { dismissDocument, getFamily, getMyDocuments, retryDocument, submitDecisions, updateDoctorName } from "@/api/portal";
 import type { PatientDocument } from "@/api/types";
 import { buildDecisions, canSelect, currentType, isEdited, isReviewable, stageOf, typeCounts } from "@/utils/reviewDraft";
+import { cardDate } from "@/utils/documentLabels";
 import { pickDocuments } from "@/utils/fileHelpers";
 import { AppStackParamList } from "@/navigation/types";
 
@@ -70,16 +71,21 @@ function FadeIn({ children }: { children: React.ReactNode }) {
 }
 
 type Tab = "review" | "ready";
+
+// The type filter the patient last chose, kept while the app is open so leaving this screen and coming back does not
+// reset it. "" until they pick one.
+let lastTypeFilter = "";
 type PickerState = { doc: PatientDocument } | null;
 type Notice = { title: string; message: string; tone: "success" | "error" } | null;
 
 const HELP: HelpItem[] = [
   { icon: Upload, title: "Upload button", text: "At the top. Opens a sheet where you choose files or take photos with the camera." },
-  { icon: Eye, title: "Tap the preview", text: "Opens the file here in the app so you can check it is the right one. Pinch or double-tap to zoom." },
+  { icon: ListChecks, title: "View", text: "Opens the file here in the app so you can check it is the right one. Pinch or double-tap to zoom." },
+  { icon: CheckCircle2, title: "Ready to submit", text: "On a file's card: moves it to the Ready to Submit tab. It is greyed out until the file has a type." },
   { icon: Hand, title: "Press and hold a file", text: "Selects it. Select more, then move them to Ready to Submit." },
-  { icon: LayoutGrid, title: "List or grid", text: "The two icons next to the type chips. Your choice is remembered on every screen." },
-  { icon: Pencil, title: "Pencil icon", text: "Change the type of a file that was filed wrongly. A file with no type shows Classify." },
-  { icon: Trash2, title: "Bin icon", text: "Deletes a file for good. It asks first." },
+  { icon: MoreVertical, title: "Three dots", text: "Change a file's type, move it back to Files, or delete it. Nothing is required: you can also just submit." },
+  { icon: Stethoscope, title: "Doctor's name", text: "Read from the document. Tap the Edit or Add doctor button on the card to correct it." },
+  { icon: Trash2, title: "Delete", text: "Deletes a file for good. It asks first." },
   { icon: RefreshCw, title: "Pull the top part down", text: "Refreshes the screen. The list itself does not refresh." },
 ];
 
@@ -98,8 +104,12 @@ export function DocumentUploadScreen() {
   const [patientAwpid, setPatientAwpid] = useState<string | undefined>(route.params?.patientAwpid);
   const who = useWhoIsThisFor(patientAwpid);
   const familyQ = useQuery({ queryKey: ["family"], queryFn: getFamily });
+  // Who the files on this screen are for, shown on every card. (Chosen in "Who is this for?" when files are added, or
+  // carried in from My Documents.)
+  const person = familyQ.data?.find((m) => m.awpid === patientAwpid);
+  const personName = patientAwpid ? person?.full_name ?? "Family member" : "Myself";
+  const personColour = personColours(person);
   const { theme } = useAppTheme();
-  const { mode } = useViewMode();
   const queryClient = useQueryClient();
   const { uploading, uploadPct, fileCount, startUpload, ready: justRead, clearReady } = useDocumentUpload();
   // The files just sent are read right here, so the "ready to review" bar on My Documents has nothing left to say.
@@ -119,6 +129,7 @@ export function DocumentUploadScreen() {
   const [hint, setHint] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [doctorFor, setDoctorFor] = useState<PatientDocument | null>(null);
   const [limit, setLimit] = useState(SHOW_FIRST);
 
   const pendingQ = useQuery({
@@ -170,11 +181,15 @@ export function DocumentUploadScreen() {
   const tabList = tab === "review" ? inReview : ready;
   const chipItems = useMemo(() => typeCounts(tabList, draft), [tabList, draft]);
   const batchCounts = useMemo(() => typeCounts(visible, draft), [visible, draft]);
-  // Tapping a type chip shows only that type; drop the filter when nothing of that type is left on this tab.
-  const [typeFilter, setTypeFilter] = useState("");
+  // The type filter shows only that type; it is remembered while the app is open, so leaving this screen and coming back
+  // keeps it. It is dropped when nothing of that type is left on this tab (once the list has loaded).
+  const [typeFilter, setTypeFilter] = useState(lastTypeFilter);
+  const [filterOpen, setFilterOpen] = useState(false);
+  useEffect(() => { lastTypeFilter = typeFilter; }, [typeFilter]);
   useEffect(() => {
+    if (!loaded || !pendingQ.isSuccess) return;
     if (typeFilter && !chipItems.some((c) => c.code === typeFilter)) setTypeFilter("");
-  }, [typeFilter, chipItems]);
+  }, [typeFilter, chipItems, loaded, pendingQ.isSuccess]);
   useEffect(() => { setLimit(SHOW_FIRST); }, [tab, typeFilter, patientAwpid]);
   const shown = typeFilter ? tabList.filter((d) => (currentType(d, draft[d.id]) ?? "not_classified") === typeFilter) : tabList;
   const onScreen = shown.slice(0, limit);
@@ -234,11 +249,6 @@ export function DocumentUploadScreen() {
     setTimeout(action, 320);
   }
 
-  async function changePerson() {
-    const target = await who.ask();
-    if (target) setPatientAwpid(target.awpid);
-  }
-
   /** Opens the file in the in-app viewer, with the other files of this list in its strip. */
   function openViewer(doc: PatientDocument) {
     const ids = shown.map((d) => d.id);
@@ -291,10 +301,16 @@ export function DocumentUploadScreen() {
     sel.toggle(doc.id);
   }
 
-  /** The preview: opens the viewer, or toggles the file while others are selected. */
-  function onPreview(doc: PatientDocument) {
-    if (sel.selecting) toggleSelected(doc);
-    else openViewer(doc);
+  async function saveDoctor(name: string) {
+    if (!doctorFor) return;
+    try {
+      await updateDoctorName(doctorFor.id, name, patientAwpid);
+    } catch (err) {
+      throw new Error(apiErrorMessage(err, "Couldn't save the name."));
+    }
+    pendingQ.refetch();
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    setDoctorFor(null);
   }
 
   function selectAll() {
@@ -357,43 +373,64 @@ export function DocumentUploadScreen() {
     }
   }
 
-  /** What goes under a file's name: its type tag (a card shows the tag over the preview instead), or its state. */
-  function lineFor(doc: PatientDocument) {
+  /** One card: the file as the patient will see it in My Documents, with the choices they have here in the menu. */
+  function cardFor(doc: PatientDocument) {
     const type = currentType(doc, draft[doc.id]);
-    if (!isReviewable(doc) && doc.processing_status !== "failed") return <Text style={styles.sub}>Reading your document…</Text>;
-    if (doc.processing_status === "failed") {
-      return (
-        <View>
+    const failed = doc.processing_status === "failed";
+    const reading = !isReviewable(doc) && !failed;
+    const typeLabel = reading ? "Reading…" : failed ? "Couldn't be read" : type ? labelOf(type) : "Not classified";
+
+    let status: React.ReactNode;
+    if (reading) {
+      status = <Text style={styles.sub}>Reading your document…</Text>;
+    } else if (failed) {
+      status = (
+        <View style={{ marginTop: 6 }}>
           <Text style={[styles.sub, { color: NEUTRAL.danger }]} numberOfLines={2}>{doc.error || "Couldn't read this file"}</Text>
           <Pressable onPress={() => retry(doc)} hitSlop={8} style={{ alignSelf: "flex-start", marginTop: 4 }}>
             <Text style={[styles.link, { color: theme.text }]}>Try again</Text>
           </Pressable>
         </View>
       );
+    } else if (!type) {
+      status = (
+        <Pressable onPress={() => setPicker({ doc })} hitSlop={8} style={{ alignSelf: "flex-start", marginTop: 6 }}>
+          <Text style={[styles.sub, { color: NEUTRAL.warning, fontWeight: "700" }]}>Not classified. Choose a type ›</Text>
+        </Pressable>
+      );
+    } else if (isEdited(draft[doc.id])) {
+      status = <Text style={[styles.sub, { color: NEUTRAL.warning }]}>Type changed by you</Text>;
     }
-    if (!type) return <Text style={[styles.sub, { color: NEUTRAL.warning }]}>Not classified — choose a type</Text>;
-    if (mode === "grid" && !isEdited(draft[doc.id])) return null;      // the card shows the tag over its preview
-    return (
-      <View style={styles.lineRow}>
-        {mode === "list" && <TypeTag code={type} label={labelOf(type)} />}
-        {isEdited(draft[doc.id]) ? <Text style={styles.edited}>edited</Text> : null}
-      </View>
-    );
-  }
 
-  function actionsFor(doc: PatientDocument) {
-    if (sel.selecting) return undefined;
-    const failed = doc.processing_status === "failed";
-    const reading = !isReviewable(doc) && !failed;
-    if (reading) return undefined;
-    if (tab === "ready") return <MoveBackButton onPress={() => moveBack(doc.id)} />;
+    const menu: MenuItem[] = [];
+    if (!reading && !sel.selecting) {
+      if (!failed) menu.push({ key: "type", label: "Change type", icon: Pencil, onPress: () => setPicker({ doc }) });
+      if (!failed) menu.push({ key: "doctor", label: doc.doctor_name ? "Edit doctor's name" : "Add doctor's name", icon: Stethoscope, onPress: () => setDoctorFor(doc) });
+      if (!failed && tab === "ready") menu.push({ key: "back", label: "Move back to Files", icon: Undo2, onPress: () => moveBack(doc.id) });
+      menu.push({ key: "delete", label: "Delete", icon: Trash2, danger: true, onPress: () => setDismissing(doc) });
+    }
+
     return (
-      <RowActions
-        hasType={!!currentType(doc, draft[doc.id])}
-        showChange={!failed}
-        onChange={() => setPicker({ doc })}
-        onDelete={() => setDismissing(doc)}
-        row={mode === "grid"}
+      <FileItem
+        title={typeLabel}
+        date={cardDate(doc)}
+        forName={personName}
+        nameColor={personColour.text}
+        doctorName={doc.doctor_name}
+        onEditDoctor={reading || failed ? undefined : () => setDoctorFor(doc)}
+        status={status}
+        footerLeft={reading || failed ? undefined : <ViewButton onPress={() => openViewer(doc)} />}
+        footerRight={reading || failed || tab !== "review" ? undefined : (
+          <ReadyButton
+            enabled={canSelect(doc, draft[doc.id])}
+            onPress={() => (canSelect(doc, draft[doc.id]) ? moveToReady([doc.id]) : showHint("Classify this file first."))}
+          />
+        )}
+        typeCode={reading || failed ? null : type}
+        menu={menu}
+        selected={sel.ids.has(doc.id)}
+        onPress={sel.selecting ? () => toggleSelected(doc) : undefined}
+        onLongPress={() => onRowLongPress(doc)}
       />
     );
   }
@@ -419,23 +456,14 @@ export function DocumentUploadScreen() {
             onBack={() => navigation.goBack()}
             right={
               <>
-                <Pressable onPress={() => setUploadOpen(true)} disabled={uploading} accessibilityRole="button" accessibilityLabel="Upload" style={[styles.upload, { backgroundColor: theme.fill }, uploading && { opacity: 0.6 }]}>
-                  {uploading ? <ActivityIndicator size="small" color={theme.on} /> : <Upload size={15} color={theme.on} strokeWidth={2.4} />}
-                  <Text style={[styles.uploadText, { color: theme.on }]}>Upload</Text>
+                <Pressable onPress={() => setUploadOpen(true)} disabled={uploading} accessibilityRole="button" accessibilityLabel="Upload" style={[styles.upload, uploading && { opacity: 0.6 }]}>
+                  {uploading ? <ActivityIndicator size="small" color={ON_BRAND} /> : <Upload size={18} color={ON_BRAND} strokeWidth={2.4} />}
+                  <Text style={[styles.uploadText, { color: ON_BRAND }]}>Upload</Text>
                 </Pressable>
-                <HelpButton onPress={() => setHelpOpen(true)} />
+                <HelpButton onPress={() => setHelpOpen(true)} onDark />
               </>
             }
           />
-          {(familyQ.data?.length ?? 0) > 0 && (
-            <View style={styles.forRow}>
-              <Text style={styles.forText}>
-                For: <Text style={styles.forName}>{patientAwpid ? familyQ.data!.find((m) => m.awpid === patientAwpid)?.full_name ?? "Family member" : "Myself"}</Text>
-              </Text>
-              <Pressable onPress={changePerson} hitSlop={8}><Text style={[styles.forChange, { color: theme.text }]}>Change</Text></Pressable>
-            </View>
-          )}
-
           {(uploading || groupWorking) && (
             <UploadStages
               uploading={uploading}
@@ -450,14 +478,35 @@ export function DocumentUploadScreen() {
 
           {!uploading && !groupWorking && <BatchSummaryCard counts={batchCounts} />}
 
-          <SegmentedControl<Tab>
-            options={[
-              { key: "review", label: `Files (${inReview.length})` },
-              { key: "ready", label: `Ready to Submit (${ready.length})` },
-            ]}
-            value={tab}
-            onChange={setTab}
-          />
+          {/* the two lists, and the type filter, in one row */}
+          <View style={styles.tabsRow}>
+            {([
+              { key: "review" as Tab, label: `All files (${inReview.length})` },
+              { key: "ready" as Tab, label: `Ready to Submit (${ready.length})` },
+            ]).map((t) => {
+              const on = t.key === tab;
+              return (
+                <Pressable
+                  key={t.key}
+                  onPress={() => setTab(t.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  style={[styles.tabPill, { borderColor: on ? theme.fill : NEUTRAL.border, backgroundColor: on ? theme.fill : NEUTRAL.surface }]}
+                >
+                  <Text style={[styles.tabText, { color: on ? theme.on : NEUTRAL.textPrimary }]} numberOfLines={1}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
+            <View style={{ flex: 1 }} />
+            {tabList.length > 0 && (
+              <FilterPill
+                active={!!typeFilter}
+                label={typeFilter ? labelOf(typeFilter) : "All"}
+                count={typeFilter ? shown.length : tabList.length}
+                onPress={() => setFilterOpen(true)}
+              />
+            )}
+          </View>
 
           {visible.length > 0 && (
             <PrimaryButton
@@ -466,10 +515,6 @@ export function DocumentUploadScreen() {
               disabled={tab === "review" ? submittable === 0 : ready.length === 0}
               style={styles.submit}
             />
-          )}
-
-          {tabList.length > 0 && (
-            <TypeChipsRow items={chipItems} total={tabList.length} selected={typeFilter} onSelect={setTypeFilter} labelOf={labelOf} trailing={<ViewModeToggle />} />
           )}
         </>
       }
@@ -489,28 +534,11 @@ export function DocumentUploadScreen() {
         />
       ) : (
         <>
-          <FileList layout={mode}>
-            {onScreen.map((doc, i) => {
-              const type = currentType(doc, draft[doc.id]);
-              return (
-                <FadeIn key={doc.id}>
-                  <FileItem
-                    doc={doc}
-                    layout={mode}
-                    order={i}
-                    patientAwpid={patientAwpid}
-                    typeCode={type}
-                    line={lineFor(doc)}
-                    actions={actionsFor(doc)}
-                    selected={sel.ids.has(doc.id)}
-                    onOpen={() => onPreview(doc)}
-                    onPress={sel.selecting ? () => toggleSelected(doc) : undefined}
-                    onLongPress={() => onRowLongPress(doc)}
-                  />
-                </FadeIn>
-              );
-            })}
-          </FileList>
+          <>
+            {onScreen.map((doc) => (
+              <FadeIn key={doc.id}>{cardFor(doc)}</FadeIn>
+            ))}
+          </>
           {shown.length > limit && (
             <Pressable onPress={() => setLimit((n) => n + SHOW_FIRST)} style={styles.more}>
               <Text style={[styles.moreText, { color: theme.text }]}>Show {Math.min(SHOW_FIRST, shown.length - limit)} more files</Text>
@@ -535,6 +563,24 @@ export function DocumentUploadScreen() {
         selected={picker ? currentType(picker.doc, pickerEntry) : null}
         onSelect={onPick}
         onClose={() => setPicker(null)}
+      />
+
+      <FilterSheet
+        visible={filterOpen}
+        items={chipItems}
+        total={tabList.length}
+        selected={typeFilter}
+        onSelect={setTypeFilter}
+        onClose={() => setFilterOpen(false)}
+        labelOf={labelOf}
+        allLabel={tab === "review" ? "All files" : "Ready to Submit"}
+      />
+
+      <DoctorNameSheet
+        visible={!!doctorFor}
+        initial={doctorFor?.doctor_name ?? ""}
+        onSave={saveDoctor}
+        onClose={() => setDoctorFor(null)}
       />
 
       <ConfirmDialog
@@ -577,17 +623,14 @@ export function DocumentUploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  forRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
-  forText: { fontSize: 13, color: NEUTRAL.textSecondary },
-  forName: { fontWeight: "700", color: NEUTRAL.textPrimary },
-  forChange: { fontSize: 13, fontWeight: "600" },
-  upload: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 13, height: 30, borderRadius: 15 },
-  uploadText: { fontSize: 12.5, fontWeight: "700" },
+  upload: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: ON_BRAND },
+  uploadText: { fontSize: 15, fontWeight: "700" },
   submit: { paddingVertical: 8, marginBottom: 10 },
+  tabsRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", rowGap: 8, gap: 8, marginBottom: 12 },
+  tabPill: { paddingHorizontal: 13, minHeight: 38, justifyContent: "center", borderRadius: 20, borderWidth: 1 },
+  tabText: { fontSize: 13.5, fontWeight: "700" },
   sub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   link: { fontSize: CARD_TEXT.meta, fontWeight: "600" },
-  lineRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginTop: 4 },
-  edited: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.warning, backgroundColor: NEUTRAL.warningBg, paddingHorizontal: 7, paddingVertical: 1, borderRadius: 8, marginLeft: 6, overflow: "hidden" },
   hint: { fontSize: 12.5, color: NEUTRAL.warning, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10, overflow: "hidden" },
   more: { alignItems: "center", paddingVertical: 12 },
   moreText: { fontSize: 13, fontWeight: "600" },

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check } from "lucide-react-native";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 
 interface CategoryOption {
   value: string;
@@ -97,5 +97,5 @@ const styles = StyleSheet.create({
   optLabel: { flex: 1, fontSize: 13, color: NEUTRAL.textPrimary },
   optCount: { fontSize: 11, color: NEUTRAL.textMuted, fontVariant: ["tabular-nums"] },
   sheetDone: { marginTop: 16, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  sheetDoneText: { fontSize: 13, fontWeight: "700", color: "#fff" },
+  sheetDoneText: { fontSize: 13, fontWeight: "700", color: ON_BRAND },
 });

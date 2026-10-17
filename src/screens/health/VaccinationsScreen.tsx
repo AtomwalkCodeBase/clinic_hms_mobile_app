@@ -1,310 +1,258 @@
-import { useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { useMemo, useState } from "react";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
-import { Screen, BackHeader, EmptyState, ErrorBanner, SectionTitle } from "@/components/Layout";
-import { ListRow } from "@/components/ListRow";
-import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
-import { DetailSheet, DetailRow } from "@/components/DetailSheet";
-import { SegmentedControl } from "@/components/SegmentedControl";
+import { usePeople, usePersonSwitcher, paramsFor } from "@/hooks/usePeople";
+import { Screen, BackHeader, EmptyState, ErrorBanner } from "@/components/Layout";
+import { HelpButton, MoreButton } from "@/components/IconButtons";
+import { HelpSheet, HelpItem } from "@/components/HelpSheet";
+import { FilterPill, FilterSheet } from "@/components/TypeFilter";
+import { IconBadge } from "@/components/IconBadge";
+import { Pill } from "@/components/Pill";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
-import { DownloadButton } from "@/components/DownloadButton";
-import { NEUTRAL } from "@/theme/themes";
-import { useAppTheme } from "@/context/ThemeContext";
-import { familyAccentFor, familyGadgetPaletteFor } from "@/theme/familyColors";
-import { getVaccinations, getVaccinationFile } from "@/api/portal";
+import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
+import { formatDate } from "@/components/health/chartTheme";
+import { getImmunization } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { downloadDataUri } from "@/utils/fileHelpers";
-import { VaccinationRoadmapItem } from "@/api/types";
+import type { ImmunizationRow } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
-import { Syringe } from "lucide-react-native";
+import { CARD, CARD_TEXT } from "@/theme/cardSizes";
+import { NEUTRAL, BRAND_TEXT } from "@/theme/themes";
+import type { LucideIcon } from "@/theme/icons";
+import { CalendarPlus, Check, ChevronDown, ChevronUp, Clock, ListFilter, Plus, Syringe, Users, X } from "lucide-react-native";
 
-type FilterKey = "all" | "completed" | "not_completed";
+type Nav = NativeStackNavigationProp<AppStackParamList>;
+type Status = "overdue" | "due" | "given" | "upcoming";
+type Tone = "success" | "warning" | "danger" | "neutral";
 
-// Real due-date grouping for a parent asking "what's left this month / this
-// year" — not just a sort order. Completed/pending items always land in
-// "given" (their real administered_date already tells that story). Unrecorded
-// items are bucketed by an *estimated* due date (date_of_birth + min_age_days)
-// once the backend says the window has genuinely opened — see `timing` on
-// VaccinationRoadmapItem, which stays the source of truth for due_now/
-// past_window so this never re-derives that judgment call, only groups
-// genuinely-future items by month.
-type BucketKey = "due_now" | "this_month" | "next_3_months" | "this_year" | "next_year" | "given" | "other";
-const BUCKET_ORDER: BucketKey[] = ["due_now", "this_month", "next_3_months", "this_year", "next_year", "given", "other"];
-const BUCKET_LABEL: Record<BucketKey, string> = {
-  due_now: "Due now",
-  this_month: "Due this month",
-  next_3_months: "Coming up in the next 3 months",
-  this_year: "Later this year",
-  next_year: "Next year and beyond",
-  given: "Already given",
-  other: "Not yet scheduled",
+const LOOK: Record<Status, { label: string; tone: Tone; color: string; Icon: LucideIcon }> = {
+  overdue: { label: "Overdue", tone: "danger", color: NEUTRAL.danger, Icon: X },
+  due: { label: "Due now", tone: "warning", color: NEUTRAL.warning, Icon: Clock },
+  given: { label: "Given", tone: "success", color: NEUTRAL.success, Icon: Check },
+  upcoming: { label: "Upcoming", tone: "neutral", color: NEUTRAL.textMuted, Icon: Clock },
 };
 
-function estimatedDueDate(dob: string | null, minAgeDays?: number | null): Date | null {
-  if (!dob || minAgeDays == null) return null;
-  const d = new Date(dob);
-  d.setDate(d.getDate() + minAgeDays);
-  return d;
-}
+const statusOf = (r: ImmunizationRow): Status => (r.status === "GIVEN" ? "given" : r.status === "OVERDUE" ? "overdue" : r.status === "DUE" ? "due" : "upcoming");
+const bookable = (s: Status) => s === "overdue" || s === "due";
 
-function bucketFor(item: VaccinationRoadmapItem, dob: string | null): BucketKey {
-  if (item.status !== "unknown") return "given";
-  if (item.timing === "due_now" || item.timing === "past_window") return "due_now";
-  const due = estimatedDueDate(dob, item.min_age_days);
-  if (!due) return "other";
-  const today = new Date();
-  const startOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  const startOfMonthIn3 = new Date(today.getFullYear(), today.getMonth() + 3, 1);
-  const startOfNextYear = new Date(today.getFullYear() + 1, 0, 1);
-  if (due < startOfNextMonth) return "this_month";
-  if (due < startOfMonthIn3) return "next_3_months";
-  if (due < startOfNextYear) return "this_year";
-  return "next_year";
-}
+const HELP: HelpItem[] = [
+  { icon: Syringe, title: "What the labels mean", text: "Given: recorded. Overdue: past its due date and not recorded. Due now: can be given now. Upcoming: not due yet." },
+  { icon: Check, title: "The numbers at the top", text: "How many vaccines are given, due now or overdue, and coming up. They always count all vaccines, whatever the filter below shows." },
+  { icon: ListFilter, title: "Filter", text: "Shows only the vaccines with the status you pick: all, overdue, due now, upcoming or given." },
+  { icon: CalendarPlus, title: "Book", text: "Next to a vaccine or an age group: starts a booking for it. At the top: books every vaccine that is overdue or due." },
+  { icon: Plus, title: "Add a vaccine", text: "The button at the bottom: add a vaccine from the card with its name and date. A clinic confirms it later, and it shows in the list straight away." },
+  { icon: Check, title: "View card", text: "Opens the vaccination card a given vaccine was read from." },
+  { icon: Users, title: "Another person", text: "The three dots at the top right, next to this ?, switch to another family member's records." },
+];
 
-function groupByBucket(items: VaccinationRoadmapItem[], dob: string | null): { bucket: BucketKey; items: VaccinationRoadmapItem[] }[] {
-  const map = new Map<BucketKey, VaccinationRoadmapItem[]>();
-  for (const item of items) {
-    const b = bucketFor(item, dob);
-    if (!map.has(b)) map.set(b, []);
-    map.get(b)!.push(item);
-  }
-  if (map.has("given")) {
-    map.set("given", [...map.get("given")!].sort((a, b) => (b.administered_date || "0000-00-00").localeCompare(a.administered_date || "0000-00-00")));
-  }
-  return BUCKET_ORDER.filter((b) => map.has(b)).map((b) => ({ bucket: b, items: map.get(b)! }));
-}
-
-// The backend's real vaccination status values are "completed",
-// "pending_review", "rejected", or "unknown" (meaning: no record for this
-// scheduled slot yet — see vaccine_schedule.py's docstring, it's never
-// called "overdue"). Showing the raw word "unknown" in the UI reads like
-// something is broken; this is just copy, not a data problem.
-function vaxStatusLabel(status: string): string {
-  if (status === "unknown") return "Not recorded yet";
-  if (status === "pending_review") return "Pending review";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-function vaxStatusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "completed") return "success";
-  if (status === "pending_review") return "warning";
-  if (status === "rejected") return "danger";
-  return "neutral";
-}
-function vaxStatusColor(status: string): string | undefined {
-  if (status === "completed") return NEUTRAL.success;
-  if (status === "pending_review") return NEUTRAL.warning;
-  if (status === "rejected") return NEUTRAL.danger;
-  return undefined;
+/** The reason shown at the booking: the vaccines' names, the first few when there are many. */
+function complaintFor(rows: ImmunizationRow[]): string {
+  const names = Array.from(new Set(rows.map((r) => `${r.vaccine} ${r.dose}`)));
+  return `Vaccination: ${names.slice(0, 6).join(", ")}${names.length > 6 ? ` +${names.length - 6} more` : ""}`;
 }
 
 export function VaccinationsScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<AppStackParamList, "Vaccinations">>();
-  const { patientAwpid, patientName, patientGender, patientDob } = route.params;
-  const { theme } = useAppTheme();
-  // A dependent's age/gender-derived color (HealthScreen's family switcher),
-  // when one applies — falls back to the personal accent theme for Self,
-  // same as before this existed.
-  const accent = patientGender ? familyAccentFor({ gender: patientGender, date_of_birth: patientDob ?? null }) : null;
-  const accentText = accent?.text ?? theme.text;
-  // The same tint this person's Vaccinations gadget card uses on the Health
-  // tab — reused here so the icon badges, filter pills, and the "report a
-  // vaccination" button match it exactly, instead of staying default green
-  // regardless of who's being viewed. Status pills (Completed/Due/etc.) are
-  // untouched below — those carry real clinical meaning, not identity.
-  const vaxTint = patientGender ? familyGadgetPaletteFor({ gender: patientGender, date_of_birth: patientDob ?? null })?.vaccinations : null;
-  const vaxColor = vaxTint?.icon[1];
-  const filterOptionColor = vaxColor ? { fill: vaxColor, on: "#FFFFFF" } : undefined;
+  const { patientAwpid, patientName, headerColor, headerOn } = route.params;
 
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [viewMode, setViewMode] = useState<"age" | "date">("age");
-  const [detail, setDetail] = useState<VaccinationRoadmapItem | null>(null);
+  const [filter, setFilter] = useState<"" | Status>("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [closed, setClosed] = useState<Record<string, boolean>>({});
 
-  const { data: vax, error, refetch, isFetching, isStale } = useQuery({
-    queryKey: ["vaccinations", patientAwpid],
-    queryFn: () => getVaccinations(patientAwpid),
-  });
-  useRefreshOnFocus({ isStale, refetch });
-  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetch);
+  const { people } = usePeople();
+  const awpid = patientAwpid ?? people.find((p) => p.isSelf)?.awpid;
+  const switcher = usePersonSwitcher(people, awpid, (p) => navigation.setParams(paramsFor(p)));
 
-  const roadmap = vax?.roadmap || [];
+  const immunizationQ = useQuery({ queryKey: ["immunization", awpid], queryFn: () => getImmunization(awpid!), enabled: !!awpid });
+  useRefreshOnFocus(immunizationQ);
+  const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(immunizationQ.refetch);
+  const data = immunizationQ.data;
 
-  let shown = roadmap;
-  if (filter === "completed") shown = shown.filter((r) => r.status === "completed");
-  else if (filter === "not_completed") shown = shown.filter((r) => r.status !== "completed");
+  const book = (rows: ImmunizationRow[]) => navigation.navigate("FindDoctors", { initialComplaint: complaintFor(rows), patientAwpid, patientName });
 
-  // "By age" — schedule order, matches the web app's default. "By due date"
-  // groups into the buckets a parent actually asks about ("what's left this
-  // month / this year") instead of a flat list — see groupByBucket() above.
-  const dob = vax?.date_of_birth ?? null;
-  const groups = viewMode === "date" ? groupByBucket(shown, dob) : null;
+  // One group per age ("6 weeks"), in schedule order, with the rows the filter lets through
+  const { groups, counts, toBook } = useMemo(() => {
+    const rows = data?.rows ?? [];
+    const counts: Record<Status, number> = { overdue: 0, due: 0, given: 0, upcoming: 0 };
+    const byAge = new Map<string, { age: string; dueOn: string; rows: ImmunizationRow[] }>();
+    rows.forEach((r) => {
+      counts[statusOf(r)] += 1;
+      if (filter && statusOf(r) !== filter) return;
+      if (!byAge.has(r.due_age)) byAge.set(r.due_age, { age: r.due_age, dueOn: r.due_on, rows: [] });
+      byAge.get(r.due_age)!.rows.push(r);
+    });
+    const groups = Array.from(byAge.values()).sort((a, b) => a.dueOn.localeCompare(b.dueOn));
+    return { groups, counts, toBook: rows.filter((r) => bookable(statusOf(r))) };
+  }, [data, filter]);
 
-  const downloadCertificate = async (item: VaccinationRoadmapItem) => {
-    if (!item.record_id) return;
-    const file = await getVaccinationFile(item.record_id);
-    await downloadDataUri(file.file_name || `${item.vaccine_name}.pdf`, file.file_data);
-  };
-
-  if (!vax) {
-    return (
-      <Screen>
-        <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
-        <View style={styles.statsRow}>
-          <SkeletonBlock width="30%" height={44} radius={12} />
-          <SkeletonBlock width="30%" height={44} radius={12} />
-          <SkeletonBlock width="30%" height={44} radius={12} />
-        </View>
-        <SkeletonBlock height={34} radius={18} style={{ marginBottom: 14 }} />
-        {[0, 1, 2, 3, 4].map((i) => (
-          <SkeletonRow key={i} />
-        ))}
-      </Screen>
-    );
-  }
+  const filterText = filter ? LOOK[filter].label : "All vaccines";
 
   return (
     <Screen
+      topColor={headerColor}
       onRefresh={pullRefresh}
       refreshing={pulling}
-      backgroundLoading={isFetching && !pulling}
-      accentColor={vaxColor}
+      backgroundLoading={immunizationQ.isFetching && !pulling}
+      footer={
+        <View style={styles.addBar}>
+          <PrimaryButton label="Add a vaccine" icon={Plus} onPress={() => navigation.navigate("AddVaccine", { patientAwpid, patientName })} />
+        </View>
+      }
       header={
         <>
-          <BackHeader title={`Vaccinations — ${patientName}`} onBack={() => navigation.goBack()} tint={accent ? { bg: accent.bg, text: accent.text } : undefined} />
-
-          {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
-
-          {vax && (
-            <View style={styles.statsRow}>
-              <StatTile value={String(vax.completed_count)} label="Completed" color={accentText} />
-              <StatTile value={vax.next_recommended?.vaccine_name || "—"} label="Next due" color={NEUTRAL.warning} />
-              <StatTile value={String(roadmap.filter((r) => r.status === "pending_review").length)} label="Pending review" color={NEUTRAL.textPrimary} />
-            </View>
+          <BackHeader
+            title={`Vaccinations — ${patientName}`}
+            onBack={() => navigation.goBack()}
+            color={headerColor}
+            onColor={headerOn}
+            right={<><HelpButton onPress={() => setHelpOpen(true)} onDark color={headerOn} /><MoreButton onPress={switcher.open} onDark color={headerOn} /></>}
+          />
+          {!!immunizationQ.error && <ErrorBanner message={apiErrorMessage(immunizationQ.error)} onRetry={immunizationQ.refetch} />}
+          {data ? (
+            <>
+              <View style={styles.statsRow}>
+                <StatTile value={String(data.summary.given)} label="Given" color={NEUTRAL.success} tint={NEUTRAL.successBg} edge="#B7DEC4" />
+                <StatTile value={String(data.summary.overdue + data.summary.due)} label="Overdue or due" color={NEUTRAL.danger} tint={NEUTRAL.dangerBg} edge="#EBBDBD" />
+                <StatTile value={data.summary.coverage_pct != null ? `${Math.round(data.summary.coverage_pct)}%` : "—"} label="Recorded so far" color={NEUTRAL.textPrimary} tint={NEUTRAL.surface} edge={NEUTRAL.border} />
+              </View>
+              {toBook.length > 0 ? (
+                <View style={styles.bookCard}>
+                  <IconBadge icon={Syringe} size={38} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bookTitle}>Book a vaccine</Text>
+                    <Text style={styles.bookMeta}>{toBook.length} overdue or due</Text>
+                  </View>
+                  <PrimaryButton label="Book" icon={CalendarPlus} compact onPress={() => book(toBook)} />
+                </View>
+              ) : (
+                <Text style={styles.upToDate}>All recorded vaccines are up to date.</Text>
+              )}
+              <View style={styles.filterRow}>
+                <FilterPill label={filterText} count={filter ? counts[filter] : data.rows.length} active={!!filter} onPress={() => setFilterOpen(true)} />
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.statsRow}>
+                <SkeletonBlock width="30%" height={44} radius={12} />
+                <SkeletonBlock width="30%" height={44} radius={12} />
+                <SkeletonBlock width="30%" height={44} radius={12} />
+              </View>
+              <SkeletonBlock height={64} radius={CARD.radius} style={{ marginBottom: CARD.gap }} />
+            </>
           )}
-
-          <SegmentedControl
-            options={[
-              { key: "all", label: "All", color: filterOptionColor },
-              { key: "completed", label: "Completed", color: filterOptionColor },
-              { key: "not_completed", label: "Not completed", color: filterOptionColor },
-            ]}
-            value={filter}
-            onChange={setFilter}
-          />
-
-          <View style={styles.viewModeRow}>
-            <Text style={styles.viewModeLabel}>Show</Text>
-            <SegmentedControl
-              options={[
-                { key: "age", label: "By age" },
-                { key: "date", label: "By due date" },
-              ]}
-              value={viewMode}
-              onChange={setViewMode}
-            />
-          </View>
-
-          <SecondaryButton
-            label="+ Report a vaccination from outside"
-            onPress={() => navigation.navigate("ReportVaccination", { patientAwpid, patientName })}
-            style={{ marginBottom: 12 }}
-            color={vaxColor}
-          />
         </>
       }
     >
-      {shown.length === 0 ? (
-        <EmptyState text={roadmap.length === 0 ? "No vaccination roadmap available yet." : "Nothing in this filter."} />
-      ) : groups ? (
-        groups.map(({ bucket, items }) => (
-          <View key={bucket} style={{ marginBottom: 6 }}>
-            <SectionTitle>{BUCKET_LABEL[bucket]}</SectionTitle>
-            {items.map((r, i) => (
-              <ListRow
-                key={i}
-                icon={Syringe}
-                iconColors={vaxTint?.icon}
-                title={r.vaccine_name}
-                subtitle={r.administered_date ? `Given ${r.administered_date}` : r.scheduled_label}
-                pillLabel={vaxStatusLabel(r.status)}
-                pillTone={vaxStatusTone(r.status)}
-                onPress={() => setDetail(r)}
-              />
-            ))}
-          </View>
-        ))
+      {!data ? (
+        [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)
+      ) : groups.length === 0 ? (
+        <EmptyState text={data.rows.length === 0 ? "No vaccination schedule available yet." : "Nothing in this filter."} />
       ) : (
-        shown.map((r, i) => (
-          <ListRow
-            key={i}
-            icon={Syringe}
-            iconColors={vaxTint?.icon}
-            title={r.vaccine_name}
-            subtitle={r.administered_date ? `Given ${r.administered_date}` : r.scheduled_label}
-            pillLabel={vaxStatusLabel(r.status)}
-            pillTone={vaxStatusTone(r.status)}
-            onPress={() => setDetail(r)}
-          />
-        ))
+        groups.map((g) => {
+          const states = g.rows.map(statusOf);
+          const status: Status = states.includes("overdue") ? "overdue" : states.includes("due") ? "due" : states.every((s) => s === "given") ? "given" : "upcoming";
+          const look = LOOK[status];
+          // groups that need action start open, the rest closed
+          const open = closed[g.age] === undefined ? bookable(status) : !closed[g.age];
+          const toBookHere = g.rows.filter((r) => bookable(statusOf(r)));
+          return (
+            <View key={g.age} style={[styles.group, { borderLeftColor: look.color }]}>
+              <Pressable onPress={() => setClosed({ ...closed, [g.age]: open })} style={[styles.groupHead, { backgroundColor: status === "overdue" ? NEUTRAL.dangerBg : status === "due" ? NEUTRAL.warningBg : status === "given" ? NEUTRAL.successBg : NEUTRAL.surfaceAlt }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupTitle}>{g.age}</Text>
+                  <View style={styles.groupMeta}>
+                    <Pill label={look.label} tone={look.tone} />
+                    <Text style={styles.meta}>{g.rows.length} vaccine{g.rows.length === 1 ? "" : "s"}</Text>
+                  </View>
+                </View>
+                {toBookHere.length > 0 && <PrimaryButton label="Book" icon={CalendarPlus} compact onPress={() => book(toBookHere)} />}
+                {open ? <ChevronUp size={20} color={NEUTRAL.textSecondary} /> : <ChevronDown size={20} color={NEUTRAL.textSecondary} />}
+              </Pressable>
+              {open && g.rows.map((r) => <VaccineRow key={r.code} row={r} onBook={() => book([r])} onCard={() => navigation.navigate("DocumentViewer", { ids: [r.document_id!], index: 0, patientAwpid })} />)}
+            </View>
+          );
+        })
       )}
+      {!!data && <Text style={styles.source}>Schedule: {data.source}. Your doctor may advise a different timing.</Text>}
 
-      <DetailSheet visible={!!detail} onClose={() => setDetail(null)} title={detail?.vaccine_name || ""}>
-        {detail && (
-          <>
-            <DetailRow label="Status" value={vaxStatusLabel(detail.status)} valueColor={vaxStatusColor(detail.status)} />
-            {!!detail.scheduled_label && <DetailRow label="Scheduled" value={detail.scheduled_label} />}
-            {!!detail.administered_date && <DetailRow label="Given on" value={detail.administered_date} />}
-            {detail.has_certificate && (
-              <DownloadButton
-                label="Download certificate"
-                fileLabel={`${detail.vaccine_name} certificate`}
-                onDownload={() => downloadCertificate(detail)}
-                style={{ marginTop: 14 }}
-              />
-            )}
-            {["unknown", "pending_review", "ordered"].includes(detail.status) && (
-              <PrimaryButton
-                label="Book this vaccine"
-                style={{ marginTop: 10 }}
-                onPress={() => {
-                  const v = detail;
-                  setDetail(null);
-                  navigation.navigate("FindDoctors", {
-                    initialComplaint: `Vaccination: ${v.vaccine_name}`,
-                    patientAwpid,
-                    patientName,
-                  });
-                }}
-              />
-            )}
-          </>
-        )}
-      </DetailSheet>
+      <FilterSheet
+        visible={filterOpen}
+        items={(["overdue", "due", "given", "upcoming"] as Status[]).filter((s) => counts[s] > 0).map((s) => ({ code: s, count: counts[s] }))}
+        total={data?.rows.length}
+        selected={filter}
+        onSelect={(c) => setFilter(c as "" | Status)}
+        onClose={() => setFilterOpen(false)}
+        labelOf={(c) => LOOK[c as Status]?.label ?? ""}
+        allLabel="All vaccines"
+        title="Show vaccines"
+        subtitle="Filter the list by status."
+        iconOf={(c) => ({ Icon: c ? LOOK[c as Status].Icon : Syringe, ink: c ? LOOK[c as Status].color : BRAND_TEXT })}
+      />
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} items={HELP} title="How to read vaccinations" />
+      {switcher.sheet}
     </Screen>
   );
 }
 
-function StatTile({ value, label, color }: { value: string; label: string; color: string }) {
+function VaccineRow({ row, onBook, onCard }: { row: ImmunizationRow; onBook: () => void; onCard: () => void }) {
+  const status = statusOf(row);
   return (
-    <View style={styles.statTile}>
-      <Text style={[styles.statValue, { color }]} numberOfLines={1}>
-        {value}
-      </Text>
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>{row.vaccine}</Text>
+        <Text style={styles.meta}>
+          Dose {row.dose}
+          {status === "given" ? ` · ${formatDate(row.given_on!)}${row.late ? " · late" : ""}` : status === "upcoming" ? ` · due ${formatDate(row.due_on)}` : ""}
+        </Text>
+      </View>
+      {bookable(status) && <SecondaryButton label="Book" icon={CalendarPlus} compact onPress={onBook} />}
+      {status === "given" && !!row.document_id && (
+        <Pressable onPress={onCard} hitSlop={8}><Text style={styles.link}>View card</Text></Pressable>
+      )}
+    </View>
+  );
+}
+
+function StatTile({ value, label, color, tint, edge }: { value: string; label: string; color: string; tint: string; edge: string }) {
+  return (
+    <View style={[styles.statTile, { backgroundColor: tint, borderColor: edge }]}>
+      <Text style={[styles.statValue, { color }]} numberOfLines={1}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  viewModeRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
-  viewModeLabel: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textSecondary },
-  statsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 14 },
-  statTile: { alignItems: "center", flex: 1, backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 12, paddingVertical: 10, marginHorizontal: 3 },
-  statValue: { fontSize: 15, fontWeight: "700" },
-  statLabel: { fontSize: 9, color: NEUTRAL.textMuted, marginTop: 2 },
+  // three closed, bordered tiles on one background card
+  statsRow: {
+    flexDirection: "row", gap: 8, padding: 8, marginBottom: 12, backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius,
+    borderWidth: 0.5, borderColor: NEUTRAL.border,
+  },
+  statTile: { alignItems: "center", flex: 1, borderRadius: 12, borderWidth: 1.5, paddingVertical: 12, paddingHorizontal: 4 },
+  statValue: { fontSize: 24, fontWeight: "800", lineHeight: 28 },
+  statLabel: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 2, fontWeight: "600", textAlign: "center" },
+  bookCard: {
+    flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius,
+    borderWidth: 0.5, borderColor: NEUTRAL.border, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12,
+  },
+  bookTitle: { fontSize: CARD_TEXT.title, fontWeight: "700", color: NEUTRAL.textPrimary },
+  bookMeta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 1 },
+  upToDate: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.success, marginBottom: 12 },
+  filterRow: { flexDirection: "row", marginBottom: 4 },
+  group: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, borderLeftWidth: 6, marginBottom: CARD.gap, overflow: "hidden" },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
+  groupTitle: { fontSize: CARD_TEXT.title + 1, fontWeight: "800", color: NEUTRAL.textPrimary },
+  groupMeta: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11, paddingHorizontal: 14, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
+  rowTitle: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
+  meta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary },
+  link: { fontSize: CARD_TEXT.body, fontWeight: "700", color: BRAND_TEXT },
+  source: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textSecondary, marginTop: 4, marginBottom: 8 },
+  addBar: { paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: NEUTRAL.surface, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
 });

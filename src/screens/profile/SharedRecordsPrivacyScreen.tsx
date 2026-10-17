@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueries, keepPreviousData } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import {
   Clock, Lock, Search,
@@ -11,15 +11,16 @@ import {
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { SegmentedControl } from "@/components/SegmentedControl";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
-import { TypeAvatar } from "@/components/TypeAvatar";
+import { FileItem, ViewButton, ShareToggle } from "@/components/FileItem";
 import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
-import { getRecordsPrivacy, toggleRecordPrivacy, updateRecordsPrivacy, revealForShare, RecordsPrivacyQuery } from "@/api/portal";
+import { getDocumentDetail, getRecordsPrivacy, toggleRecordPrivacy, updateRecordsPrivacy, revealForShare, RecordsPrivacyQuery } from "@/api/portal";
 import { RecordsPrivacyDoc } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
-import { CARD, CARD_TEXT } from "@/theme/cardSizes";
+import { useDocumentTypes } from "@/hooks/useDocumentTypes";
+import { cardDate } from "@/utils/documentLabels";
 
 const CATEGORY_LABELS: Record<string, string> = {
   cbc: "Complete Blood Count", lipid: "Lipid Profile", lft: "Liver Function Test",
@@ -34,12 +35,6 @@ const KIND_LABEL: Record<string, string> = {
   discharge_summary: "Discharge summaries", consultation_note: "Consultation notes", medical_bill: "Medical bills",
   vaccination_record: "Vaccination records", referral_letter: "Referral letters", medical_certificate: "Medical certificates",
   other: "Other documents", not_classified: "Other documents",
-};
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const dOf = (d: RecordsPrivacyDoc) => d.document_date || d.created_at || "";
-const fmtDate = (iso: string) => {
-  const dt = new Date(iso);
-  return isNaN(dt.getTime()) ? "" : `${String(dt.getDate()).padStart(2, "0")} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
 };
 
 // "documents" filter → the backend's ?kind= (exact doc_type slugs)
@@ -70,6 +65,7 @@ const seen = (d: RecordsPrivacyDoc) => !d.private || d.revealed_for_visit;
 export function SharedRecordsPrivacyScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useAppTheme();
+  const { labelOf } = useDocumentTypes();
 
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -110,6 +106,17 @@ export function SharedRecordsPrivacyScreen() {
   const load = refetch;
 
   const docs = data?.documents ?? [];               // one page
+
+  // The doctor on each file is not in the privacy list. Each card on this page asks the existing My Documents detail
+  // call for its own id (cached per id), so only the files on screen are looked up.
+  const doctorQs = useQueries({
+    queries: docs.map((d) => ({
+      queryKey: ["documentDoctor", d.id],
+      queryFn: async () => (await getDocumentDetail(d.id)).doctor_name || "",
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+  const doctorOf = new Map(docs.map((d, i) => [d.id, { done: doctorQs[i]?.isSuccess ?? false, name: doctorQs[i]?.data || "" }]));
   const summary = data?.summary;
   const pagination = data?.pagination ?? null;
   const session = data?.active_session ?? null;
@@ -239,188 +246,184 @@ export function SharedRecordsPrivacyScreen() {
 
   const onBack = () => navigation.goBack();
   const catTriggerLabel = catF.size === 0 ? "All categories" : `${catF.size} categor${catF.size > 1 ? "ies" : "y"}`;
+  const openViewer = (id: number) =>
+    navigation.navigate("DocumentViewer", { ids: docs.map((d) => d.id), index: Math.max(0, docs.findIndex((d) => d.id === id)) });
+
+  // Everything above the list stays fixed (header, readout, filters, search, count). The list is flat so each group's
+  // heading can stick under the fixed part while its cards scroll.
+  const stickyIdx: number[] = [];
+  const bodyNodes: ReactNode[] = [];
+  if (loading) {
+    bodyNodes.push(<View key="loading" style={styles.center}><ActivityIndicator color={theme.fill} /></View>);
+  } else if (error && !data) {
+    bodyNodes.push(<ErrorBanner key="error" message={error} onRetry={load} />);
+  } else if (data) {
+    if (groups.length === 0) bodyNodes.push(<Text key="empty" style={styles.empty}>No records match these filters.</Text>);
+    groups.forEach((g) => {
+      const sc = g.list.filter(seen).length;
+      const allShown = sc === g.list.length;
+      const none = sc === 0;
+      stickyIdx.push(bodyNodes.length);
+      bodyNodes.push(
+        <View key={`h:${g.key}`} style={styles.grpWrap}>
+          <View style={styles.grpHead}>
+            <Text style={styles.grpName}>{g.label}</Text>
+            <Text style={styles.grpCount}>{g.list.length}</Text>
+            <View style={{ flex: 1 }} />
+            <Pressable
+              onPress={() => onGroupPill(g.list, g.label)}
+              style={[styles.grpPill, allShown && { borderColor: theme.fill, backgroundColor: NEUTRAL.successBg }]}
+            >
+              <Text style={[styles.grpPillText, allShown && { color: theme.text }]}>
+                {allShown ? "All shared" : none ? "All hidden" : `${sc} / ${g.list.length} shared`}
+              </Text>
+            </Pressable>
+          </View>
+        </View>,
+      );
+      g.list.forEach((d) => {
+        const st = stateOf(d);
+        bodyNodes.push(
+          <FileItem
+            key={d.id}
+            title={labelOf(d.doc_type)}
+            date={cardDate(d)}
+            forName="Myself"
+            doctorName={doctorOf.get(d.id)?.name || undefined}
+            showDoctor={doctorOf.get(d.id)?.done}
+            typeCode={d.doc_type}
+            extra={d.private_by_rule && st === "off" ? <Text style={styles.byRule}>Hidden by a rule you set on the web</Text> : undefined}
+            footerLeft={<ViewButton onPress={() => openViewer(d.id)} />}
+            footerRight={<ShareToggle state={st} disabled={busy} onPress={() => onPill(d)} />}
+          />,
+        );
+      });
+    });
+
+    if (pagination && pagination.total_pages > 1) {
+      bodyNodes.push(
+        <View key="pager" style={styles.pager}>
+          <Pressable
+            disabled={!pagination.has_previous}
+            onPress={() => setPage((p) => Math.max(1, p - 1))}
+            style={[styles.pagerBtn, !pagination.has_previous && styles.pagerBtnOff]}
+          >
+            <ChevronLeft size={15} color={NEUTRAL.textPrimary} />
+            <Text style={styles.pagerBtnText}>Prev</Text>
+          </Pressable>
+          <Text style={styles.pagerLabel}>Page {pagination.page} of {pagination.total_pages}</Text>
+          <Pressable
+            disabled={!pagination.has_next}
+            onPress={() => setPage((p) => p + 1)}
+            style={[styles.pagerBtn, !pagination.has_next && styles.pagerBtnOff]}
+          >
+            <Text style={styles.pagerBtnText}>Next</Text>
+            <ChevronRight size={15} color={NEUTRAL.textPrimary} />
+          </Pressable>
+        </View>,
+      );
+    }
+    bodyNodes.push(
+      <View key="foot" style={styles.footRow}>
+        <Lock size={11} color={NEUTRAL.textMuted} strokeWidth={2} />
+        <Text style={styles.foot}>
+          Locking a record only changes what a doctor sees when you share — it never removes it from your own view and never deletes it.
+        </Text>
+      </View>,
+    );
+  }
 
   return (
-    <Screen>
-      <BackHeader title="Shared records privacy" onBack={onBack} />
-
-      {loading ? (
-        <View style={styles.center}><ActivityIndicator color={theme.fill} /></View>
-      ) : error && !data ? (
-        <ErrorBanner message={error} onRetry={load} />
-      ) : data ? (
-        <View style={styles.pad}>
-          {!!mutationError && <ErrorBanner message={mutationError} />}
-          <Text style={styles.intro}>
-            Choose what a doctor sees when you share your records. Nothing here is hidden from you, and nothing is deleted.
-          </Text>
-
-          {!!session && (
-            <View style={styles.banner}>
-              <Clock size={13} color={NEUTRAL.warning} strokeWidth={2.2} style={{ marginTop: 1 }} />
-              <Text style={styles.bannerText}>
-                <Text style={styles.bannerStrong}>{session.requester_label || "A doctor"} is viewing your records now.</Text>{" "}
-                Showing a private record asks whether it&rsquo;s just this visit or always.
+    <Screen
+      stickyHeaderIndices={stickyIdx}
+      header={
+        <>
+          <BackHeader title="Shared records privacy" onBack={onBack} />
+          {data && (
+            <>
+              {!!mutationError && <ErrorBanner message={mutationError} />}
+              <Text style={styles.intro}>
+                Choose what a doctor sees when you share your records. Nothing here is hidden from you, and nothing is deleted.
               </Text>
-            </View>
-          )}
 
-          {/* readout */}
-          <View style={styles.readout}>
-            <Text style={styles.roLabel}>VISIBLE TO A DOCTOR</Text>
-            <View style={styles.roRow}>
-              <Text style={[styles.roNum, { color: theme.text }]}>{shownCount} / {vaultTotal}</Text>
-              <Text style={styles.roUnit}>records</Text>
-              <View style={{ flex: 1 }} />
-              <Pressable onPress={() => askShow(summary?.showable_ids ?? [], "every hidden record")} hitSlop={6}>
-                <Text style={[styles.roAct, { color: theme.text }]}>Show all</Text>
-              </Pressable>
-              <Pressable onPress={() => askHide(summary?.hideable_ids ?? [], "every record")} hitSlop={6}>
-                <Text style={[styles.roAct, styles.roActMut]}>Hide all</Text>
-              </Pressable>
-            </View>
-            <View style={styles.track}>
-              <View style={[styles.trackFill, { width: `${vaultTotal ? ((shownCount - visitCount) / vaultTotal) * 100 : 0}%`, backgroundColor: theme.fill }]} />
-              <View style={[styles.trackFill, { width: `${vaultTotal ? (visitCount / vaultTotal) * 100 : 0}%`, backgroundColor: "#7C5CD6" }]} />
-            </View>
-            {summary?.truncated && (
-              <Text style={styles.truncNote}>Showing your {vaultTotal} most recent records.</Text>
-            )}
-          </View>
-
-          {/* filters — navigate the list; broad rules (hide-all, sections, live
-              category rules) live on the web privacy screen */}
-          <View style={{ marginTop: 4 }}>
-            <SegmentedControl
-              options={[
-                { key: "all", label: "All" },
-                { key: "lab_report", label: "Reports" },
-                { key: "prescription", label: "Prescriptions" },
-                { key: "doc", label: "Documents" },
-              ]}
-              value={typeF}
-              onChange={(k) => setTypeFilter(k as TypeF)}
-            />
-          </View>
-
-          <View style={styles.filterRow}>
-            {catOptions.length > 0 && (
-              <Pressable
-                onPress={() => setCatSheet(true)}
-                style={[styles.catTrigger, catF.size > 0 && { borderColor: theme.fill }]}
-              >
-                <Text style={[styles.catTriggerText, catF.size > 0 && { color: theme.text, fontWeight: "600" }]} numberOfLines={1}>
-                  {catTriggerLabel}
-                </Text>
-                <ChevronDown size={13} color={catF.size > 0 ? theme.text : NEUTRAL.textMuted} />
-              </Pressable>
-            )}
-            <View style={styles.search}>
-              <Search size={14} color={NEUTRAL.textMuted} />
-              <TextInput
-                value={q}
-                onChangeText={setQ}
-                placeholder="Search"
-                placeholderTextColor={NEUTRAL.textMuted}
-                style={styles.searchInput}
-              />
-            </View>
-          </View>
-
-          <Text style={styles.count}>
-            {filteredTotal} of {vaultTotal} records
-            {privateCount ? ` · ${privateCount} private` : ""}
-          </Text>
-
-          {groups.length === 0 ? (
-            <Text style={styles.empty}>No records match these filters.</Text>
-          ) : (
-            groups.map((g) => {
-              const sc = g.list.filter(seen).length;
-              const allShown = sc === g.list.length;
-              const none = sc === 0;
-              return (
-                <View key={g.key} style={{ marginTop: 6 }}>
-                  <View style={styles.grpHead}>
-                    <Text style={styles.grpName}>{g.label}</Text>
-                    <Text style={styles.grpCount}>{g.list.length}</Text>
-                    <View style={{ flex: 1 }} />
-                    <Pressable
-                      onPress={() => onGroupPill(g.list, g.label)}
-                      style={[styles.grpPill, allShown && { borderColor: theme.fill, backgroundColor: NEUTRAL.successBg }]}
-                    >
-                      <Text style={[styles.grpPillText, allShown && { color: theme.text }]}>
-                        {allShown ? "All shared" : none ? "All hidden" : `${sc} / ${g.list.length} shared`}
-                      </Text>
-                    </Pressable>
-                  </View>
-                  {g.list.map((d) => {
-                    const st = stateOf(d);
-                    const on = st !== "off";
-                    return (
-                      <View key={d.id} style={styles.rec}>
-                        <TypeAvatar code={d.doc_type} />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={[styles.recTitle, st === "off" && { color: NEUTRAL.textSecondary }]} numberOfLines={1}>
-                            {d.title}
-                          </Text>
-                          <Text style={styles.recSub} numberOfLines={1}>
-                            {fmtDate(dOf(d))}
-                            {d.private_by_rule ? " · by rule" : ""}
-                          </Text>
-                        </View>
-                        <Pressable
-                          onPress={() => onPill(d)}
-                          disabled={busy}
-                          style={[styles.pill, on && { borderColor: theme.fill, backgroundColor: NEUTRAL.successBg }]}
-                        >
-                          {st === "visit" ? (
-                            <Clock size={10} color={theme.text} strokeWidth={2.4} />
-                          ) : (
-                            <View style={[styles.pillDot, { backgroundColor: on ? theme.fill : NEUTRAL.textMuted, opacity: on ? 1 : 0.5 }]} />
-                          )}
-                          <Text style={[styles.pillText, { color: on ? theme.text : NEUTRAL.textMuted }]}>
-                            {st === "visit" ? "This visit" : st === "on" ? "Shared" : "Hidden"}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    );
-                  })}
+              {!!session && (
+                <View style={styles.banner}>
+                  <Clock size={13} color={NEUTRAL.warning} strokeWidth={2.2} style={{ marginTop: 1 }} />
+                  <Text style={styles.bannerText}>
+                    <Text style={styles.bannerStrong}>{session.requester_label || "A doctor"} is viewing your records now.</Text>{" "}
+                    Showing a private record asks whether it&rsquo;s just this visit or always.
+                  </Text>
                 </View>
-              );
-            })
-          )}
+              )}
 
-          {pagination && pagination.total_pages > 1 && (
-            <View style={styles.pager}>
-              <Pressable
-                disabled={!pagination.has_previous}
-                onPress={() => setPage((p) => Math.max(1, p - 1))}
-                style={[styles.pagerBtn, !pagination.has_previous && styles.pagerBtnOff]}
-              >
-                <ChevronLeft size={15} color={NEUTRAL.textPrimary} />
-                <Text style={styles.pagerBtnText}>Prev</Text>
-              </Pressable>
-              <Text style={styles.pagerLabel}>Page {pagination.page} of {pagination.total_pages}</Text>
-              <Pressable
-                disabled={!pagination.has_next}
-                onPress={() => setPage((p) => p + 1)}
-                style={[styles.pagerBtn, !pagination.has_next && styles.pagerBtnOff]}
-              >
-                <Text style={styles.pagerBtnText}>Next</Text>
-                <ChevronRight size={15} color={NEUTRAL.textPrimary} />
-              </Pressable>
-            </View>
-          )}
+              <View style={styles.readout}>
+                <Text style={styles.roLabel}>VISIBLE TO A DOCTOR</Text>
+                <View style={styles.roRow}>
+                  <Text style={[styles.roNum, { color: theme.text }]}>{shownCount} / {vaultTotal}</Text>
+                  <Text style={styles.roUnit}>records</Text>
+                  <View style={{ flex: 1 }} />
+                  <Pressable onPress={() => askShow(summary?.showable_ids ?? [], "every hidden record")} hitSlop={6}>
+                    <Text style={[styles.roAct, { color: theme.text }]}>Show all</Text>
+                  </Pressable>
+                  <Pressable onPress={() => askHide(summary?.hideable_ids ?? [], "every record")} hitSlop={6}>
+                    <Text style={[styles.roAct, styles.roActMut]}>Hide all</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.track}>
+                  <View style={[styles.trackFill, { width: `${vaultTotal ? ((shownCount - visitCount) / vaultTotal) * 100 : 0}%`, backgroundColor: theme.fill }]} />
+                  <View style={[styles.trackFill, { width: `${vaultTotal ? (visitCount / vaultTotal) * 100 : 0}%`, backgroundColor: "#7C5CD6" }]} />
+                </View>
+                {summary?.truncated && (
+                  <Text style={styles.truncNote}>Showing your {vaultTotal} most recent records.</Text>
+                )}
+              </View>
 
-          <View style={styles.footRow}>
-            <Lock size={11} color={NEUTRAL.textMuted} strokeWidth={2} />
-            <Text style={styles.foot}>
-              Locking a record only changes what a doctor sees when you share — it never removes it from your own view and never deletes it.
-            </Text>
-          </View>
-        </View>
-      ) : null}
+              {/* filters — navigate the list; broad rules (hide-all, sections, live category rules) live on the web privacy screen */}
+              <SegmentedControl
+                options={[
+                  { key: "all", label: "All" },
+                  { key: "lab_report", label: "Reports" },
+                  { key: "prescription", label: "Prescriptions" },
+                  { key: "doc", label: "Documents" },
+                ]}
+                value={typeF}
+                onChange={(k) => setTypeFilter(k as TypeF)}
+              />
+
+              <View style={styles.filterRow}>
+                {catOptions.length > 0 && (
+                  <Pressable
+                    onPress={() => setCatSheet(true)}
+                    style={[styles.catTrigger, catF.size > 0 && { borderColor: theme.fill }]}
+                  >
+                    <Text style={[styles.catTriggerText, catF.size > 0 && { color: theme.text, fontWeight: "600" }]} numberOfLines={1}>
+                      {catTriggerLabel}
+                    </Text>
+                    <ChevronDown size={13} color={catF.size > 0 ? theme.text : NEUTRAL.textMuted} />
+                  </Pressable>
+                )}
+                <View style={styles.search}>
+                  <Search size={14} color={NEUTRAL.textMuted} />
+                  <TextInput
+                    value={q}
+                    onChangeText={setQ}
+                    placeholder="Search"
+                    placeholderTextColor={NEUTRAL.textMuted}
+                    style={styles.searchInput}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.count}>
+                {filteredTotal} of {vaultTotal} records
+                {privateCount ? ` · ${privateCount} private` : ""}
+              </Text>
+            </>
+          )}
+        </>
+      }
+    >
+      {bodyNodes}
 
       <ChoiceSheet
         visible={!!sheet}
@@ -444,7 +447,6 @@ export function SharedRecordsPrivacyScreen() {
 
 const styles = StyleSheet.create({
   center: { paddingVertical: 60, alignItems: "center" },
-  pad: { paddingHorizontal: 16, paddingBottom: 28 },
   intro: { fontSize: 12.5, lineHeight: 18, color: NEUTRAL.textSecondary, marginBottom: 12 },
 
   banner: { flexDirection: "row", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 11, marginBottom: 12 },
@@ -465,7 +467,7 @@ const styles = StyleSheet.create({
   trackFill: { height: "100%" },
   truncNote: { fontSize: 10.5, color: NEUTRAL.textMuted, marginTop: 8 },
 
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
   catTrigger: {
     flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 0.5, borderColor: NEUTRAL.border,
     borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: NEUTRAL.surface, maxWidth: "52%",
@@ -475,21 +477,17 @@ const styles = StyleSheet.create({
   search: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 10, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface },
   searchInput: { flex: 1, paddingVertical: 8, fontSize: 12.5, color: NEUTRAL.textPrimary },
 
-  count: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: 12 },
+  count: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 4 },
   empty: { fontSize: 12.5, color: NEUTRAL.textMuted, textAlign: "center", paddingVertical: 32 },
 
-  grpHead: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 2 },
-  grpName: { fontSize: 12, fontWeight: "700", color: NEUTRAL.textPrimary },
-  grpCount: { fontSize: 10, color: NEUTRAL.textMuted, fontVariant: ["tabular-nums"] },
+  // the group heading sticks under the fixed part while its cards scroll past, so it needs a solid background
+  grpWrap: { backgroundColor: NEUTRAL.bg },
+  grpHead: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 2 },
+  grpName: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary },
+  grpCount: { fontSize: 11, color: NEUTRAL.textMuted, fontVariant: ["tabular-nums"] },
   grpPill: { borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 20, paddingVertical: 4, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface },
-  grpPillText: { fontSize: 9.5, fontWeight: "600", color: NEUTRAL.textMuted },
-
-  rec: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: CARD.radius, paddingVertical: CARD.padding - 2, paddingHorizontal: CARD.padding, marginBottom: CARD.gap },
-  recTitle: { fontSize: CARD_TEXT.title, fontWeight: "500", color: NEUTRAL.textPrimary },
-  recSub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textMuted, marginTop: 2 },
-  pill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 76, borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface },
-  pillDot: { width: 5, height: 5, borderRadius: 3 },
-  pillText: { fontSize: 9.5, fontWeight: "600" },
+  grpPillText: { fontSize: 11, fontWeight: "600", color: NEUTRAL.textMuted },
+  byRule: { fontSize: 12.5, color: NEUTRAL.textMuted, marginTop: 6 },
 
   pager: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 2 },
   pagerBtn: { flexDirection: "row", alignItems: "center", gap: 3, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12, backgroundColor: NEUTRAL.surface },
@@ -499,6 +497,4 @@ const styles = StyleSheet.create({
 
   footRow: { flexDirection: "row", gap: 6, marginTop: 20 },
   foot: { flex: 1, fontSize: 10.5, lineHeight: 16, color: NEUTRAL.textMuted },
-
-  // category sheet
 });

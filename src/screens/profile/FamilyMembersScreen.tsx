@@ -8,7 +8,7 @@ import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { SecondaryButton } from "@/components/Buttons";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { NEUTRAL } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { RELATIONSHIP_OPTIONS } from "@/constants/options";
 import { getFamily, removeFamilyMember } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
@@ -37,14 +37,21 @@ export function FamilyMembersScreen() {
   });
 
   return (
-    <Screen onRefresh={refetch} refreshing={isFetching}>
-      <View style={styles.headerRow}>
-        <BackHeader title="Family members" onBack={() => navigation.goBack()} />
-        <Pressable onPress={() => navigation.navigate("AddFamilyMember")} hitSlop={8}>
-          <Text style={styles.addLink}>+ Add</Text>
-        </Pressable>
-      </View>
-
+    <Screen
+      onRefresh={refetch}
+      refreshing={isFetching}
+      header={
+        <BackHeader
+          title="Family members"
+          onBack={() => navigation.goBack()}
+          right={
+            <Pressable onPress={() => navigation.navigate("AddFamilyMember")} hitSlop={8}>
+              <Text style={styles.addLink}>+ Add</Text>
+            </Pressable>
+          }
+        />
+      }
+    >
       {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetch} />}
       {!!removeMember.error && <ErrorBanner message={apiErrorMessage(removeMember.error, "Couldn't remove this family member.")} />}
 
@@ -102,8 +109,7 @@ function relationshipLabel(value: string): string {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addLink: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary, marginRight: 16 },
+  addLink: { fontSize: 16, fontWeight: "700", color: ON_BRAND, borderWidth: 1.5, borderColor: ON_BRAND, borderRadius: 19, paddingHorizontal: 16, paddingVertical: 6 },
   empty: { fontSize: CARD_TEXT.body, color: NEUTRAL.textMuted },
   name: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
   meta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },

@@ -17,7 +17,7 @@ export type AppStackParamList = {
   Tabs: undefined;
   FindDoctors:
     | {
-        tenantId?: number;
+        hospitalId?: number;
         hospitalName?: string;
         initialSpecialty?: string;
         initialComplaint?: string;
@@ -25,10 +25,10 @@ export type AppStackParamList = {
         patientName?: string;
       }
     | undefined;
-  DoctorDetail: { tenantId: number; doctorId: number; initialComplaint?: string; patientAwpid?: string; patientName?: string };
+  DoctorDetail: { hospitalId: number; doctorId: number; initialComplaint?: string; patientAwpid?: string; patientName?: string };
   BookingFor: { initialComplaint?: string } | undefined;
   ConfirmBooking: {
-    tenantId: number;
+    hospitalId: number;
     doctorId: number;
     doctorName: string;
     hospitalName: string;
@@ -41,26 +41,23 @@ export type AppStackParamList = {
   };
   BookingSuccess: { hospital: string; doctor: string; date: string; time?: string; tokenNumber?: number };
   PrescriptionDetail: { record: import("@/api/types").MedicalRecord };
-  MyDocuments: { patientAwpid?: string; patientName?: string; patientGender?: string; patientDob?: string | null } | undefined;
+  MyDocuments: undefined;
+  // One upload day of the By-date view: its files. `date` is "2026-05-12"; `byType` is how many of each type that day
+  // holds (from the day card), so the type filter inside the day can show its counts without another request.
+  DocumentDay: { date: string; patientAwpid?: string; byType: Record<string, number> };
   // mode "instant" = one document on the fast lane (QR scan or one photo); "bulk" = several photos at once
   DocumentCapture: { mode: "instant" | "bulk"; patientAwpid?: string };
   DocumentUpload: { patientAwpid?: string } | undefined;
   // The full-screen viewer: the files of the list it was opened from (ids), which one to open (index), whose they are.
   DocumentViewer: { ids: number[]; index: number; patientAwpid?: string };
   Notifications: undefined;
-  Reschedule: { bookingId: number; tenantId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
-  // patientGender/patientDob: raw fields for theme/familyColors.ts's
-  // familyAccentFor()/familyGadgetTintFor() — the SAME derivation
-  // HealthScreen's family-member switcher uses, re-run here rather than
-  // precomputed and passed through, so there's one source of truth for the
-  // color instead of duplicating it in nav params. Undefined for Self (or
-  // any patient the derivation doesn't apply to) — callers fall back to the
-  // personal accent theme.
-  Vaccinations: { patientAwpid?: string; patientName: string; patientGender?: string; patientDob?: string | null };
-  ReportVaccination: { patientAwpid?: string; patientName: string };
-  HealthTimeline: { patientAwpid?: string; patientName: string; patientGender?: string; patientDob?: string | null };
-  HealthVisits: { patientAwpid?: string; patientName: string; patientGender?: string; patientDob?: string | null };
-  Growth: { patientAwpid?: string; patientName: string; patientGender?: string; patientDob?: string | null };
+  Reschedule: { bookingId: number; hospitalId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
+  // Only the Health tab's header takes the family member's colour; the screens below always use the app theme.
+  // headerColor / headerOn: the selected family member's colour for the header band only (Health tab sets them)
+  Vaccinations: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
+  AddVaccine: { patientAwpid?: string; patientName: string };
+  HealthTimeline: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
+  HealthVisits: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
   AddFamilyMember: { member?: import("@/api/types").FamilyMember } | undefined;
   PersonalDetails: undefined;
   HealthSummary: undefined;

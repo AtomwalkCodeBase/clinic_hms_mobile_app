@@ -1,6 +1,7 @@
 import { View, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { LucideIcon } from "@/theme/icons";
+import { ON_BRAND, BRAND, BRAND_SOFT, BRAND_DEEP } from "@/theme/themes";
 
 /**
  * Glossy metallic-green icon badge — layered gradient (depth) + a
@@ -15,20 +16,23 @@ import type { LucideIcon } from "@/theme/icons";
 export function IconBadge({
   icon: Icon,
   size = 30,
-  colors = ["#2eb166", "#15803D", "#0d4b26"],
-  shadowColor = "#0a4020",
+  colors = [BRAND, BRAND_SOFT],
+  shadowColor = BRAND_DEEP,
+  iconColor = ON_BRAND,
 }: {
   icon: LucideIcon;
   size?: number;
-  /** 3-stop gradient — defaults to the brand green used everywhere else. */
-  colors?: readonly [string, string, string];
+  /** 3-stop gradient — defaults to the brand mint used everywhere else. */
+  colors?: readonly [string, string, ...string[]];
   shadowColor?: string;
+  /** Dark on the default mint; pass white when `colors` is a dark gradient. */
+  iconColor?: string;
 }) {
   const radius = size * 0.32;
   return (
     <View style={[styles.shadowWrap, { width: size, height: size, borderRadius: radius, shadowColor }]}>
       <View style={[styles.clip, { borderRadius: radius }]}>
-        <LinearGradient colors={colors} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={colors} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
         <LinearGradient
           colors={["rgba(255,255,255,0.4)", "rgba(255,255,255,0.05)", "rgba(255,255,255,0)"]}
           locations={[0, 0.4, 1]}
@@ -36,7 +40,7 @@ export function IconBadge({
           end={{ x: 0.7, y: 0.8 }}
           style={StyleSheet.absoluteFill}
         />
-        <Icon size={size * 0.5} color="#FFFFFF" strokeWidth={2.2} />
+        <Icon size={size * 0.5} color={iconColor} strokeWidth={2.2} />
       </View>
     </View>
   );
@@ -44,7 +48,7 @@ export function IconBadge({
 
 const styles = StyleSheet.create({
   shadowWrap: {
-    shadowColor: "#0a4020",
+    shadowColor: BRAND_DEEP,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.28,
     shadowRadius: 3,

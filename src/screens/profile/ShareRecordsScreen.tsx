@@ -5,7 +5,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { Clock, Check, ShieldCheck, ShieldAlert, ScanLine, X, Download, Link2 } from "lucide-react-native";
+import { Clock, Check, ShieldCheck, ShieldAlert, ScanLine, Download, Link2 } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
@@ -442,9 +443,7 @@ export function ShareRecordsScreen() {
             <Text style={styles.scanOverlayHint}>Point at the QR on the doctor's screen</Text>
             {!!scanHint && <Text style={styles.scanWarn}>{scanHint}</Text>}
           </View>
-          <Pressable style={styles.scanClose} onPress={() => setScanning(false)}>
-            <X size={22} color="#fff" strokeWidth={2.4} />
-          </Pressable>
+          <CloseButton variant="overlay" style={styles.scanClose} onPress={() => setScanning(false)} />
         </View>
       </Modal>
 
@@ -522,5 +521,5 @@ const styles = StyleSheet.create({
   reticle: { width: "64%", aspectRatio: 1, borderWidth: 3, borderColor: "rgba(255,255,255,0.9)", borderRadius: 20 },
   scanOverlayHint: { color: "#fff", fontSize: 12.5, marginTop: 16, textAlign: "center", paddingHorizontal: 40 },
   scanWarn: { color: "#fecaca", fontSize: 12, marginTop: 10, textAlign: "center", paddingHorizontal: 40 },
-  scanClose: { position: "absolute", top: 44, left: 18, width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center" },
+  scanClose: { position: "absolute", top: 44, left: 18 },
 });

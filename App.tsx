@@ -4,25 +4,16 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/api/queryClient";
 import { ThemeProvider } from "@/context/ThemeContext";
-import { ViewModeProvider } from "@/context/ViewModeContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { NetworkProvider } from "@/context/NetworkContext";
 import { DocumentUploadProvider } from "@/context/DocumentUploadContext";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { RootNavigator } from "@/navigation/RootNavigator";
+import { ErrorDialogHost, AppErrorBoundary } from "@/components/ErrorDialogHost";
+import { installGlobalErrorHandling } from "@/utils/errors";
 
-// Temporary — Metro was only printing the bare error message for the
-// "Cannot read property 'length' of undefined" crash, no stack trace.
-// This forces the full JS stack into the terminal so it's actually
-// findable. Remove once that bug is fixed.
-const g = globalThis as any;
-if (g.ErrorUtils) {
-  const prevHandler = g.ErrorUtils.getGlobalHandler?.();
-  g.ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
-    console.log("FULL_STACK_TRACE " + (error?.stack || String(error)));
-    prevHandler?.(error, isFatal);
-  });
-}
+// An error nobody caught, or a promise nobody handled, becomes the app's error dialog (see utils/errors.ts).
+installGlobalErrorHandling();
 
 export default function App() {
   return (
@@ -32,12 +23,13 @@ export default function App() {
         <NetworkProvider>
           <AuthProvider>
             <QueryClientProvider client={queryClient}>
-              <ViewModeProvider>
               <DocumentUploadProvider>
-                <RootNavigator />
+                <AppErrorBoundary>
+                  <RootNavigator />
+                </AppErrorBoundary>
                 <OfflineBanner />
+                <ErrorDialogHost />
               </DocumentUploadProvider>
-              </ViewModeProvider>
             </QueryClientProvider>
           </AuthProvider>
         </NetworkProvider>

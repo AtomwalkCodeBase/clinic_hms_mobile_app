@@ -1,174 +1,224 @@
 import { ReactNode } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Check, Pencil, Trash2, Undo2 } from "lucide-react-native";
-import type { PatientDocument } from "@/api/types";
-import { DocPreview } from "@/components/DocPreview";
-import { TypeTag } from "@/components/TypeAvatar";
-import { NEUTRAL } from "@/theme/themes";
+import { Check, CheckCircle2, Clock, Eye, Building2, Pencil, User } from "lucide-react-native";
+import { CardMenu, MenuItem } from "@/components/CardMenu";
+import { docTypeStyle } from "@/theme/docTypes";
+import { NEUTRAL, BRAND_TEXT, BRAND_TINT } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { CARD, CARD_TEXT } from "@/theme/cardSizes";
+import { CARD } from "@/theme/cardSizes";
+import { CardEdge } from "@/components/CardEdge";
+import { Toggle } from "@/components/Toggle";
 
-/** The delete icon and the pencil are exactly the same size (Classify is the same height, wider). */
-export const ACTION_SIZE = 40;
+const GREEN = { bg: BRAND_TINT, text: BRAND_TEXT };
 
 /**
- * One file in any list: Bulk Upload (review and ready), the one-file Add Document sheet, and My Documents.
- *   "list"  a row: the preview at the left, the name and details in the middle, the actions at the right
- *   "grid"  a card for a two-column grid: the preview on top (with the type tag over it), the name and actions under it
- *   "wide"  a full-width card: a big preview with the name and actions under it (the one-file sheet in grid mode)
- * Tap the preview to open the file in the viewer (`onOpen`). The rest of the row is `onPress`, and press and hold
- * is `onLongPress` (it works on the preview too). What goes under the name (`line`), the small grey text (`sub`),
- * and the buttons or date at the right (`actions`, `trailing`) are passed in, so each screen decides them.
+ * One document on any list: Bulk Upload (review and ready), the one-file review sheet and My Documents.
+ *
+ *   [type icon] Type name                                             date   ⋮
+ *   Doctor: Dr. Anita Rao  [Edit]
+ *   For: Aarav
+ *   ─────────────────────────────────────────────────────────────────────────
+ *   footerLeft                                                   footerRight
+ *
+ * It only draws what it is given; each screen decides the words, the footer buttons and the menu
+ * (utils/documentLabels.ts).
  */
 export function FileItem({
-  doc, layout, order, patientAwpid, typeCode, line, sub, actions, trailing, selected, onOpen, onPress, onLongPress,
+  title, date, forName, nameColor,
+  doctorName, onEditDoctor, showDoctor,
+  status, extra,
+  footerLeft, footerRight, typeCode, edgeColor,
+  menu, selected, onPress, onLongPress,
 }: {
-  doc: PatientDocument;
-  layout: "list" | "grid" | "wide";
-  /** the file's place in its list: the top rows get their previews first */
-  order: number;
-  patientAwpid?: string;
-  /** the type shown on the tag over a card's preview (and the icon if the picture can't be drawn) */
+  /** the document type's name, shown big at the top beside its icon */
+  title: string;
+  date: string;
+  /** "For: <name>" */
+  forName: string;
+  /** the colour of the person's name; the app's green when left out */
+  nameColor?: string;
+  /** the doctor named on the document, without "Dr." */
+  doctorName?: string;
+  /** present when the patient may add or correct the doctor; absent for a hospital's document */
+  onEditDoctor?: () => void;
+  /** draw the doctor line ("Doctor not mentioned" when there is no name) even without an edit button */
+  showDoctor?: boolean;
+  /** "Reading your document…", a failure and its retry, "Not classified…" */
+  status?: ReactNode;
+  /** small tags such as PRIVATE */
+  extra?: ReactNode;
+  /** the left and right ends of the footer: <SourceFooter/>, <ViewButton/>, <ReadyButton/> */
+  footerLeft?: ReactNode;
+  footerRight?: ReactNode;
+  /** picks the icon and colour beside the title */
   typeCode?: string | null;
-  /** under the name: usually a coloured type tag, or "Reading your document…" */
-  line?: ReactNode;
-  sub?: string;
-  /** the pencil and bin, "Move back"… */
-  actions?: ReactNode;
-  /** the date and lock at the right of a My Documents row */
-  trailing?: ReactNode;
+  /** the colour of the card's left edge; the type's icon colour when left out */
+  edgeColor?: string;
+  menu?: MenuItem[];
   selected?: boolean;
-  onOpen: () => void;
   onPress?: () => void;
   onLongPress?: () => void;
 }) {
   const { theme } = useAppTheme();
-  const name = doc.file_name || doc.title;
-  const frame = [styles.frame, layout !== "list" && styles.card, selected && { borderColor: theme.fill, borderWidth: 1.5, backgroundColor: NEUTRAL.successBg }];
+  const type = docTypeStyle(typeCode);
+  const TypeIcon = type.Icon;
+  const frame = [styles.frame, selected && { borderColor: theme.fill, borderWidth: 1.5, backgroundColor: NEUTRAL.successBg }];
+  const hasFooter = !!footerLeft || !!footerRight;
 
-  const preview = (style: object, size: number) => (
-    <Pressable onPress={onOpen} onLongPress={onLongPress} delayLongPress={380} accessibilityRole="button" accessibilityLabel={`Open ${name}`}>
-      <DocPreview id={doc.id} typeCode={typeCode ?? doc.doc_type} patientAwpid={patientAwpid} order={order} width={size} style={style} />
-      {selected && <View style={[styles.tick, layout !== "list" && styles.tickRight, { backgroundColor: theme.fill }]}><Check size={12} color={theme.on} strokeWidth={3.4} /></View>}
-    </Pressable>
-  );
-
-  if (layout === "list") {
-    return (
-      <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={380} style={frame}>
-        <View style={styles.listRow}>
-          {preview(styles.listPreview, 160)}
-          <View style={styles.body}>
-            <Text style={styles.name} numberOfLines={1}>{name}</Text>
-            {line}
-            {!!sub && <Text style={styles.sub} numberOfLines={1}>{sub}</Text>}
-          </View>
-          {trailing}
-          {actions}
-        </View>
-      </Pressable>
-    );
-  }
-
-  const big = layout === "wide";
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={380} style={frame}>
-      <View>
-        {preview(big ? styles.widePreview : styles.gridPreview, big ? 600 : 300)}
-        {typeCode ? <View style={styles.tagOver} pointerEvents="none"><TypeTag code={typeCode} /></View> : null}
-      </View>
-      <View style={[styles.cardBody, big && styles.cardBodyRow]}>
-        <View style={{ flex: big ? 1 : undefined, minWidth: 0 }}>
-          <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          {line}
-          {!!sub && <Text style={styles.sub} numberOfLines={1}>{sub}</Text>}
+    <Pressable onPress={onPress} onLongPress={onLongPress} delayLongPress={380} disabled={!onPress && !onLongPress} style={frame}>
+      <CardEdge color={edgeColor ?? type.ink} />
+      <View style={styles.top}>
+        {selected && (
+          <View style={[styles.tick, { backgroundColor: theme.fill }]}><Check size={13} color={theme.on} strokeWidth={3.4} /></View>
+        )}
+        <View style={[styles.typeTile, { backgroundColor: type.tint }]}>
+          <TypeIcon size={22} color={type.ink} strokeWidth={2.2} />
         </View>
-        {trailing}
-        {actions}
+        <Text style={styles.title} numberOfLines={2}>{title}</Text>
+        <Text style={styles.date}>{date}</Text>
+        {!!menu?.length && <CardMenu items={menu} />}
       </View>
+
+      {(!!doctorName || !!onEditDoctor || showDoctor) && (
+        <View style={styles.doctorRow}>
+          <Text style={styles.doctor} numberOfLines={1}>
+            {doctorName ? (
+              <>Doctor <Text style={styles.doctorName}>Dr. {doctorName}</Text></>
+            ) : (
+              <Text style={styles.doctorMissing}>Doctor not mentioned</Text>
+            )}
+          </Text>
+          {!!onEditDoctor && (
+            <Pressable onPress={onEditDoctor} hitSlop={6} accessibilityRole="button" accessibilityLabel={doctorName ? "Edit doctor's name" : "Add doctor's name"} style={styles.editBtn}>
+              <Pencil size={14} color={NEUTRAL.textPrimary} strokeWidth={2.4} />
+              <Text style={styles.editText}>{doctorName ? "Edit" : "Add doctor"}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      <Text style={styles.whoText} numberOfLines={1}>
+        For: <Text style={[styles.whoName, { color: nameColor ?? GREEN.text }]}>{forName}</Text>
+      </Text>
+
+      {status}
+      {extra}
+
+      {hasFooter && (
+        <View style={styles.footer}>
+          <View style={{ flexShrink: 1 }}>{footerLeft}</View>
+          <View>{footerRight}</View>
+        </View>
+      )}
     </Pressable>
   );
 }
 
-/** Lays a list of FileItems out as a plain column (list layout) or two columns (grid). Each child needs a key. */
-export function FileList({ layout, children }: { layout: "list" | "grid"; children: ReactNode }) {
-  if (layout === "list") return <>{children}</>;
-  const items = (Array.isArray(children) ? children : [children]).filter(Boolean) as any[];
+/** My Documents footer, left side: where the document came from. */
+export function SourceFooter({ hospital }: { hospital: boolean }) {
+  const Icon = hospital ? Building2 : User;
   return (
-    <View style={styles.grid}>
-      {items.map((c, i) => <View key={c.key ?? i} style={styles.gridCell}>{c}</View>)}
+    <View>
+      <Text style={styles.srcLead}>{hospital ? "Issued by" : "Uploaded by"}</Text>
+      <View style={styles.srcRow}>
+        <View style={[styles.srcIcon, { backgroundColor: hospital ? "#E3ECFB" : GREEN.bg }]}>
+          <Icon size={17} color={hospital ? "#2455C3" : GREEN.text} strokeWidth={2.4} />
+        </View>
+        <Text style={styles.srcValue} numberOfLines={1}>{hospital ? "Your hospital" : "You"}</Text>
+      </View>
     </View>
   );
 }
 
-/** The bin (always) and the pencil or Classify (when the file can still be re-typed) at the right of a review row. */
-export function RowActions({
-  hasType, onChange, onDelete, showChange = true, showDelete = true, row = false,
-}: {
-  hasType: boolean;
-  onChange: () => void;
-  onDelete: () => void;
-  showChange?: boolean;
-  showDelete?: boolean;
-  /** side by side (cards) instead of stacked (list rows) */
-  row?: boolean;
-}) {
+/** Opens the file in the in-app viewer. */
+export function ViewButton({ onPress }: { onPress: () => void }) {
   return (
-    <View style={[styles.actions, row && styles.actionsRow]}>
-      {showDelete && (
-        <Pressable onPress={onDelete} hitSlop={6} style={styles.del} accessibilityRole="button" accessibilityLabel="Delete this file">
-          <Trash2 size={18} color={NEUTRAL.danger} strokeWidth={2} />
-        </Pressable>
-      )}
-      {showChange && (
-        <Pressable
-          onPress={onChange}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={hasType ? "Change type" : "Classify"}
-          style={[styles.change, !hasType && styles.classify]}
-        >
-          {hasType
-            ? <Pencil size={18} color={NEUTRAL.textPrimary} strokeWidth={2} />
-            : <Text style={styles.classifyText}>Classify</Text>}
-        </Pressable>
-      )}
-    </View>
+    <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel="View this file" style={styles.outlineBtn}>
+      <Eye size={16} color={BRAND_TEXT} strokeWidth={2.3} />
+      <Text style={styles.outlineText}>View</Text>
+    </Pressable>
   );
 }
 
-export function MoveBackButton({ onPress }: { onPress: () => void }) {
+/** Bulk Upload: moves the file to "Ready to Submit". Same look as View. Greyed out until the file has a type. */
+export function ReadyButton({ onPress, enabled = true }: { onPress: () => void; enabled?: boolean }) {
+  const color = enabled ? BRAND_TEXT : NEUTRAL.textMuted;
   return (
-    <Pressable onPress={onPress} hitSlop={6} style={styles.moveBack} accessibilityRole="button" accessibilityLabel="Move back to Files">
-      <Undo2 size={15} color={NEUTRAL.textPrimary} strokeWidth={2.2} />
-      <Text style={styles.moveBackText}>Move back</Text>
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel="Move to Ready to Submit"
+      style={[styles.outlineBtn, { borderColor: color }]}
+    >
+      <CheckCircle2 size={16} color={color} strokeWidth={2.3} />
+      <Text style={[styles.outlineText, { color }]}>Ready to submit</Text>
+    </Pressable>
+  );
+}
+
+/** Shared records privacy: whether a doctor you share with sees this file. "visit" is shown only for the live visit. */
+export function ShareToggle({ state, onPress, disabled }: { state: "on" | "visit" | "off"; onPress: () => void; disabled?: boolean }) {
+  const tone =
+    state === "on" ? { fg: BRAND_TEXT, bg: BRAND_TINT, line: BRAND_TEXT, label: "Shared with doctor" }
+    : state === "visit" ? { fg: NEUTRAL.warning, bg: NEUTRAL.warningBg, line: NEUTRAL.warning, label: "Shared for this visit" }
+    : { fg: NEUTRAL.textSecondary, bg: NEUTRAL.surfaceAlt, line: NEUTRAL.border, label: "Hidden from doctor" };
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={6}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: state !== "off" }}
+      accessibilityLabel={tone.label}
+      style={[styles.shareFrame, { backgroundColor: tone.bg, borderColor: tone.line }, disabled && { opacity: 0.6 }]}
+    >
+      {state === "visit" ? <Clock size={14} color={tone.fg} strokeWidth={2.4} /> : <View style={[styles.shareDot, { backgroundColor: tone.fg }]} />}
+      <Text style={[styles.shareText, { color: tone.fg }]} numberOfLines={1}>{tone.label}</Text>
+      <Toggle on={state !== "off"} color={tone.fg} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 10, marginBottom: CARD.gap },
-  card: { padding: 0, overflow: "hidden", marginBottom: 0 },
-  listRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  listPreview: { width: 56, height: 72, borderRadius: 8, borderWidth: 0.5, borderColor: NEUTRAL.border },
-  gridPreview: { width: "100%", height: 124 },
-  widePreview: { width: "100%", height: 210 },
-  body: { flex: 1, minWidth: 0 },
-  name: { fontSize: CARD_TEXT.body, fontWeight: "600", color: NEUTRAL.textPrimary },
-  sub: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textSecondary, marginTop: 3 },
-  cardBody: { padding: 10, gap: 8 },
-  cardBodyRow: { flexDirection: "row", alignItems: "center" },
-  tagOver: { position: "absolute", left: 6, top: 6 },
-  tick: { position: "absolute", left: 6, top: 6, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: NEUTRAL.surface },
-  tickRight: { left: undefined, right: 6 },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  gridCell: { width: "48.5%", marginBottom: CARD.gap },
-  actions: { gap: 6, alignItems: "flex-end" },
-  actionsRow: { flexDirection: "row", justifyContent: "flex-end" },
-  del: { width: ACTION_SIZE, height: ACTION_SIZE, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.danger },
-  change: { height: ACTION_SIZE, minWidth: ACTION_SIZE, borderRadius: 11, alignItems: "center", justifyContent: "center", borderWidth: 0.5, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface },
-  classify: { backgroundColor: NEUTRAL.warningBg, borderColor: NEUTRAL.warning, paddingHorizontal: 14 },
-  classifyText: { fontSize: CARD_TEXT.meta, fontWeight: "700", color: NEUTRAL.warning },
-  moveBack: { flexDirection: "row", alignItems: "center", gap: 6, height: 36, paddingHorizontal: 12, borderRadius: 10, borderWidth: 0.5, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface },
-  moveBackText: { fontSize: CARD_TEXT.meta, fontWeight: "600", color: NEUTRAL.textPrimary },
+  shareFrame: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingLeft: 11, paddingRight: 8, paddingVertical: 7 },
+  shareDot: { width: 7, height: 7, borderRadius: 4 },
+  shareText: { fontSize: 12.5, fontWeight: "800" },
+
+  frame: {
+    backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius,
+    paddingTop: 12, paddingHorizontal: 14, marginBottom: CARD.gap,
+  },
+  top: { flexDirection: "row", alignItems: "center", gap: 10 },
+  tick: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  typeTile: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  title: { flex: 1, fontSize: 18.5, fontWeight: "800", color: NEUTRAL.textPrimary, lineHeight: 24 },
+  date: { fontSize: 15.5, fontWeight: "700", color: "#3D4B5C" },
+
+  doctorRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
+  doctor: { flexShrink: 1, fontSize: 15, color: NEUTRAL.textSecondary },
+  doctorName: { fontSize: 17, fontWeight: "800", color: NEUTRAL.textPrimary },
+  doctorMissing: { fontStyle: "italic", color: NEUTRAL.textMuted },
+  editBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: NEUTRAL.surface,
+    borderWidth: 1.2, borderColor: NEUTRAL.textPrimary, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5,
+  },
+  editText: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary },
+
+  whoText: { fontSize: 15.5, color: NEUTRAL.textSecondary, marginTop: 10 },
+  whoName: { fontSize: 16.5, fontWeight: "800" },
+
+  footer: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10,
+    borderTopWidth: 0.5, borderTopColor: NEUTRAL.border, marginTop: 12, marginHorizontal: -14, paddingHorizontal: 14, paddingVertical: 10,
+  },
+
+  srcLead: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textSecondary },
+  srcRow: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 4 },
+  srcIcon: { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  srcValue: { fontSize: 16, fontWeight: "800", color: NEUTRAL.textPrimary },
+
+  outlineBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: BRAND_TEXT, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  outlineText: { fontSize: 13, fontWeight: "800", color: BRAND_TEXT },
 });

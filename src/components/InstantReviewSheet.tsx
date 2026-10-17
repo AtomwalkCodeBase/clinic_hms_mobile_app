@@ -4,21 +4,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, X } from "lucide-react-native";
+import { AlertCircle, Pencil, Trash2 } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
 import { CARD_TEXT } from "@/theme/cardSizes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
-import { dismissDocument, getDocumentDetail, retryDocument, submitDecisions } from "@/api/portal";
+import { dismissDocument, getDocumentDetail, getFamily, retryDocument, submitDecisions, updateDoctorName } from "@/api/portal";
 import { useDocumentTypes } from "@/hooks/useDocumentTypes";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PrimaryButton } from "@/components/Buttons";
-import { FileItem, RowActions } from "@/components/FileItem";
-import { TypeTag } from "@/components/TypeAvatar";
-import { useViewMode } from "@/context/ViewModeContext";
+import { FileItem, ViewButton } from "@/components/FileItem";
+import type { MenuItem } from "@/components/CardMenu";
+import { DoctorNameSheet } from "@/components/DoctorNameSheet";
+import { personColours } from "@/utils/personColours";
 import { AppStackParamList } from "@/navigation/types";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
 import { currentType, isReviewable } from "@/utils/reviewDraft";
+import { cardDate } from "@/utils/documentLabels";
 
 const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
 
@@ -41,7 +44,6 @@ export function InstantReviewSheet({
   onSubmitted: (type: string) => void;
 }) {
   const { theme } = useAppTheme();
-  const { mode } = useViewMode();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const [viewing, setViewing] = useState(false);
   useEffect(() => navigation.addListener("focus", () => setViewing(false)), [navigation]);
@@ -53,8 +55,11 @@ export function InstantReviewSheet({
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [editingDoctor, setEditingDoctor] = useState(false);
 
   const queryClient = useQueryClient();
+  const familyQ = useQuery({ queryKey: ["family"], queryFn: getFamily });
+  const person = familyQ.data?.find((m) => m.awpid === patientAwpid);
   const docQ = useQuery({
     queryKey: ["document", documentId],
     queryFn: () => getDocumentDetail(documentId as number, { patientAwpid }),
@@ -109,6 +114,18 @@ export function InstantReviewSheet({
     }
   }
 
+  async function saveDoctor(name: string) {
+    if (!doc) return;
+    try {
+      await updateDoctorName(doc.id, name, patientAwpid);
+    } catch (err) {
+      throw new Error(apiErrorMessage(err, "Couldn't save the name."));
+    }
+    await docQ.refetch();
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    setEditingDoctor(false);
+  }
+
   async function dismiss() {
     if (!doc) return;
     try {
@@ -134,7 +151,7 @@ export function InstantReviewSheet({
             <View style={styles.handle} />
             <View style={styles.head}>
               <Text style={styles.title}>Add Document</Text>
-              <Pressable onPress={close} hitSlop={10}><X size={18} color={NEUTRAL.textMuted} strokeWidth={2.2} /></Pressable>
+              <CloseButton onPress={close} />
             </View>
 
             {working ? (
@@ -157,18 +174,23 @@ export function InstantReviewSheet({
                   <Text style={styles.noticeText}>Check the type below, then submit.</Text>
                 </View>
                 <FileItem
-                  doc={doc}
-                  layout={mode === "grid" ? "wide" : "list"}
-                  order={0}
-                  patientAwpid={patientAwpid}
+                  title={type ? labelOf(type) : "Not classified"}
+                  date={cardDate(doc)}
+                  forName={patientAwpid ? person?.full_name ?? "Family member" : "Myself"}
+                  nameColor={personColours(person).text}
+                  doctorName={doc.doctor_name}
+                  onEditDoctor={() => setEditingDoctor(true)}
+                  status={!type ? (
+                    <Pressable onPress={() => setPicking(true)} hitSlop={8} style={{ alignSelf: "flex-start", marginTop: 6 }}>
+                      <Text style={[styles.lineText, { color: NEUTRAL.warning, fontWeight: "700" }]}>Not classified. Choose a type ›</Text>
+                    </Pressable>
+                  ) : undefined}
+                  footerLeft={<ViewButton onPress={openViewer} />}
                   typeCode={type}
-                  line={
-                    type
-                      ? <View style={styles.lineRow}>{mode === "list" && <TypeTag code={type} label={labelOf(type)} />}</View>
-                      : <Text style={[styles.lineText, { color: NEUTRAL.warning }]}>Not classified — choose a type</Text>
-                  }
-                  actions={<RowActions hasType={!!type} onChange={() => setPicking(true)} onDelete={() => setDeleting(true)} row={mode === "grid"} />}
-                  onOpen={openViewer}
+                  menu={[
+                    { key: "type", label: "Change type", icon: Pencil, onPress: () => setPicking(true) },
+                    { key: "delete", label: "Delete", icon: Trash2, danger: true, onPress: () => setDeleting(true) },
+                  ] as MenuItem[]}
                 />
                 <PrimaryButton label="Submit" onPress={() => setAsking(true)} disabled={!type} style={{ marginTop: 6, marginBottom: 8 }} />
                 <Text style={styles.foot}>If you close this, the document stays in Bulk Upload until you submit it.</Text>
@@ -184,6 +206,12 @@ export function InstantReviewSheet({
         selected={type}
         onSelect={(code) => { setSelectedType(code === doc?.suggested_type ? null : code); setPicking(false); }}
         onClose={() => setPicking(false)}
+      />
+      <DoctorNameSheet
+        visible={editingDoctor}
+        initial={doc?.doctor_name ?? ""}
+        onSave={saveDoctor}
+        onClose={() => setEditingDoctor(false)}
       />
       <ConfirmDialog
         visible={deleting}
@@ -225,7 +253,6 @@ const styles = StyleSheet.create({
   notice: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, padding: 10, marginBottom: 10 },
   noticeText: { flex: 1, fontSize: 12.5, fontWeight: "600", color: NEUTRAL.warning },
   foot: { fontSize: 11, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 2 },
-  lineRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
   lineText: { fontSize: CARD_TEXT.meta, marginTop: 3 },
   error: { fontSize: 12, color: NEUTRAL.danger, textAlign: "center", marginTop: 10 },
 });

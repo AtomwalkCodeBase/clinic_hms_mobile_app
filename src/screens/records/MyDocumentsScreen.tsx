@@ -1,362 +1,171 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, Pressable, TextInput } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonRow } from "@/components/Skeleton";
-import { ArrowLeft, Plus, Search, ChevronDown, AlertCircle, Lock, Unlock, Clock, Eye, Download, LayoutGrid, Pointer, RefreshCw } from "lucide-react-native";
-import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
-import { MessageDialog } from "@/components/MessageDialog";
+import { Search, ChevronDown, AlertCircle, Lock, Clock, Eye, Download, MoreVertical, Stethoscope, RefreshCw, CalendarDays, Files, LayoutList, Users, Plus } from "lucide-react-native";
+import { Screen, EmptyState, ErrorBanner, HeaderBand } from "@/components/Layout";
+import { BackButton } from "@/components/IconButtons";
 import { SecondaryButton } from "@/components/Buttons";
-import { DetailSheet, DetailRow } from "@/components/DetailSheet";
-import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
 import { SelectField } from "@/components/SelectField";
-import { TypeChipsRow } from "@/components/TypeChipsRow";
-import { TypeTag } from "@/components/TypeAvatar";
-import { FileItem } from "@/components/FileItem";
-import { HelpButton, HelpItem, HelpSheet } from "@/components/HelpSheet";
+import { FilterPill, FilterSheet } from "@/components/TypeFilter";
+import { CardMenu, MenuItem } from "@/components/CardMenu";
+import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
+import { HelpItem, HelpSheet } from "@/components/HelpSheet";
+import { HelpButton } from "@/components/IconButtons";
 import { UploadSheet } from "@/components/UploadSheet";
-import { ViewModeToggle } from "@/components/ViewModeToggle";
-import { useViewMode } from "@/context/ViewModeContext";
 import { InstantReviewSheet } from "@/components/InstantReviewSheet";
 import { UploadStatusBar } from "@/components/UploadStatusBar";
+import { DayList, DocumentsMode } from "@/components/DateView";
+import { filesLabel } from "@/components/DayCard";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
-import { NEUTRAL } from "@/theme/themes";
+import { LinearGradient } from "expo-linear-gradient";
+import { NEUTRAL, ON_BRAND, HEADER_GRADIENT } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
-import { familyAccentFor } from "@/theme/familyColors";
-import type { LucideIcon } from "@/theme/icons";
 import { apiErrorMessage } from "@/api/client";
 import {
-  getMyDocuments, getDocumentDetail, getDocumentCounts,
+  getMyDocuments, getDocumentCounts, getDocumentDays,
   getPrescriptions, getLabOrders, choosePrescription, chooseLabOrder,
-  getAllRecordsPrivacy, toggleRecordPrivacy, revealForShare,
 } from "@/api/portal";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
-import { useDocumentTypes } from "@/hooks/useDocumentTypes";
-import { pickDocuments, downloadDataUri } from "@/utils/fileHelpers";
-import { PatientDocument, PrescriptionOrder, LabOrder, RecordsPrivacyDoc } from "@/api/types";
+import { useDocumentActions } from "@/hooks/useDocumentActions";
+import { pickDocuments } from "@/utils/fileHelpers";
+import { setViewingPerson, useViewingPerson } from "@/utils/viewingPerson";
+import { PatientDocument, PrescriptionOrder, LabOrder } from "@/api/types";
+import type { DocumentDay } from "@/api/portal";
 import { AppStackParamList } from "@/navigation/types";
-import { CARD, CARD_TEXT } from "@/theme/cardSizes";
 
 const PAGE = 15;
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// The month filter the patient last chose, kept while the app is open so leaving this screen and coming back does not
-// reset it. "ALL" until they pick one.
-let lastMonth = "ALL";
+// What the patient last chose here, kept while the app is open so leaving this screen and coming back does not reset
+// it: the view (By date is the default), the year and month of each view, and the type filter of All files.
+// Year and month are "" for "All years" / "All months" (By date has no "all years": it opens on the latest year).
+let lastMode: DocumentsMode = "date";
+let lastYear: number | undefined;
+let lastDayMonth = "";
+let lastAllYear = "";
+let lastAllMonth = "";
+let lastCategory = "";
 
 // ── date helpers ───────────────────────────────────────────────────────────
+/** "2026-10" of a document's date (the date printed on it, else the day it was uploaded). */
 const ymKey = (iso?: string | null) => {
   const d = new Date(iso || "");
   return isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
+/** "October 2026" - the heading above one month's files in All files. */
 const ymLabel = (key: string) => {
   const [y, m] = key.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 };
-const ymShort = (key: string) => {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-};
-const fmtShort = (iso?: string | null) => {
-  const d = new Date(iso || "");
-  return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-};
-const fmtLong = (iso?: string | null) => {
-  const d = new Date(iso || "");
-  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
-};
-
-// Continuous list of months from the newest record (or now) back to the oldest.
-function monthOptions(docs: PatientDocument[]) {
-  const keys = docs
-    .map((d) => ymKey(d.document_date || d.created_at))
-    .filter(Boolean);
-  const nowK = ymKey(new Date().toISOString());
-  const newest = keys.reduce((a, b) => (a > b ? a : b), nowK);
-  const oldest = keys.reduce((a, b) => (a < b ? a : b), nowK);
-  const has = new Set(keys);
-  let [y, m] = newest.split("-").map(Number);
-  const [oy, om] = oldest.split("-").map(Number);
-  const out: { key: string; has: boolean }[] = [];
-  for (let i = 0; i < 48; i++) {
-    const k = `${y}-${String(m).padStart(2, "0")}`;
-    out.push({ key: k, has: has.has(k) });
-    if (y < oy || (y === oy && m <= om)) break;
-    m -= 1;
-    if (m === 0) { m = 12; y -= 1; }
-  }
-  return out;
-}
+const monthOf = (key: string) => Number(key.slice(5, 7)) - 1;
 
 const HELP: HelpItem[] = [
-  { icon: Pointer, title: "Tap a file", text: "Shows its details, with View and Download." },
-  { icon: Eye, title: "Tap the preview", text: "Opens the file here in the app. Pinch or double-tap to zoom." },
-  { icon: LayoutGrid, title: "List or grid", text: "The two icons next to the type chips. Your choice is remembered on every screen." },
-  { icon: Lock, title: "Lock icon", text: "Choose whether doctors can see a document when you share your records." },
+  { icon: Plus, title: "Add record", text: "The button at the bottom: upload a file or take a photo of a record." },
+  { icon: CalendarDays, title: "By date", text: "One card for each day you uploaded files, with how many there are. Pick a year and a month at the top, tap a day to open its files." },
+  { icon: Files, title: "All files", text: "Every file in one list, newest first. Narrow it by year and month, by type, or search." },
+  { icon: LayoutList, title: "Change view", text: "In the three dots at the top: switch between By date and All files." },
+  { icon: MoreVertical, title: "Three dots on a file", text: "Download a file to your phone, add or correct the doctor's name, hide it from doctors, or delete one you uploaded." },
+  { icon: Stethoscope, title: "Doctor's name", text: "Read from the document. Tap the Edit or Add doctor button on the card to correct it." },
+  { icon: Eye, title: "Whose documents", text: "Tap the name at the top, or choose Change family member in the three dots: yours or a family member's." },
+  { icon: Lock, title: "Privacy", text: "In the menu: choose whether doctors can see a document when you share your records." },
   { icon: Download, title: "Download", text: "Saves a copy of the original file to your phone." },
   { icon: RefreshCw, title: "Pull the top part down", text: "Refreshes the screen. The list itself does not refresh." },
 ];
 
-const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
-/** What to show instead of a type tag while a document is still being read, or if it could not be. */
-const statusLabel = (s: string) => (s === "queued" ? "Waiting" : s === "extracting" ? "Reading…" : s === "classifying" ? "Classifying…" : "Couldn't be read");
-
-// ── one row ────────────────────────────────────────────────────────────────
-function RecItem({
-  d, layout, order, patientAwpid, onOpen, onDetails, priv, onLock,
-}: {
-  d: PatientDocument;
-  layout: "list" | "grid";
-  order: number;
-  patientAwpid?: string;
-  onOpen: () => void;
-  onDetails: () => void;
-  priv?: RecordsPrivacyDoc;
-  onLock?: () => void;
-}) {
-  const sub = d.uploaded_by === "staff" ? "Issued by your hospital" : d.confirmed ? "Verified by you" : "Uploaded by you";
-  const inProgress = IN_PROGRESS.has(d.processing_status);
-  const failed = d.processing_status === "failed";
-  const pState = priv ? (priv.revealed_for_visit ? "visit" : priv.private ? "private" : "shared") : null;
-  const LockIcon = pState === "shared" ? Unlock : Lock;
-  const date = fmtShort(d.document_date || d.created_at);
-  const line = (
-    <View style={{ alignItems: "flex-start", gap: 3, marginTop: 4 }}>
-      {inProgress || failed ? (
-        <Text style={[styles.tag, failed && { color: NEUTRAL.warning, borderColor: NEUTRAL.warning }]}>{statusLabel(d.processing_status)}</Text>
-      ) : layout === "list" ? (
-        <TypeTag code={d.doc_type} />
-      ) : null}
-      {pState === "private" && <Text style={styles.privTag}>PRIVATE{priv?.private_by_rule ? " · BY RULE" : ""}</Text>}
-      {pState === "visit" && (
-        <View style={styles.visTag}>
-          <Clock size={9} color={NEUTRAL.success} strokeWidth={2.6} />
-          <Text style={styles.visTagT}>SHOWN THIS VISIT</Text>
-        </View>
-      )}
-    </View>
-  );
-  const showLock = !inProgress && !failed && !!priv && !!onLock;
-  const trailing = layout === "list" || showLock ? (
-    <View style={{ alignItems: "flex-end", gap: 6 }}>
-      {layout === "list" && <Text style={styles.recDt}>{date}</Text>}
-      {showLock && (
-        <Pressable onPress={onLock} hitSlop={8} style={[styles.lockBtn, pState !== "shared" && styles.lockBtnOn]} accessibilityRole="button" accessibilityLabel="Sharing privacy">
-          <LockIcon size={14} color={pState === "shared" ? NEUTRAL.textMuted : NEUTRAL.success} strokeWidth={2} />
-        </Pressable>
-      )}
-    </View>
-  ) : undefined;
-  return (
-    <FileItem
-      doc={d}
-      layout={layout}
-      order={order}
-      patientAwpid={patientAwpid}
-      typeCode={inProgress || failed ? null : d.doc_type}
-      line={line}
-      sub={layout === "list" ? sub : date}
-      trailing={trailing}
-      onOpen={onOpen}
-      onPress={onDetails}
-    />
-  );
-}
-
-// A small outlined action for the detail sheet's View/Download row — the
-// previous version reused PrimaryButton/SecondaryButton (full-width pill
-// CTAs meant for one-decision screens like Sign in), which stacked into an
-// oversized, heavy block for what's really a compact "here's what you can
-// do with this file" row. View and Download are equal-weight actions on
-// the same file, so both get the same neutral styling — no reason one
-// should read as more important than the other.
-function FileAction({
-  icon: Icon, label, loading, onPress,
-}: {
-  icon: LucideIcon;
-  label: string;
-  loading?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={loading}
-      style={({ pressed }) => [styles.fileAction, pressed && { opacity: 0.7 }]}
-    >
-      {loading ? (
-        <ActivityIndicator size="small" color={NEUTRAL.textSecondary} />
-      ) : (
-        <>
-          <Icon size={14} color={NEUTRAL.textSecondary} strokeWidth={2.2} />
-          <Text style={styles.fileActionText} numberOfLines={1}>{label}</Text>
-        </>
-      )}
-    </Pressable>
-  );
-}
-
-
 // ── screen ─────────────────────────────────────────────────────────────────
 export function MyDocumentsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const route = useRoute<RouteProp<AppStackParamList, "MyDocuments">>();
-  const patientAwpid = route.params?.patientAwpid;
-  const patientName = route.params?.patientName;
-  const patientGender = route.params?.patientGender;
-  const patientDob = route.params?.patientDob;
-  // Same identity accent HealthScreen's family switcher and the other
-  // detail screens reached from it (Vaccinations, Growth, Timeline,
-  // Visits) use — this screen just never read the two params for it
-  // before, so its header stayed plain neutral gray regardless of who
-  // Rx & Reports was actually showing.
-  const accent = patientGender ? familyAccentFor({ gender: patientGender, date_of_birth: patientDob ?? null }) : null;
   const { theme } = useAppTheme();
-
   const queryClient = useQueryClient();
-  // Mutation/action failures (privacy toggle, review submit, upload, choosing
-  // a pharmacy/lab option...) — separate from the documents query's own
-  // load error below, same two-banner split this screen already had.
-  const [actionError, setActionError] = useState("");
-  // What happened to the files the patient just picked (some skipped / none could be uploaded). Shown as a
-  // dialog: the error banner's Retry re-loads the reports list, which can never fix an upload.
-  const [uploadNotice, setUploadNotice] = useState<{ title: string; message: string; tone: "success" | "error" } | null>(null);
-  // Mirrors `error` for failures that happen while the detail sheet is open —
-  // the main ErrorBanner renders behind that modal, so a failed view/download
-  // there looked like "nothing happens" with no feedback at all.
-  const [sheetError, setSheetError] = useState("");
-  const [sheetMessage, setSheetMessage] = useState("");
 
-  const [category, setCategory] = useState("");        // "" = every category, else a type code
+  // Whose documents are showing: the patient themself, or one family member. Kept in memory only (utils/viewingPerson.ts).
+  const patientAwpid = useViewingPerson();
+  const {
+    cardFor, dialogs, actionError, setActionError, setNotice, privacyQ, privSession, privEnabled,
+    familyQ, members, member, personName, personTag, nameColor, labelOf,
+  } = useDocumentActions(patientAwpid);
+  // A family member who is no longer linked: fall back to the patient themself.
+  useEffect(() => {
+    if (patientAwpid && familyQ.data && !member) setViewingPerson(undefined);
+  }, [patientAwpid, familyQ.data, member]);
+
+  const [mode, setMode] = useState<DocumentsMode>(lastMode);
+  useEffect(() => { lastMode = mode; }, [mode]);
+  // The year of the By-date view; undefined until the patient picks one (the server then answers with the newest).
+  const [year, setYear] = useState<number | undefined>(lastYear);
+  useEffect(() => { lastYear = year; }, [year]);
+  // The month inside that year: "" = every month, else "0".."11".
+  const [dayMonth, setDayMonth] = useState(lastDayMonth);
+  useEffect(() => { lastDayMonth = dayMonth; }, [dayMonth]);
+  // The two choices of the three-dots menu open as sheets.
+  const [viewOpen, setViewOpen] = useState(false);
+  const [personOpen, setPersonOpen] = useState(false);
+  // All files: the year and month it is narrowed to ("" = all), then the type and the search.
+  const [allYear, setAllYear] = useState(lastAllYear);
+  useEffect(() => { lastAllYear = allYear; }, [allYear]);
+  const [allMonth, setAllMonth] = useState(lastAllMonth);
+  useEffect(() => { lastAllMonth = allMonth; }, [allMonth]);
+  // "" = every category, else a type code. Remembered while the app is open.
+  const [category, setCategory] = useState(lastCategory);
+  useEffect(() => { lastCategory = category; }, [category]);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [month, setMonth] = useState<string>(lastMonth); // "ALL" or "YYYY-MM"
-  useEffect(() => { lastMonth = month; }, [month]);
   const [visible, setVisible] = useState(PAGE);
   const [showPending, setShowPending] = useState(false);
-
-  const [detail, setDetail] = useState<PatientDocument | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
-  // View and Download are two different actions on the same doc id — busyId
-  // alone can't tell them apart, so both buttons lit up together no matter
-  // which one was actually running.
-  const [busyAction, setBusyAction] = useState<"download" | "save" | "remove" | "">("");
   const [choosing, setChoosing] = useState<string | null>(null);
 
-  // ── shared-records privacy: the per-report lock (self only) ─────────────
-  const privEnabled = !patientAwpid;
-  // Distinct key from SharedRecordsPrivacyScreen's ["recordsPrivacy", page,
-  // ...] — same endpoint, but called here with no pagination/filter params
-  // for a different shape (the full unfiltered map), so it stays its own
-  // cache entry rather than colliding with that screen's paginated one.
-  const privacyQ = useQuery({
-    queryKey: ["recordsPrivacyDocs"],
-    queryFn: () => getAllRecordsPrivacy().catch(() => null),
-    enabled: !patientAwpid,
-  });
-  const privMap = useMemo(
-    () => new Map((privacyQ.data?.documents ?? []).map((x) => [x.id, x])),
-    [privacyQ.data]
-  );
-  const privSession = privacyQ.data?.active_session ?? null;
-  const [lockSheet, setLockSheet] = useState<{ title: string; message?: string; actions: ChoiceAction[] } | null>(null);
-
-  async function privToggle(docId: number, makePrivate: boolean) {
-    try {
-      await toggleRecordPrivacy(docId, makePrivate);
-      privacyQ.refetch();
-    } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't update."));
-    }
-  }
-  async function privReveal(docId: number, scope: "visit" | "always" | "conceal") {
-    if (!privSession) return;
-    try {
-      await revealForShare(privSession.token, [docId], scope);
-      privacyQ.refetch();
-    } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't update."));
-    }
-  }
-  function onLock(d: PatientDocument) {
-    const p = privMap.get(d.id);
-    const name = d.title;
-    if (!p) return;
-    if (p.revealed_for_visit) {
-      setLockSheet({
-        title: "Hide this again now?",
-        message: `${name} would hide by itself when the visit ends.`,
-        actions: [
-          { label: "Cancel", cancel: true },
-          { label: "Hide now", primary: true, onPress: () => privReveal(d.id, "conceal") },
-        ],
-      });
-    } else if (p.private_by_rule) {
-      setLockSheet({
-        title: "Hidden by a rule",
-        message: `${name} is hidden by a category, kind or "hide everything" rule. Change those in Shared records privacy.`,
-        actions: [
-          ...(privSession
-            ? [{ label: "Just this visit", sub: "Reveal only for the doctor viewing now", primary: true, onPress: () => privReveal(d.id, "visit") } as ChoiceAction]
-            : []),
-          { label: "Close", cancel: true },
-        ],
-      });
-    } else if (!p.private) {
-      setLockSheet({
-        title: "Make this private?",
-        message: `${name} won't be shown to doctors when you share your records. You'll still see it here.`,
-        actions: [
-          { label: "Cancel", cancel: true },
-          { label: "Make private", cancel: true, onPress: () => privToggle(d.id, true) },
-        ],
-      });
-    } else if (privSession) {
-      setLockSheet({
-        title: "A doctor is viewing now",
-        message: `Show ${name} to ${privSession.requester_label || "the doctor"} —`,
-        actions: [
-          { label: "Just this visit", sub: "Hides again when the visit ends", primary: true, onPress: () => privReveal(d.id, "visit") },
-          { label: "Always", sub: "Stays visible for future visits too", onPress: () => privToggle(d.id, false) },
-          { label: "Cancel", cancel: true },
-        ],
-      });
-    } else {
-      setLockSheet({
-        title: "Show this to doctors again?",
-        message: `Doctors you share with will be able to see ${name}.`,
-        actions: [
-          { label: "Cancel", cancel: true },
-          { label: "Show", primary: true, onPress: () => privToggle(d.id, false) },
-        ],
-      });
-    }
-  }
   const [addOpen, setAddOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const { mode } = useViewMode();
   const { queueUpload, ready } = useDocumentUpload();
-  const { labelOf } = useDocumentTypes();
   const who = useWhoIsThisFor(patientAwpid);
   // The one document just added with "+", opened to confirm (or change) its type once the bar says it has been read.
   const [instant, setInstant] = useState<{ id: number; awpid?: string } | null>(null);
 
-  // Search, the month picker, and the category-panel counts below all work
-  // over the FULL document set — they're client-side, not server-driven —
-  // so this still needs every document eventually, unlike a screen that
-  // can get away with only ever showing what's been explicitly paged in.
-  // What was actually broken wasn't "loads everything," it was "does it
-  // sequentially, one page at a time, and shows nothing until the last one
-  // lands" — with 100 files at 25/page that's 4 blocking round-trips in a
-  // row. The fix keeps "eventually everything" but makes the first page
-  // its own fast query (instant paint, matches what PAGE=15's own "Load
-  // more" button in the list below shows anyway) and fetches whatever
-  // pages remain in PARALLEL, in the background, merging in once they
-  // land — nothing here waits on that second query to render.
+  // ── By date: one entry per upload day, grouped by the server ──────────────
+  const daysQ = useQuery({
+    queryKey: ["documentDays", patientAwpid, year ?? "latest"],
+    queryFn: () => getDocumentDays({ year, patientAwpid }),
+    enabled: mode === "date",
+    placeholderData: (previous) => previous,
+  });
+  const days = daysQ.data;
+  // A year that has no files any more (the last one was deleted) is not offered: go back to the newest that has some.
+  useEffect(() => {
+    if (days && year && days.years.length && !days.years.some((y) => y.year === year)) setYear(undefined);
+  }, [days, year]);
+
+  // The months of the chosen year that have files, newest first, each with its file count - and the days of the month
+  // picked (all of them when none is).
+  const monthChoices = useMemo(() => {
+    const perMonth: Record<number, number> = {};
+    (days?.days ?? []).forEach((d) => {
+      const m = Number(d.date.slice(5, 7)) - 1;
+      perMonth[m] = (perMonth[m] || 0) + d.total;
+    });
+    return Object.keys(perMonth).map(Number).sort((a, b) => b - a)
+      .map((m) => ({ value: String(m), label: MONTHS[m], meta: filesLabel(perMonth[m]) }));
+  }, [days]);
+  const visibleDays = useMemo(
+    () => (days?.days ?? []).filter((d) => dayMonth === "" || Number(d.date.slice(5, 7)) - 1 === Number(dayMonth)),
+    [days, dayMonth],
+  );
+  // A month whose last file was deleted is not offered any more.
+  useEffect(() => {
+    if (dayMonth && days && !monthChoices.some((c) => c.value === dayMonth)) setDayMonth("");
+  }, [dayMonth, days, monthChoices]);
+
+  // ── All files: search, the year/month filter and the category counts work over the FULL document set - client-side,
+  // not server-driven. The first page is its own fast query (instant paint) and whatever pages remain are fetched in
+  // PARALLEL in the background and merged in once they land; nothing here waits on that to render.
   const docsFirstQ = useQuery({
     queryKey: ["documents", patientAwpid, "page1"],
     queryFn: () => getMyDocuments(1, patientAwpid),
+    enabled: mode === "all",
   });
   const firstPage = docsFirstQ.data;
   const totalPages = firstPage?.pagination.total_pages ?? 1;
@@ -367,27 +176,23 @@ export function MyDocumentsScreen() {
       const pages = await Promise.all(pageNums.map((p) => getMyDocuments(p, patientAwpid)));
       return pages.flatMap((p) => p.results);
     },
-    enabled: !!firstPage && totalPages > 1,
+    enabled: mode === "all" && !!firstPage && totalPages > 1,
   });
   const docs = useMemo(() => {
-    // Offset pagination (page 1, then pages 2..N fetched afterward) isn't stable against
-    // concurrent inserts: a new upload shifts everything after it by one position, so a
-    // document already in firstPage.results can reappear in docsRestQ.data at the shifted
-    // offset. De-dupe by id (keep the first occurrence) rather than rendering it twice.
+    // Offset pagination (page 1, then pages 2..N fetched afterward) isn't stable against concurrent inserts: a new
+    // upload shifts everything after it by one position, so a document already in firstPage.results can reappear in
+    // docsRestQ.data at the shifted offset. De-dupe by id (keep the first occurrence) rather than rendering it twice.
     const combined = [...(firstPage?.results ?? []), ...(totalPages > 1 ? docsRestQ.data ?? [] : [])];
     const seen = new Set<number>();
     return combined.filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)));
   }, [firstPage, docsRestQ.data, totalPages]);
-  // "Ready to actually use" — the first page has landed, so there's real
-  // content and search/filter/months already work over what's loaded so
-  // far. Any remaining pages fill in silently afterward (backgroundLoading
-  // below), same as any other query going stale and refreshing quietly.
   const isInitialLoading = !firstPage;
-  const loadError = (docsFirstQ.error && apiErrorMessage(docsFirstQ.error)) || (docsRestQ.error && apiErrorMessage(docsRestQ.error)) || "";
+  const loadError =
+    (mode === "all" && ((docsFirstQ.error && apiErrorMessage(docsFirstQ.error)) || (docsRestQ.error && apiErrorMessage(docsRestQ.error)))) ||
+    (mode === "date" && daysQ.error && apiErrorMessage(daysQ.error)) || "";
   const error = loadError || actionError;
 
-  // Two independent, soft-failing queries — a failure in either never blocks
-  // the documents list, same as the old try/catch(() => [])-per-call.
+  // Two independent, soft-failing queries — a failure in either never blocks the documents list.
   const pendingRxQ = useQuery({
     queryKey: ["prescriptionOrders", patientAwpid],
     queryFn: () => getPrescriptions(patientAwpid).catch(() => [] as PrescriptionOrder[]),
@@ -399,31 +204,65 @@ export function MyDocumentsScreen() {
   const pendingRx = (pendingRxQ.data ?? []).filter((r) => r.patient_choice === "pending");
   const pendingLab = (pendingLabQ.data ?? []).filter((l) => l.patient_choice === "pending");
 
-  // Per-category numbers for the type chips and how many uploads still wait for review.
+  // Per-category numbers for the type filter and how many uploads still wait for review.
   const countsQ = useQuery({ queryKey: ["documentCounts", patientAwpid], queryFn: () => getDocumentCounts(patientAwpid) });
   const counts = countsQ.data;
 
   const load = useCallback(async () => {
     await Promise.all([
-      docsFirstQ.refetch(),
-      totalPages > 1 ? docsRestQ.refetch() : Promise.resolve(),
+      mode === "date" ? daysQ.refetch() : docsFirstQ.refetch(),
+      mode === "all" && totalPages > 1 ? docsRestQ.refetch() : Promise.resolve(),
       pendingRxQ.refetch(),
       pendingLabQ.refetch(),
       countsQ.refetch(),
     ]);
-  }, [docsFirstQ.refetch, docsRestQ.refetch, totalPages, pendingRxQ.refetch, pendingLabQ.refetch, countsQ.refetch]);
+  }, [mode, daysQ.refetch, docsFirstQ.refetch, docsRestQ.refetch, totalPages, pendingRxQ.refetch, pendingLabQ.refetch, countsQ.refetch]);
   const refetchAll = useCallback(async () => {
-    await Promise.all([load(), privacyQ.refetch()]);
-  }, [load, privacyQ.refetch]);
-  useRefreshOnFocus([docsFirstQ, docsRestQ, pendingRxQ, pendingLabQ, privacyQ, countsQ]);
+    await Promise.all([load(), privacyQ.refetch(), familyQ.refetch()]);
+  }, [load, privacyQ.refetch, familyQ.refetch]);
+  useRefreshOnFocus(
+    mode === "date"
+      ? [daysQ, pendingRxQ, pendingLabQ, privacyQ, countsQ]
+      : [docsFirstQ, docsRestQ, pendingRxQ, pendingLabQ, privacyQ, countsQ],
+  );
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
-  const isFetchingAny = docsFirstQ.isFetching || docsRestQ.isFetching || pendingRxQ.isFetching || pendingLabQ.isFetching;
+  const isFetchingAny =
+    (mode === "date" ? daysQ.isFetching : docsFirstQ.isFetching || docsRestQ.isFetching) ||
+    pendingRxQ.isFetching || pendingLabQ.isFetching;
 
-  const monthOpts = useMemo(() => monthOptions(docs), [docs]);
+  // The years that have files and, for the year picked (or every year), the months that have files - each with its
+  // file count, newest first.
+  const allYearChoices = useMemo(() => {
+    const perYear: Record<string, number> = {};
+    docs.forEach((d) => { const k = ymKey(d.document_date || d.created_at); if (k) perYear[k.slice(0, 4)] = (perYear[k.slice(0, 4)] || 0) + 1; });
+    return Object.keys(perYear).sort((a, b) => Number(b) - Number(a))
+      .map((y) => ({ value: y, label: y, meta: filesLabel(perYear[y]) }));
+  }, [docs]);
+  const allMonthChoices = useMemo(() => {
+    const perMonth: Record<number, number> = {};
+    docs.forEach((d) => {
+      const k = ymKey(d.document_date || d.created_at);
+      if (k && (!allYear || k.slice(0, 4) === allYear)) perMonth[monthOf(k)] = (perMonth[monthOf(k)] || 0) + 1;
+    });
+    return Object.keys(perMonth).map(Number).sort((a, b) => b - a)
+      .map((m) => ({ value: String(m), label: MONTHS[m], meta: filesLabel(perMonth[m]) }));
+  }, [docs, allYear]);
 
-  useEffect(() => { setVisible(PAGE); }, [category, q, month]);
+  // Choosing another person starts the list afresh: no half-applied filters from the previous person.
+  useEffect(() => { setVisible(PAGE); }, [category, q, allYear, allMonth, patientAwpid]);
+  const shownPerson = useRef(patientAwpid);
+  useEffect(() => {
+    if (shownPerson.current === patientAwpid) return;        // not on the first render: keep the remembered filter
+    shownPerson.current = patientAwpid;
+    setCategory("");
+    setQ("");
+    setYear(undefined);
+    setDayMonth("");
+    setAllYear("");
+    setAllMonth("");
+  }, [patientAwpid]);
 
-  // One chip per type the patient actually has (from the server's counts), biggest first.
+  // One entry per type the patient actually has (from the server's counts), biggest first.
   const typeChips = useMemo(
     () => Object.entries(counts?.by_type ?? {})
       .filter(([, n]) => n > 0)
@@ -438,16 +277,22 @@ export function MyDocumentsScreen() {
       .filter((d) => !category || d.doc_type === category)
       .filter((d) =>
         !needle ||
-        [d.title, d.file_name, d.public_document_id]
+        [d.doctor_name, labelOf(d.doc_type), d.file_name, d.public_document_id]
           .filter(Boolean).join(" ").toLowerCase().includes(needle))
-      .filter((d) => (!month || month === "ALL" ? true : ymKey(d.document_date || d.created_at) === month))
+      .filter((d) => {
+        const k = ymKey(d.document_date || d.created_at);
+        return (!allYear || k.slice(0, 4) === allYear) && (!allMonth || monthOf(k) === Number(allMonth));
+      })
       .sort((a, b) => (b.document_date || b.created_at).localeCompare(a.document_date || a.created_at));
-  }, [docs, category, q, month]);
+  }, [docs, category, q, allYear, allMonth, labelOf]);
 
   const shown = filtered.slice(0, visible);
+  const filteredIds = useMemo(() => filtered.map((d) => d.id), [filtered]);
 
+  // One month of one year is a single group: no heading needed above it.
+  const singleMonth = !!allYear && !!allMonth;
   const groups = useMemo(() => {
-    if (month !== "ALL") return [{ key: "flat", label: "", list: shown }];
+    if (singleMonth) return [{ key: "flat", label: "", list: shown }];
     const map = new Map<string, PatientDocument[]>();
     shown.forEach((d) => {
       const k = ymKey(d.document_date || d.created_at) || "0000-00";
@@ -457,42 +302,32 @@ export function MyDocumentsScreen() {
     return [...map.entries()]
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([k, list]) => ({ key: k, label: ymLabel(k), list }));
-  }, [shown, month]);
+  }, [shown, singleMonth]);
 
   // ── actions ──────────────────────────────────────────────────────────────
-  // View opens the file inside the app (the full-screen viewer), with the other files of this list in its strip.
-  function openViewer(id: number) {
-    const ids = filtered.map((d) => d.id);
-    navigation.navigate("DocumentViewer", {
-      ids: ids.includes(id) ? ids : [id],
-      index: Math.max(0, ids.indexOf(id)),
-      ...(patientAwpid ? { patientAwpid } : {}),
-    });
+  // A day card opens that day's files (a screen of its own, which has no Add button). The day's per-type counts go
+  // along, for the type filter inside it.
+  function openDay(day: DocumentDay) {
+    navigation.navigate("DocumentDay", { date: day.date, byType: day.by_type, ...(patientAwpid ? { patientAwpid } : {}) });
   }
 
-  async function openFile(id: number) {
-    setBusyId(id);
-    setBusyAction("download");
-    setSheetError("");
-    setSheetMessage("");
-    try {
-      const full = await getDocumentDetail(id, { download: true, patientAwpid });
-      const src = (full as any).file_data as string;
-      if (!src) {
-        setSheetError("This document doesn't have a file to download.");
-        return;
-      }
-      const outcome = await downloadDataUri(full.file_name || full.title || "document", src);
-      setSheetMessage(outcome === "saved" ? "Downloaded to your device." : "Shared.");
-    } catch (err) {
-      const msg = apiErrorMessage(err, "Couldn't open the file.");
-      setActionError(msg);
-      setSheetError(msg);
-    } finally {
-      setBusyId(null);
-      setBusyAction("");
-    }
-  }
+  // The three dots in the header: change the view, and (when the account has family members) whose documents show.
+  const headerMenu: MenuItem[] = [
+    { key: "view", label: "Change view", icon: LayoutList, onPress: () => setViewOpen(true) },
+    ...(members.length ? [{ key: "person", label: "Change family member", icon: Users, onPress: () => setPersonOpen(true) } as MenuItem] : []),
+  ];
+  const viewActions: ChoiceAction[] = [
+    { label: "By date", primary: mode === "date", onPress: () => setMode("date") },
+    { label: "All files", primary: mode === "all", onPress: () => setMode("all") },
+    
+  ];
+  const personActions: ChoiceAction[] = [
+    { label: "Myself", sub: "Your own documents", primary: !patientAwpid, onPress: () => setViewingPerson(undefined) },
+    ...members.map((m) => ({
+      label: m.full_name, sub: m.relationship, primary: m.awpid === patientAwpid, onPress: () => setViewingPerson(m.awpid),
+    })),
+    { label: "Cancel", cancel: true, onPress: () => undefined },
+  ];
 
   // Add Document: one file, uploaded on the fast lane after asking whose it is. A bar at the top follows it until it has
   // been read, then offers to confirm the type. (For many files at once there is the Bulk Upload screen.)
@@ -509,10 +344,10 @@ export function MyDocumentsScreen() {
         target.awpid,
       );
       if (outcome.status !== "queued") {
-        setUploadNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
+        setNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
       }
     } catch (err) {
-      setUploadNotice({ title: "Can't upload", message: apiErrorMessage(err, "Couldn't upload that file."), tone: "error" });
+      setNotice({ title: "Can't upload", message: apiErrorMessage(err, "Couldn't upload that file."), tone: "error" });
     }
   }
 
@@ -533,12 +368,12 @@ export function MyDocumentsScreen() {
       if (kind === "rx") {
         const r = item as PrescriptionOrder;
         await choosePrescription({
-          tenant_db: r.tenant_db, prescription_id: r.id, patient_choice: ch,
+          hospital_db: r.hospital_db, prescription_id: r.id, patient_choice: ch,
           payment_preference: ch === "in_house" ? "pay_at_pharmacy" : undefined,
         });
       } else {
         const l = item as LabOrder;
-        await chooseLabOrder({ tenant_db: l.tenant_db, request_id: l.id, patient_choice: ch });
+        await chooseLabOrder({ hospital_db: l.hospital_db, request_id: l.id, patient_choice: ch });
       }
       queryClient.invalidateQueries({ queryKey: ["prescriptionOrders", patientAwpid] });
       queryClient.invalidateQueries({ queryKey: ["labOrders", patientAwpid] });
@@ -550,7 +385,6 @@ export function MyDocumentsScreen() {
   }
 
   const pendingCount = pendingRx.length + pendingLab.length;
-  const monthFiltered = !!month && month !== "ALL";
 
   // The scrolling body as a flat list of children, so each month label can be a sticky header: it stays at the top of
   // the list while that month's documents scroll under it, until the next month's label takes over.
@@ -558,7 +392,6 @@ export function MyDocumentsScreen() {
   const stickyIdx: number[] = [];
   if (pendingCount > 0) {
     bodyNodes.push(
-
       <View key="pend" style={styles.pend}>
         <Pressable onPress={() => setShowPending((v) => !v)} style={styles.pendHead}>
           <AlertCircle size={14} color={NEUTRAL.warning} strokeWidth={2.2} />
@@ -599,7 +432,20 @@ export function MyDocumentsScreen() {
       </View>
     );
   }
-  if (isInitialLoading) {
+  if (mode === "date") {
+    bodyNodes.push(
+      <DayList
+        key="days"
+        data={days}
+        days={visibleDays}
+        loading={!days && daysQ.isLoading}
+        forName={personName}
+        nameColor={nameColor}
+        labelOf={labelOf}
+        onOpenDay={openDay}
+      />,
+    );
+  } else if (isInitialLoading) {
     bodyNodes.push(
       <View key="skeleton">
         {[0, 1, 2, 3, 4].map((i) => (
@@ -614,9 +460,9 @@ export function MyDocumentsScreen() {
           key="empty"
           text={
             q ? `Nothing matches "${q}".`
-            : monthFiltered ? `No records in ${ymLabel(month)}.`
+            : allYear || allMonth ? "No records in this period."
             : category ? "Nothing in this category yet."
-            : "No records yet. Tap + to add one."
+            : "No records yet. Tap Add record to add one."
           }
         />,
       );
@@ -630,28 +476,7 @@ export function MyDocumentsScreen() {
             </View>,
           );
         }
-        const items = g.list.map((d) => (
-          <RecItem
-            key={d.id}
-            d={d}
-            layout={mode}
-            order={filtered.indexOf(d)}
-            patientAwpid={patientAwpid}
-            onOpen={() => openViewer(d.id)}
-            onDetails={() => { setSheetError(""); setSheetMessage(""); setDetail(d); }}
-            priv={privEnabled ? privMap.get(d.id) : undefined}
-            onLock={privEnabled ? () => onLock(d) : undefined}
-          />
-        ));
-        if (mode === "grid") {
-          bodyNodes.push(
-            <View key={`g${g.key}`} style={styles.grid}>
-              {items.map((it) => <View key={it.key} style={styles.gridCell}>{it}</View>)}
-            </View>,
-          );
-        } else {
-          bodyNodes.push(...items);
-        }
+        g.list.forEach((d) => bodyNodes.push(cardFor(d, filteredIds)));
       });
     }
     if (filtered.length > visible) {
@@ -668,7 +493,6 @@ export function MyDocumentsScreen() {
       bodyNodes.push(
         <Text key="count" style={styles.count}>
           Showing {Math.min(visible, filtered.length)} of {filtered.length}
-          {monthFiltered ? ` in ${ymShort(month)}` : ""}
         </Text>,
       );
     }
@@ -680,21 +504,92 @@ export function MyDocumentsScreen() {
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
       stickyHeaderIndices={stickyIdx}
+      footer={
+        // The one way to add a record: a full-width button on a white strip at the bottom, under the list.
+        <View style={styles.addBar}>
+          <Pressable
+            onPress={() => setAddOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Add record"
+            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
+          >
+            <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+            <Text style={[styles.addBtnText, { color: theme.on }]}>Add record</Text>
+          </Pressable>
+        </View>
+      }
       header={
         <>
-          {/* header */}
-          <View style={styles.hdr}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={[styles.back, accent && { backgroundColor: accent.bg }]}>
-              <ArrowLeft size={19} color={accent?.text ?? NEUTRAL.textPrimary} strokeWidth={2.2} />
+          {/* header band: solid green, one piece with the status bar above it. Back, the screen name over whose
+              documents these are (tap it to change the person), help, menu */}
+          <HeaderBand>
+            <BackButton onPress={() => navigation.goBack()} />
+            <Pressable
+              disabled={!members.length}
+              onPress={() => setPersonOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Showing documents of ${personName}. Change`}
+              style={styles.titleBlock}
+            >
+              <Text style={styles.kicker}>My Documents</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>{personName}</Text>
+                {!!members.length && <ChevronDown size={18} color={ON_BRAND} strokeWidth={2.6} />}
+                <View style={styles.tag}>
+                  <Text style={styles.tagText}>{personTag}</Text>
+                </View>
+              </View>
             </Pressable>
-            <Text style={[styles.hdrTitle, accent && { color: accent.text }]}>
-              {patientName ? `My Documents — ${patientName}` : "My Documents"}
-            </Text>
-            <HelpButton onPress={() => setHelpOpen(true)} />
-            <Pressable onPress={() => setAddOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Add a document" style={[styles.addBtn, { backgroundColor: accent?.fill ?? theme.fill }]}>
-              <Plus size={15} color={accent?.on ?? theme.on} strokeWidth={2.8} />
-            </Pressable>
-          </View>
+            <HelpButton onPress={() => setHelpOpen(true)} onDark />
+            <CardMenu items={headerMenu} round label="More options" />
+          </HeaderBand>
+
+          {/* the year and the month: the same plain dropdowns in both views. By date opens on the latest year with
+              files; All files opens on "All years" and "All months". */}
+          {mode === "date" ? (
+            !!days && days.years.length > 0 && (
+              <View style={styles.ymRow}>
+                <SelectField
+                  variant="text"
+                  label="Year"
+                  value={String(days.year ?? "")}
+                  onChange={(v) => { if (v) { setYear(Number(v)); setDayMonth(""); } }}
+                  options={days.years.map((y) => ({ value: String(y.year), label: String(y.year), meta: filesLabel(y.count) }))}
+                />
+                <SelectField
+                  variant="text"
+                  label="Month"
+                  value={dayMonth}
+                  onChange={setDayMonth}
+                  options={monthChoices}
+                  placeholder="All months"
+                  clearLabel="All months"
+                />
+              </View>
+            )
+          ) : (
+            <View style={styles.ymRow}>
+              <SelectField
+                variant="text"
+                label="Year"
+                value={allYear}
+                onChange={(v) => { setAllYear(v); setAllMonth(""); }}
+                options={allYearChoices}
+                placeholder="All years"
+                clearLabel="All years"
+              />
+              <SelectField
+                variant="text"
+                label="Month"
+                value={allMonth}
+                onChange={setAllMonth}
+                options={allMonthChoices}
+                placeholder="All months"
+                clearLabel="All months"
+              />
+            </View>
+          )}
+
           {/* files just uploaded: a progress bar while they are read, then a Review button */}
           <UploadStatusBar
             onReview={(r) =>
@@ -728,105 +623,37 @@ export function MyDocumentsScreen() {
               </Text>
             </View>
           )}
-          {privEnabled && privMap.size > 0 && (
-            <Pressable style={styles.privLine} onPress={() => navigation.navigate("SharedRecordsPrivacy")}>
-              <Lock size={16} color={NEUTRAL.textMuted} strokeWidth={2} />
-              <Text style={[styles.privLineGo, { color: theme.text }]}>Shared records privacy ›</Text>
-            </Pressable>
-          )}
-
           {!!error && <ErrorBanner message={error} onRetry={load} />}
 
-          {/* category */}
-          {!!counts && typeChips.length > 0 && (
-            <TypeChipsRow items={typeChips} total={counts.total} selected={category} onSelect={setCategory} labelOf={labelOf} allLabel="All" trailing={<ViewModeToggle />} />
+          {/* category (All files only): one pill showing the active type (or "All"); tap to change it */}
+          {mode === "all" && !!counts && typeChips.length > 0 && (
+            <View style={styles.filterRow}>
+              <FilterPill
+                active={!!category}
+                label={category ? labelOf(category) : "All"}
+                count={category ? typeChips.find((c) => c.code === category)?.count : counts.total}
+                onPress={() => setFilterOpen(true)}
+              />
+            </View>
           )}
 
-          {/* search */}
-          <View style={styles.srch}>
-            <Search size={14} color={NEUTRAL.textMuted} strokeWidth={2.2} />
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="Search by name"
-              placeholderTextColor={NEUTRAL.textMuted}
-              style={styles.srchIn}
-            />
-          </View>
-
-          {/* month filter */}
-          <SelectField
-            label="Filter by month"
-            value={month === "ALL" ? "" : month}
-            onChange={(v) => setMonth(v || "ALL")}
-            options={monthOpts.map((o) => ({ value: o.key, label: ymLabel(o.key), meta: o.has ? undefined : "No reports" }))}
-            placeholder="All months"
-            clearLabel="All months"
-          />
+          {/* search (All files only) */}
+          {mode === "all" && (
+            <View style={styles.srch}>
+              <Search size={14} color={NEUTRAL.textMuted} strokeWidth={2.2} />
+              <TextInput
+                value={q}
+                onChangeText={setQ}
+                placeholder="Search by type or doctor"
+                placeholderTextColor={NEUTRAL.textMuted}
+                style={styles.srchIn}
+              />
+            </View>
+          )}
         </>
       }
     >
       {bodyNodes}
-
-      {/* detail sheet */}
-      <DetailSheet
-        visible={!!detail}
-        onClose={() => { setDetail(null); setSheetError(""); setSheetMessage(""); }}
-        title={detail ? detail.title : ""}
-      >
-        {detail && (
-          <>
-            <DetailRow label="Type" value={labelOf(detail.doc_type)} />
-            {detail.confirmed && <DetailRow label="Verified" value="You confirmed this type" />}
-            <DetailRow label="Date" value={fmtLong(detail.document_date || detail.created_at)} />
-            <DetailRow label="Source" value={detail.uploaded_by === "staff" ? "Issued by your hospital" : "Uploaded by you"} />
-            {!!detail.public_document_id && <DetailRow label="Document ID" value={detail.public_document_id} />}
-            {detail.processing_status !== "completed" && detail.processing_status !== "review_required" && (
-              <DetailRow
-                label="Status"
-                value={detail.processing_status === "failed" ? (detail.error || "Couldn't be processed") : statusLabel(detail.processing_status)}
-                valueColor={detail.processing_status === "failed" ? NEUTRAL.warning : undefined}
-              />
-            )}
-            <View style={{ marginTop: 14 }}>
-              <View style={styles.actionRow}>
-                <FileAction
-                  icon={Eye}
-                  label={detail.handwritten_doc_id ? "View prescription" : "View"}
-                  onPress={() => { const id = detail.id; setDetail(null); openViewer(id); }}
-                />
-                <FileAction
-                  icon={Download}
-                  label={detail.handwritten_doc_id ? "Download prescription" : "Download"}
-                  loading={busyId === detail.id && busyAction === "download"}
-                  onPress={() => openFile(detail.id)}
-                />
-              </View>
-              {!!detail.handwritten_doc_id && (
-                <View style={styles.actionRow}>
-                  <FileAction
-                    icon={Eye}
-                    label="View handwritten"
-                    onPress={() => {
-                      const id = detail.handwritten_doc_id!;
-                      setDetail(null);
-                      navigation.navigate("DocumentViewer", { ids: [id], index: 0, ...(patientAwpid ? { patientAwpid } : {}) });
-                    }}
-                  />
-                  <FileAction
-                    icon={Download}
-                    label="Download handwritten"
-                    loading={busyId === detail.handwritten_doc_id && busyAction === "download"}
-                    onPress={() => openFile(detail.handwritten_doc_id!)}
-                  />
-                </View>
-              )}
-              {!!sheetError && <Text style={styles.sheetErrorText}>{sheetError}</Text>}
-              {!!sheetMessage && <Text style={styles.sheetSuccessText}>{sheetMessage}</Text>}
-            </View>
-          </>
-        )}
-      </DetailSheet>
 
       <UploadSheet
         visible={addOpen}
@@ -837,13 +664,21 @@ export function MyDocumentsScreen() {
       />
       <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} items={HELP} />
 
-      <ChoiceSheet
-        visible={!!lockSheet}
-        title={lockSheet?.title || ""}
-        message={lockSheet?.message}
-        actions={lockSheet?.actions || []}
-        onClose={() => setLockSheet(null)}
+      <ChoiceSheet visible={viewOpen} title="Change view" actions={viewActions} large onClose={() => setViewOpen(false)} />
+      <ChoiceSheet visible={personOpen} title="Whose documents?" message="Choose whose documents to show." actions={personActions} onClose={() => setPersonOpen(false)} />
+
+      <FilterSheet
+        visible={filterOpen}
+        items={typeChips}
+        total={counts?.total ?? 0}
+        selected={category}
+        onSelect={setCategory}
+        onClose={() => setFilterOpen(false)}
+        labelOf={labelOf}
+        allLabel="All documents"
       />
+
+      {dialogs}
 
       {who.sheet}
 
@@ -854,48 +689,45 @@ export function MyDocumentsScreen() {
         onSubmitted={(type) => {
           setInstant(null);
           queryClient.invalidateQueries({ queryKey: ["documents"] });
+          queryClient.invalidateQueries({ queryKey: ["documentDays"] });
           queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
-          setUploadNotice({ title: "Added to My Documents", message: `Saved as ${labelOf(type)}.`, tone: "success" });
+          setNotice({ title: "Added to My Documents", message: `Saved as ${labelOf(type)}.`, tone: "success" });
         }}
-      />
-
-      <MessageDialog
-        visible={!!uploadNotice}
-        title={uploadNotice?.title ?? ""}
-        message={uploadNotice?.message}
-        buttonLabel="OK"
-        tone={uploadNotice?.tone ?? "error"}
-        onDismiss={() => setUploadNotice(null)}
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hdr: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 4 },
-  back: { width: 30, height: 30, borderRadius: 15, backgroundColor: NEUTRAL.surfaceAlt, alignItems: "center", justifyContent: "center" },
-  hdrTitle: { flex: 1, fontSize: 17, fontWeight: "800", color: NEUTRAL.textPrimary },
-  addBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  titleBlock: { flex: 1, minWidth: 0 },
+  kicker: { fontSize: 19, color: ON_BRAND, fontWeight: "700" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  name: { fontSize: 16, fontWeight: "800", color: ON_BRAND, flexShrink: 1, letterSpacing: -0.2 },
+  tag: { borderRadius: 11, paddingHorizontal: 9, paddingVertical: 1, borderWidth: 1.5, borderColor: ON_BRAND },
+  tagText: { fontSize: 12, fontWeight: "800", color: ON_BRAND },
+
+  ymRow: { flexDirection: "row", alignItems: "flex-end", gap: 20, marginBottom: 12 },
+
+  addBar: {
+    paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16,
+    backgroundColor: NEUTRAL.surface, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border,
+  },
+  addBtn: { height: 52, borderRadius: 8, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  addBtnText: { fontSize: 17, fontWeight: "800" },
 
   privBanner: { flexDirection: "row", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 10, marginBottom: 10 },
   privBannerT: { flex: 1, fontSize: 11, lineHeight: 16, color: "#5C3A08" },
   privBannerB: { fontWeight: "700", color: "#3E2A08" },
-  privLine: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14, paddingVertical: 6 },
-  privLineGo: { fontSize: 14, fontWeight: "600" },
-  privTag: { fontSize: 8, fontWeight: "700", letterSpacing: 0.4, color: "#4A3489", backgroundColor: "#ECE7F7", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginTop: 4, alignSelf: "flex-start" },
-  visTag: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4, alignSelf: "flex-start" },
-  visTagT: { fontSize: 8, fontWeight: "700", letterSpacing: 0.4, color: NEUTRAL.success },
-  lockBtn: { width: 30, height: 30, borderRadius: 8, borderWidth: 1, borderColor: NEUTRAL.border, alignItems: "center", justifyContent: "center", backgroundColor: NEUTRAL.surface },
-  lockBtnOn: { borderColor: NEUTRAL.success, backgroundColor: NEUTRAL.successBg },
 
   reviewBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 11, marginBottom: 12 },
   reviewBannerT: { flex: 1, fontSize: 11.5, lineHeight: 16, color: "#5C3A08" },
   reviewBannerB: { fontWeight: "700", color: "#3E2A08" },
   reviewBannerGo: { fontSize: 11.5, fontWeight: "700" },
 
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+
   srch: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 10 },
   srchIn: { flex: 1, fontSize: 12.5, color: NEUTRAL.textPrimary, padding: 0 },
-
 
   pend: { backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 10, marginBottom: 12 },
   pendHead: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -907,22 +739,5 @@ const styles = StyleSheet.create({
   grpHead: { backgroundColor: NEUTRAL.bg, marginHorizontal: -16, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 },
   grpLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: NEUTRAL.textMuted },
 
-  recDt: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textMuted },
-  tag: { fontSize: 8.5, fontWeight: "700", letterSpacing: 0.4, color: NEUTRAL.textSecondary, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
-
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  gridCell: { width: "48.5%", marginBottom: CARD.gap },
   count: { textAlign: "center", fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 4 },
-
-  sheetErrorText: { fontSize: 12, color: NEUTRAL.danger, marginTop: 8, lineHeight: 16 },
-  sheetSuccessText: { fontSize: 12, color: NEUTRAL.success, marginTop: 8, lineHeight: 16 },
-
-  actionRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
-  fileAction: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 11, paddingVertical: 10, paddingHorizontal: 8,
-    backgroundColor: NEUTRAL.surface,
-  },
-  fileActionText: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary },
-
 });

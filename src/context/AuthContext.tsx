@@ -5,9 +5,9 @@ import { loginPatient, logout as apiLogout } from "@/api/auth";
 import { setSessionExpiredHandler } from "@/api/client";
 import { setUpNotifications } from "@/utils/pushNotifications";
 import { queryClient } from "@/api/queryClient";
-import { clearPreviewCache } from "@/utils/previewQueue";
 import { wipePrivateFiles } from "@/utils/fileHelpers";
 import { clearAllDrafts } from "@/utils/reviewDraft";
+import { resetViewingPerson } from "@/utils/viewingPerson";
 
 interface AuthContextValue {
   isLoading: boolean; // true only during the initial "do we have a saved session" check
@@ -47,21 +47,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // choice (needsUnlock) instead of dropping straight into the app.
   useEffect(() => {
     (async () => {
-      const access = await getAccessToken();
-      if (!access) {
+      try {
+        const access = await getAccessToken();
+        if (!access) {
+          setIsAuthenticated(false);
+          setNeedsUnlock(false);
+          return;
+        }
+        setIsAuthenticated(true);
+        let gate = false;
+        if (await getBiometricLockEnabled()) {
+          const hasHardware = await LocalAuthentication.hasHardwareAsync();
+          gate = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+        }
+        setNeedsUnlock(gate);
+      } catch {
+        // the stored session could not be read: show the sign-in screen rather than a spinner for ever
         setIsAuthenticated(false);
         setNeedsUnlock(false);
+      } finally {
         setIsLoading(false);
-        return;
       }
-      setIsAuthenticated(true);
-      let gate = false;
-      if (await getBiometricLockEnabled()) {
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        gate = hasHardware && (await LocalAuthentication.isEnrolledAsync());
-      }
-      setNeedsUnlock(gate);
-      setIsLoading(false);
     })();
   }, []);
 
@@ -71,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setNeedsUnlock(false);
       // Whoever signs in next must never be shown this person's saved screens.
       queryClient.clear();
-      clearPreviewCache();
+      resetViewingPerson();
     });
   }, []);
 
@@ -87,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const tokens = await loginPatient(mobile, password);
     await saveTokens(tokens.access, tokens.refresh);
     queryClient.clear();   // saved screens from a previous account must not appear under this one
-    clearPreviewCache();
+    resetViewingPerson();
     wipePrivateFiles().catch(() => {});   // so must document copies left behind by an earlier session
     setNeedsUnlock(false);
     setIsAuthenticated(true);
@@ -96,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithTokens = useCallback(async (access: string, refresh: string) => {
     await saveTokens(access, refresh);
     queryClient.clear();   // same as login: start this account with an empty cache
-    clearPreviewCache();
+    resetViewingPerson();
     wipePrivateFiles().catch(() => {});
     setNeedsUnlock(false);
     setIsAuthenticated(true);
@@ -119,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Drop every saved screen (profile, family, documents...) so the next person to sign in on this phone starts
     // clean. Cleared after the app has switched to the login screens, so nothing still mounted refetches without a token.
     queryClient.clear();
-    clearPreviewCache();
+    resetViewingPerson();
     // Signing out on purpose also forgets what is stored on the phone: unfinished review picks and document copies.
     // (A session that merely expires keeps the picks, so a timeout never costs the person their work.)
     await Promise.all([clearAllDrafts(), wipePrivateFiles().catch(() => {})]);

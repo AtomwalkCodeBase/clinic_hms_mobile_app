@@ -7,26 +7,22 @@ import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Screen, ErrorBanner } from "@/components/Layout";
-import { SegmentedControl } from "@/components/SegmentedControl";
 import { MetalHero } from "@/components/MetalHero";
 import { GadgetCard } from "@/components/GadgetCard";
 import { SkeletonBlock, SkeletonGadgetCard } from "@/components/Skeleton";
-import { Syringe, Clock, Stethoscope, FileText } from "lucide-react-native";
-import { useAppTheme } from "@/context/ThemeContext";
+import { Syringe, Clock, Stethoscope, Users, ChevronDown, Plus } from "lucide-react-native";
 import { familyAccentFor } from "@/theme/familyColors";
-import { getFamily, getProfile, getHealthSummary, getVaccinations } from "@/api/portal";
+import { usePeople, usePersonSwitcher, paramsFor } from "@/hooks/usePeople";
+import { getHealthSummary, getImmunization } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { FamilyMember } from "@/api/types";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
+import { ON_BRAND, BRAND, BRAND_TEXT, NEUTRAL } from "@/theme/themes";
 
 type Nav = CompositeNavigationProp<BottomTabNavigationProp<AppTabsParamList, "Health">, NativeStackNavigationProp<AppStackParamList>>;
 
-interface Person {
-  awpid: string;
-  full_name: string;
-  gender: string;
-  date_of_birth: string | null;
-  isSelf: boolean;
+/** The vaccination schedule is a child's: it says nothing useful about an adult. */
+function isChild(dob: string | null): boolean {
+  return !!dob && (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000) < 18;
 }
 
 function ageFromDob(dob: string | null): string {
@@ -37,23 +33,10 @@ function ageFromDob(dob: string | null): string {
 
 export function HealthScreen() {
   const navigation = useNavigation<Nav>();
-  const { theme } = useAppTheme();
 
   const [selectedAwpid, setSelectedAwpid] = useState<string>("");
-
-  // ["profile"]/["family"] — the same shared keys HomeScreen, ProfileScreen,
-  // PersonalDetailsScreen, FamilyMembersScreen and BookingForScreen use, so
-  // an edit or a family-member removal made anywhere invalidates the same
-  // cache entry this switcher reads.
-  const profileQ = useQuery({ queryKey: ["profile"], queryFn: getProfile });
-  const familyQ = useQuery({ queryKey: ["family"], queryFn: getFamily });
-
-  const people: Person[] = profileQ.data
-    ? [
-        { awpid: profileQ.data.awpid, full_name: profileQ.data.full_name, gender: profileQ.data.gender, date_of_birth: profileQ.data.date_of_birth, isSelf: true },
-        ...(familyQ.data ?? []).map((f: FamilyMember) => ({ ...f, isSelf: false })),
-      ]
-    : [];
+  const { people, profileQ, familyQ } = usePeople();
+  const switcher = usePersonSwitcher(people, selectedAwpid, (p) => setSelectedAwpid(p.awpid));
 
   // Default to Self once the profile first loads — same as the old
   // loadPeople() side effect, just expressed as syncing local UI state to
@@ -76,50 +59,39 @@ export function HealthScreen() {
     queryFn: () => getHealthSummary(target),
     enabled: !!selectedAwpid,
   });
-  // Same key shape VaccinationsScreen uses (`["vaccinations", patientAwpid]`,
-  // patientAwpid possibly undefined for self) — shares that cache entry.
-  const vaxQ = useQuery({
-    queryKey: ["vaccinations", target],
-    queryFn: () => getVaccinations(target),
-    enabled: !!selectedAwpid,
-  });
   const summary = summaryQ.data ?? null;
-  const vax = vaxQ.data ?? null;
-  const error = profileQ.error || familyQ.error || summaryQ.error || vaxQ.error;
+  // The overdue count on the Vaccinations card. Same key as the Vaccinations screen, so opening it afterwards is instant.
+  const showDue = !!selectedAwpid && isChild(selected?.date_of_birth ?? null);
+  const immunizationQ = useQuery({
+    queryKey: ["immunization", selectedAwpid],
+    queryFn: () => getImmunization(selectedAwpid),
+    enabled: showDue,
+  });
+  const dueCount = showDue && immunizationQ.data ? immunizationQ.data.summary.overdue + immunizationQ.data.summary.due : 0;
+  const error = profileQ.error || familyQ.error || summaryQ.error;
   // Nothing meaningful can render before the profile itself has ever
   // loaded once — everything else (hero, switcher, gadgets) hangs off
   // `selected`, which needs `profileQ.data`. That first-ever wait gets the
   // skeleton; every refetch after it (stale refocus or pull-to-refresh)
   // keeps showing the last-known content instead.
   const isInitialLoading = !profileQ.data;
-  const isFetchingAny = profileQ.isFetching || familyQ.isFetching || summaryQ.isFetching || vaxQ.isFetching;
+  const isFetchingAny = profileQ.isFetching || familyQ.isFetching || summaryQ.isFetching || (showDue && immunizationQ.isFetching);
 
   const refetchAll = useCallback(async () => {
-    await Promise.all([profileQ.refetch(), familyQ.refetch(), summaryQ.refetch(), vaxQ.refetch()]);
-  }, [profileQ.refetch, familyQ.refetch, summaryQ.refetch, vaxQ.refetch]);
-  useRefreshOnFocus([profileQ, familyQ, summaryQ, vaxQ]);
+    await Promise.all([profileQ.refetch(), familyQ.refetch(), summaryQ.refetch(), showDue && immunizationQ.refetch()]);
+  }, [profileQ.refetch, familyQ.refetch, summaryQ.refetch, immunizationQ.refetch, showDue]);
+  useRefreshOnFocus(showDue ? [profileQ, familyQ, summaryQ, immunizationQ] : [profileQ, familyQ, summaryQ]);
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
-  const openGadget = (screen: "Vaccinations" | "HealthTimeline" | "HealthVisits" | "Growth") => {
+  const openGadget = (screen: "Vaccinations" | "HealthTimeline" | "HealthVisits") => {
     if (!selected) return;
-    navigation.navigate(screen, {
-      patientAwpid: target, patientName: selected.full_name,
-      patientGender: selected.gender, patientDob: selected.date_of_birth,
-    });
-  };
-
-  const openRecords = () => {
-    if (!selected) return;
-    navigation.navigate("MyDocuments", {
-      patientAwpid: target, patientName: selected.full_name,
-      patientGender: selected.gender, patientDob: selected.date_of_birth,
-    });
+    navigation.navigate(screen, paramsFor(selected));
   };
 
   if (isInitialLoading) {
     return (
-      <Screen topColor="#249c57" bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, height: 128, backgroundColor: "#1f7a4d", borderRadius: 24 }]}>
+      <Screen bottomInset={false}>
+        <View style={[styles.hero, { padding: 20, height: 128, backgroundColor: BRAND, borderRadius: 24 }]}>
           <SkeletonBlock width={150} height={18} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={210} height={12} style={{ marginTop: 10, backgroundColor: "rgba(255,255,255,0.25)" }} />
         </View>
@@ -144,11 +116,11 @@ export function HealthScreen() {
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
       accentColor={accent?.fill}
-      topColor={accent?.fill ?? "#249c57"}
+      topColor={accent?.fill}
       bottomInset={false}
     >
       {selected && (
-        <MetalHero style={styles.hero} curved underStatusBar overrideColor={accent?.fill}>
+        <MetalHero style={styles.hero} curved overrideColor={accent?.fill} onBack={() => navigation.navigate("Home")}>
           <View style={styles.nameRow}>
             <Text style={[styles.name, accent && { color: accent.on }]}>{selected.full_name}</Text>
             {!!accent && (
@@ -168,57 +140,52 @@ export function HealthScreen() {
         </MetalHero>
       )}
 
-      <SegmentedControl
-        options={people.map((p) => ({
-          key: p.awpid,
-          label: p.isSelf ? `${p.full_name} (Self)` : p.full_name,
-          color: p.isSelf ? undefined : familyAccentFor(p) ?? undefined,
-        }))}
-        value={selectedAwpid}
-        onChange={setSelectedAwpid}
-      />
-      <Pressable onPress={() => navigation.navigate("AddFamilyMember")} style={styles.addFamilyLink}>
-        <Text style={[styles.addFamilyText, { color: theme.text }]}>+ Add family member</Text>
-      </Pressable>
+      {/* Whose records: the member count, Switch (opens the list) and Add. The name is already in the header above. */}
+      <View style={styles.switchCard}>
+        <View style={styles.switchCell}>
+          <Users size={20} color={BRAND_TEXT} strokeWidth={2.2} />
+          <Text style={styles.countText}>{people.length - 1} members</Text>
+        </View>
+        <View style={styles.switchDivider} />
+        <Pressable onPress={switcher.open} accessibilityRole="button" accessibilityLabel="Switch family member" style={styles.switchCell}>
+          <Text style={styles.switchText}>Switch</Text>
+          <ChevronDown size={18} color={BRAND_TEXT} strokeWidth={2.6} />
+        </Pressable>
+        <View style={styles.switchDivider} />
+        <Pressable onPress={() => navigation.navigate("AddFamilyMember")} accessibilityRole="button" accessibilityLabel="Add family member" style={styles.switchCell}>
+          <Plus size={18} color={BRAND_TEXT} strokeWidth={2.8} />
+          <Text style={styles.switchText}>Add</Text>
+        </Pressable>
+      </View>
+      {switcher.sheet}
 
       {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
 
       <View style={styles.grid}>
         <GadgetCard
-          icon={Syringe}
-          title="Vaccinations"
-          subtitle={vax ? `${vax.completed_count} of ${vax.total_count} completed` : "—"}
-          onPress={() => openGadget("Vaccinations")}
-          style={styles.gadgetSize}
-          radius={22}
-          cardPadding={16}
-        />
-        <GadgetCard
           icon={Clock}
           title="Health timeline"
-          subtitle="Visits, vaccinations, growth, and more"
           onPress={() => openGadget("HealthTimeline")}
           style={styles.gadgetSize}
           radius={22}
-          cardPadding={16}
+          cardPadding={20}
+        />
+        <GadgetCard
+          icon={Syringe}
+          title="Vaccinations"
+          onPress={() => openGadget("Vaccinations")}
+          badge={dueCount > 0 ? `${dueCount} due` : undefined}
+          style={styles.gadgetSize}
+          radius={22}
+          cardPadding={20}
         />
         <GadgetCard
           icon={Stethoscope}
           title="Visits"
-          subtitle={summary?.last_hospital ? `Last: ${summary.last_hospital}` : "No visits yet"}
           onPress={() => openGadget("HealthVisits")}
           style={styles.gadgetSize}
           radius={22}
-          cardPadding={16}
-        />
-        <GadgetCard
-          icon={FileText}
-          title="My Documents"
-          subtitle="Prescriptions, lab reports and more"
-          onPress={openRecords}
-          style={styles.gadgetSize}
-          radius={22}
-          cardPadding={16}
+          cardPadding={20}
         />
       </View>
     </Screen>
@@ -228,13 +195,19 @@ export function HealthScreen() {
 const styles = StyleSheet.create({
   hero: { marginBottom: 16 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  name: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
+  name: { fontSize: 16, fontWeight: "700", color: ON_BRAND },
   accentBadge: { paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 10 },
   accentBadgeText: { fontSize: 10, fontWeight: "700" },
-  meta: { fontSize: 11.5, color: "#EAF3DE", marginTop: 3 },
-  lastVisit: { fontSize: 11, color: "#EAF3DE", marginTop: 6 },
-  addFamilyLink: { alignSelf: "flex-end", marginTop: -6, marginBottom: 14 },
-  addFamilyText: { fontSize: 12, fontWeight: "600" },
+  meta: { fontSize: 11.5, color: "rgba(4,38,28,0.78)", marginTop: 3 },
+  lastVisit: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 6 },
+  switchCard: {
+    flexDirection: "row", alignItems: "center", backgroundColor: NEUTRAL.surface, borderRadius: 18,
+    marginTop: 14, marginBottom: 16, paddingVertical: 4,
+  },
+  switchCell: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingVertical: 14 },
+  switchDivider: { width: 1, height: 26, backgroundColor: NEUTRAL.border },
+  countText: { fontSize: 14.5, fontWeight: "800", color: NEUTRAL.textPrimary },
+  switchText: { fontSize: 14.5, fontWeight: "800", color: BRAND_TEXT },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 11, marginTop: 8 },
   gadgetSize: { width: "47%" },
 });

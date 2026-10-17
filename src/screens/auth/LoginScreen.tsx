@@ -35,11 +35,15 @@ export function LoginScreen() {
 
   useEffect(() => {
     (async () => {
-      if (!(await getRefreshToken())) return;
-      if (!(await getBiometricLockEnabled())) return;
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
-      setBiometricReady(isEnrolled);
+      try {
+        if (!(await getRefreshToken())) return;
+        if (!(await getBiometricLockEnabled())) return;
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = hasHardware && (await LocalAuthentication.isEnrolledAsync());
+        setBiometricReady(isEnrolled);
+      } catch {
+        setBiometricReady(false);      // no fingerprint option; the password form is always there
+      }
     })();
   }, []);
 
@@ -82,16 +86,16 @@ export function LoginScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-      <Screen topColor="#249c57">
-        {!!APP_VERSION_LABEL && <Text style={styles.version}>{APP_VERSION_LABEL}</Text>}
-        <MetalHero style={styles.hero} decorative curved underStatusBar>
+      <Screen>
+        <MetalHero style={styles.hero} curved>
+          {!!APP_VERSION_LABEL && <Text style={styles.version}>{APP_VERSION_LABEL}</Text>}
           <View style={styles.heroInner}>
             <LogoPill size={58} />
           </View>
         </MetalHero>
         <View style={styles.header}>
           <Text style={styles.title}>Let’s get you signed in</Text>
-          <Text style={styles.subtitle}>Sign in to view your appointments and records</Text>
+          <Text style={styles.subtitle}>Sign in to your profile</Text>
         </View>
 
         {!!submitError && <ErrorBanner message={submitError} />}
@@ -153,7 +157,9 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  version: { fontSize: 11, color: NEUTRAL.textMuted, alignSelf: "flex-end", marginBottom: 2 },
+  // The app version, small in the top right corner of the green hero (it used to sit above the hero, on the page colour,
+  // which left a pale gap at the top of the screen).
+  version: { position: "absolute", top: -4, right: 0, fontSize: 11, color: "rgba(4,38,28,0.6)" },
   hero: { marginBottom: 20 },
   heroInner: { alignItems: "center", paddingVertical: 10 },
   header: { alignItems: "center", marginBottom: 24 },

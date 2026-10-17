@@ -4,9 +4,11 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { X, Camera as CameraIcon, QrCode, Check } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { AppStackParamList } from "@/navigation/types";
 import * as FileSystem from "expo-file-system/legacy";
 import { useDocumentUpload, UploadCandidate } from "@/context/DocumentUploadContext";
+import { setViewingPerson } from "@/utils/viewingPerson";
 
 type Mode = "qr" | "photo";
 
@@ -58,7 +60,8 @@ export function CaptureScreen() {
   // offers the confirmation); a bulk upload goes back to Bulk Upload for the review.
   const leaveAfterUpload = useCallback(() => {
     if (uploadMode === "instant") {
-      navigation.navigate({ name: "MyDocuments", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
+      setViewingPerson(patientAwpid);          // My Documents shows the person the photo was taken for
+      navigation.navigate("MyDocuments");
     } else {
       navigation.navigate({ name: "DocumentUpload", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
     }
@@ -125,15 +128,19 @@ export function CaptureScreen() {
   const uploadAll = useCallback(async () => {
     if (shots.length === 0) return;
     setError("");
-    const candidates = await Promise.all(shots.map((shotUri, i) => shotToCandidate(shotUri, i)));
-    const outcome = queueUpload(candidates, uploadMode, patientAwpid);
-    if (outcome.status !== "queued") {
-      setError(outcome.reason);
-      setShots(candidates.map((c) => c.uri));       // the photos were moved to their upload names: keep the tray in step
-      return;
+    try {
+      const candidates = await Promise.all(shots.map((shotUri, i) => shotToCandidate(shotUri, i)));
+      const outcome = queueUpload(candidates, uploadMode, patientAwpid);
+      if (outcome.status !== "queued") {
+        setError(outcome.reason);
+        setShots(candidates.map((c) => c.uri));       // the photos were moved to their upload names: keep the tray in step
+        return;
+      }
+      setShots([]);
+      leaveAfterUpload();
+    } catch {
+      setError("Couldn't prepare your photos for upload. Please try again.");
     }
-    setShots([]);
-    leaveAfterUpload();
   }, [shots, queueUpload, uploadMode, patientAwpid, leaveAfterUpload]);
 
   const switchMode = (m: Mode) => {
@@ -207,9 +214,7 @@ export function CaptureScreen() {
         </View>
       )}
 
-      <Pressable style={styles.close} hitSlop={12} onPress={() => navigation.goBack()}>
-        <X size={22} color="#fff" strokeWidth={2.4} />
-      </Pressable>
+      <CloseButton variant="overlay" style={styles.close} onPress={() => navigation.goBack()} />
 
       {/* photo-mode tray */}
       {!isQr && shots.length > 0 && (
@@ -283,7 +288,7 @@ const styles = StyleSheet.create({
   pageGuide: { width: "82%", height: "56%", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.5)", borderRadius: 10, borderStyle: "dashed" },
   hint: { color: "#fff", fontSize: 12.5, textAlign: "center", marginTop: 18, paddingHorizontal: 36, lineHeight: 18 },
 
-  close: { position: "absolute", top: Platform.OS === "ios" ? 56 : 24, left: 18, width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center" },
+  close: { position: "absolute", top: Platform.OS === "ios" ? 56 : 24, left: 18 },
 
   tray: { position: "absolute", left: 0, right: 0, bottom: Platform.OS === "ios" ? 132 : 120, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.4)" },
   trayRow: { paddingHorizontal: 14, gap: 8 },

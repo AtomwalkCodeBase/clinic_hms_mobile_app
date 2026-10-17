@@ -1,6 +1,7 @@
 import { Pressable, Text, View, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
 import type { LucideIcon } from "@/theme/icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { HEADER_GRADIENT } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 
 // A diagonal highlight overlaid on the flat theme fill — the same layered
@@ -19,7 +20,7 @@ interface ButtonProps {
   compact?: boolean;
 }
 
-export function PrimaryButton({ label, onPress, loading, disabled, style, compact }: ButtonProps) {
+export function PrimaryButton({ label, onPress, loading, disabled, style, compact, icon: Icon }: ButtonProps & { icon?: LucideIcon }) {
   const { theme } = useAppTheme();
   // style may carry a caller-supplied backgroundColor (e.g. the danger-red
   // override in ConfirmDialog) — honor it as the gloss's base instead of
@@ -38,11 +39,17 @@ export function PrimaryButton({ label, onPress, loading, disabled, style, compac
         style,
       ]}
     >
+      {!flatStyle?.backgroundColor && (
+        <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      )}
       <LinearGradient colors={GLOSS} locations={[0, 0.45, 1]} start={{ x: 0.1, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
       {loading ? (
         <ActivityIndicator color={theme.on} size={compact ? "small" : undefined} />
       ) : (
-        <Text style={[styles.label, compact && styles.compactLabel, { color: theme.on }]}>{label}</Text>
+        <View style={styles.content}>
+          {Icon && <Icon size={compact ? 14 : 17} color={theme.on} strokeWidth={2.2} />}
+          <Text style={[styles.label, compact && styles.compactLabel, { color: theme.on }]}>{label}</Text>
+        </View>
       )}
     </Pressable>
   );

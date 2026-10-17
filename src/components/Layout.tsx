@@ -4,8 +4,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useFocusEffect } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
-import { ArrowLeft } from "lucide-react-native";
-import { NEUTRAL } from "@/theme/themes";
+import { BackButton } from "@/components/IconButtons";
+import { LinearGradient } from "expo-linear-gradient";
+import { HEADER_GREEN, HEADER_GRADIENT, NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { TopProgressBar } from "@/components/TopProgressBar";
 
@@ -14,7 +15,7 @@ export function Screen({
   scroll = true,
   onRefresh,
   refreshing,
-  topColor,
+  topColor = HEADER_GREEN,
   bottomInset = true,
   accentColor,
   backgroundLoading = false,
@@ -42,11 +43,9 @@ export function Screen({
    * a silent background refetch must never set this, or it shows the
    * exact same spinner over content the user never asked to reload. */
   refreshing?: boolean;
-  /** Extends this color into the status-bar safe-area inset instead of the
-   * default page background — for screens whose first element is a
-   * MetalHero, so the hero's own color reaches all the way to the top of
-   * the screen instead of showing a mismatched light strip above it. Pass
-   * the hero gradient's own top-left stop (see MetalHero's METAL_STOPS). */
+  /** The colour of the status-bar safe-area inset. Every screen has the same solid green (HEADER_GREEN) there, so the
+   * status bar and a green header under it read as one piece. A screen whose hero is another colour (the Health tab's
+   * family member) passes that colour so the two still meet. */
   topColor?: string;
   /** False for a screen that sits directly under AppTabs' bottom Tab.Navigator
    * (Home/Visits/Health/Profile) — its tabBarStyle already reserves the
@@ -75,9 +74,8 @@ export function Screen({
   const { height: windowHeight } = useWindowDimensions();
   const { theme } = useAppTheme();
   const tint = accentColor || theme.fill;
-  const edges = (topColor ? ["bottom"] : ["top", "bottom"]).filter(
-    (e) => bottomInset || e !== "bottom",
-  ) as ("top" | "bottom")[];
+  // The top inset is the coloured strip below, so the safe area only has the bottom edge left to take care of.
+  const edges: "bottom"[] = bottomInset ? ["bottom"] : [];
   // Every screen used to pop in the instant its data resolved — fine on a
   // fast connection, but a visible "blank, then sudden content" flash on
   // any real network delay. A short fade+rise on mount doesn't remove the
@@ -101,7 +99,7 @@ export function Screen({
   // it always matches whichever screen is currently on top.
   useFocusEffect(
     useCallback(() => {
-      SystemUI.setBackgroundColorAsync(topColor || NEUTRAL.bg);
+      SystemUI.setBackgroundColorAsync(topColor);
     }, [topColor])
   );
 
@@ -117,8 +115,12 @@ export function Screen({
 
   return (
     <View style={styles.safe}>
-      <StatusBar style={topColor ? "light" : "dark"} />
-      {!!topColor && <View style={{ height: insets.top, backgroundColor: topColor }} />}
+      <StatusBar style="dark" />
+      {topColor === HEADER_GREEN ? (
+        <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ height: insets.top }} />
+      ) : (
+        <View style={{ height: insets.top, backgroundColor: topColor }} />
+      )}
       <SafeAreaView style={styles.safeInner} edges={edges}>
         <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
           <TopProgressBar visible={backgroundLoading} color={tint} />
@@ -153,35 +155,42 @@ export function Screen({
   );
 }
 
+/**
+ * The solid green band at the top of a page, straight under the green status bar - one piece with it. Put it as the
+ * first thing in a Screen: the negative margins cancel the Screen's 16px padding so it runs edge to edge and flush with
+ * the status bar. The page's title, back button and buttons go inside (dark on the mint).
+ */
+export function HeaderBand({ children, color }: { children: React.ReactNode; color?: string }) {
+  return (
+    <View style={[styles.band, !!color && { backgroundColor: color }]}>
+      {!color && <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />}
+      {children}
+    </View>
+  );
+}
+
+/** A page's header: the green band with a back arrow, the title in white, and optional buttons at the right end. */
 export function BackHeader({
   title,
   onBack,
-  tint,
   right,
+  color,
+  onColor,
 }: {
   title: string;
   onBack: () => void;
-  /** Buttons at the right end of the header (an Upload pill, a "?"). */
+  /** Buttons at the right end of the header (an Upload pill, a "?"). White on the green: use light-on-dark styles. */
   right?: React.ReactNode;
-  /** A dependent's family-accent colors (familyAccentFor), when this screen
-   * is currently showing their data instead of the account owner's own —
-   * so a detail screen reached from a colored family member card doesn't
-   * suddenly go back to plain neutral gray, the one place in the header
-   * chain that used to stay untinted regardless of who's selected. */
-  tint?: { bg: string; text: string };
+  /** a family member's colour for the band, and the colour of the arrow and title on it; the app's green when left out */
+  color?: string;
+  onColor?: string;
 }) {
   return (
-    <View style={styles.backRow}>
-      <Pressable
-        onPress={onBack}
-        hitSlop={8}
-        style={({ pressed }) => [styles.backBtn, tint && { backgroundColor: tint.bg }, pressed && styles.backBtnPressed]}
-      >
-        <ArrowLeft size={19} color={tint?.text ?? NEUTRAL.textPrimary} strokeWidth={2.3} />
-      </Pressable>
-      <Text style={[styles.backTitle, tint && { color: tint.text }]}>{title}</Text>
-      {right ? <View style={styles.backRight}>{right}</View> : null}
-    </View>
+    <HeaderBand color={color}>
+      <BackButton onPress={onBack} color={onColor} />
+      <Text style={[styles.bandTitle, !!onColor && { color: onColor }]} numberOfLines={1}>{title}</Text>
+      {right ? <View style={styles.bandRight}>{right}</View> : null}
+    </HeaderBand>
   );
 }
 
@@ -220,18 +229,12 @@ const styles = StyleSheet.create({
   pinnedBelow: { paddingHorizontal: 16, paddingTop: 4 },
   pinnedContent: { padding: 16, paddingBottom: 0 },
   scrollContentUnderHeader: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 16 },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: NEUTRAL.surfaceAlt,
+  band: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: HEADER_GREEN,
+    marginHorizontal: -16, marginTop: -16, marginBottom: 14, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14,
   },
-  backBtnPressed: { opacity: 0.7 },
-  backTitle: { fontWeight: "600", fontSize: 15, color: NEUTRAL.textPrimary },
-  backRight: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 8 },
+  bandTitle: { flex: 1, fontWeight: "700", fontSize: 17, color: ON_BRAND },
+  bandRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginTop: 14, marginBottom: 8 },
   empty: { padding: 24, alignItems: "center" },
   emptyText: { color: NEUTRAL.textMuted, fontSize: 13, textAlign: "center" },
