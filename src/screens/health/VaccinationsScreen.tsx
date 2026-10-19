@@ -13,6 +13,7 @@ import { FilterPill, FilterSheet } from "@/components/TypeFilter";
 import { IconBadge } from "@/components/IconBadge";
 import { Pill } from "@/components/Pill";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
+import { FooterAction } from "@/components/FooterAction";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import { formatDate } from "@/components/health/chartTheme";
 import { getImmunization } from "@/api/portal";
@@ -99,9 +100,7 @@ export function VaccinationsScreen() {
       refreshing={pulling}
       backgroundLoading={immunizationQ.isFetching && !pulling}
       footer={
-        <View style={styles.addBar}>
-          <PrimaryButton label="Add a vaccine" icon={Plus} onPress={() => navigation.navigate("AddVaccine", { patientAwpid, patientName })} />
-        </View>
+        <FooterAction label="Add a vaccine" icon={Plus} onPress={() => navigation.navigate("AddVaccine", { patientAwpid, patientName })} />
       }
       header={
         <>
@@ -254,5 +253,4 @@ const styles = StyleSheet.create({
   meta: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary },
   link: { fontSize: CARD_TEXT.body, fontWeight: "700", color: BRAND_TEXT },
   source: { fontSize: CARD_TEXT.tiny, color: NEUTRAL.textSecondary, marginTop: 4, marginBottom: 8 },
-  addBar: { paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: NEUTRAL.surface, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
 });

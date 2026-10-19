@@ -1,5 +1,5 @@
 import { Pressable, Text, StyleSheet, StyleProp, ViewStyle } from "react-native";
-import { ArrowLeft, Ellipsis, X } from "lucide-react-native";
+import { ArrowLeft, EllipsisVertical, X } from "lucide-react-native";
 import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 
@@ -71,7 +71,7 @@ export function MoreButton({ onPress, onDark = false, color: given }: { onPress:
       accessibilityLabel="Change person"
       style={[styles.help, { borderColor: color }, onDark && { backgroundColor: "transparent" }]}
     >
-      <Ellipsis size={20} color={color} strokeWidth={2.6} />
+      <EllipsisVertical size={20} color={color} strokeWidth={2.6} />
     </Pressable>
   );
 }

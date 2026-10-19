@@ -22,8 +22,8 @@ import { UploadStatusBar } from "@/components/UploadStatusBar";
 import { DayList, DocumentsMode } from "@/components/DateView";
 import { filesLabel } from "@/components/DayCard";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
-import { LinearGradient } from "expo-linear-gradient";
-import { NEUTRAL, ON_BRAND, HEADER_GRADIENT } from "@/theme/themes";
+import { FooterAction } from "@/components/FooterAction";
+import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
 import {
@@ -504,20 +504,8 @@ export function MyDocumentsScreen() {
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
       stickyHeaderIndices={stickyIdx}
-      footer={
-        // The one way to add a record: a full-width button on a white strip at the bottom, under the list.
-        <View style={styles.addBar}>
-          <Pressable
-            onPress={() => setAddOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Add record"
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.85 }]}
-          >
-            <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-            <Text style={[styles.addBtnText, { color: theme.on }]}>Add record</Text>
-          </Pressable>
-        </View>
-      }
+      // The one way to add a record: a full-width button on a white strip at the bottom, under the list.
+      footer={<FooterAction label="Add record" onPress={() => setAddOpen(true)} />}
       header={
         <>
           {/* header band: solid green, one piece with the status bar above it. Back, the screen name over whose
@@ -708,13 +696,6 @@ const styles = StyleSheet.create({
 
   ymRow: { flexDirection: "row", alignItems: "flex-end", gap: 20, marginBottom: 12 },
 
-  addBar: {
-    paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16,
-    backgroundColor: NEUTRAL.surface, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border,
-  },
-  addBtn: { height: 52, borderRadius: 8, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  addBtnText: { fontSize: 17, fontWeight: "800" },
-
   privBanner: { flexDirection: "row", gap: 8, backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 10, marginBottom: 10 },
   privBannerT: { flex: 1, fontSize: 11, lineHeight: 16, color: "#5C3A08" },
   privBannerB: { fontWeight: "700", color: "#3E2A08" },
@@ -736,7 +717,7 @@ const styles = StyleSheet.create({
   pendItemT: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textPrimary, marginBottom: 8 },
   pendBtns: { flexDirection: "row", gap: 6 },
 
-  grpHead: { backgroundColor: NEUTRAL.bg, marginHorizontal: -16, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 },
+  grpHead: { backgroundColor: NEUTRAL.bg, marginHorizontal: -10, paddingHorizontal: 10, paddingTop: 6, paddingBottom: 8 },
   grpLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: NEUTRAL.textMuted },
 
   count: { textAlign: "center", fontSize: 10, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 4 },

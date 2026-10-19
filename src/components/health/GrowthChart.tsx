@@ -5,10 +5,10 @@ import type { GrowthSeries } from "@/api/types";
 import { CHART, clamp, formatMonths, niceTicks } from "./chartTheme";
 
 const TOP = 34;
-const BOTTOM = 38;
-const AXIS_W = 50;          // the value labels on the left stay in place
-const PAD_L = 34;           // keeps the first age label from being cut off
-const PAD_R = 58;           // room for the 98th / 50th / 2nd labels at the end of the lines
+const BOTTOM = 30;
+const AXIS_W = 24;          // the value labels on the left stay in place
+const PAD_L = 14;           // keeps the first age label from being cut off
+const PAD_R = 12;           // room for the 98th / 50th / 2nd labels at the end of the lines
 const PX_PER_MONTH = 26;    // room for each month: the dots stay apart and are easy to press
 
 /**
@@ -85,8 +85,10 @@ export function GrowthChart({ data, unit, fromDate, selected, onSelect, height =
       {box > 0 && (
         <View style={{ flexDirection: "row", height }}>
           <Svg width={AXIS_W} height={height}>
-            <SvgText x={AXIS_W - 8} y={TOP - 14} fontSize={12} fontWeight="700" fill={CHART.label} textAnchor="end">{unit}</SvgText>
-            {y.ticks.map((v) => <SvgText key={v} x={AXIS_W - 8} y={Y(v) + 4} fontSize={12} fill={CHART.label} textAnchor="end">{v}</SvgText>)}
+            <SvgText x={AXIS_W - 5} y={TOP - 14} fontSize={12} fontWeight="700" fill={CHART.label} textAnchor="end">{unit}</SvgText>
+            {y.ticks.map((v) => <SvgText key={v} x={AXIS_W - 6} y={Y(v) + 4} fontSize={12} fill={CHART.label} textAnchor="end">{v}</SvgText>)}
+            <Line x1={AXIS_W - 1} x2={AXIS_W - 1} y1={TOP} y2={TOP + plotH} stroke={CHART.label} strokeWidth={1.6} />
+            {y.ticks.map((v) => <Line key={v} x1={AXIS_W - 4} x2={AXIS_W - 1} y1={Y(v)} y2={Y(v)} stroke={CHART.label} strokeWidth={1.6} />)}
           </Svg>
           <ScrollView
             ref={scroller}
@@ -118,10 +120,12 @@ export function GrowthChart({ data, unit, fromDate, selected, onSelect, height =
               {xTicks.map((m) => (
                 <G key={m}>
                   <Line x1={X(m)} x2={X(m)} y1={TOP} y2={TOP + plotH} stroke={CHART.grid} strokeDasharray="2 5" />
-                  <SvgText x={X(m)} y={TOP + plotH + 22} fontSize={12} fill={CHART.label} textAnchor="middle">{formatMonths(m)}</SvgText>
+                  <SvgText x={X(m)} y={TOP + plotH + 17} fontSize={12} fill={CHART.label} textAnchor={X(m) < 24 ? "start" : "middle"}>{formatMonths(m)}</SvgText>
                 </G>
               ))}
 
+              <Line x1={0} x2={canvasW} y1={TOP + plotH} y2={TOP + plotH} stroke={CHART.label} strokeWidth={1.6} />
+              {xTicks.map((m) => <Line key={`t${m}`} x1={X(m)} x2={X(m)} y1={TOP + plotH} y2={TOP + plotH + 5} stroke={CHART.label} strokeWidth={1.6} />)}
               <G clipPath="url(#plot)">
                 <Polygon points={band("-3", "3")} fill={CHART.bandOuter} />
                 <Polygon points={band("-2", "2")} fill="url(#inner)" />
@@ -129,9 +133,9 @@ export function GrowthChart({ data, unit, fromDate, selected, onSelect, height =
                 <Polyline points={line("-2")} fill="none" stroke="#7FAEE8" strokeWidth={1.2} />
                 <Polyline points={line("0")} fill="none" stroke={CHART.median} strokeWidth={1.8} strokeDasharray="6 4" />
               </G>
-              <SvgText x={canvasW - PAD_R + 8} y={endY("2") + 4} fontSize={11.5} fontWeight="700" fill="#4F86D6">98th</SvgText>
-              <SvgText x={canvasW - PAD_R + 8} y={endY("0") + 4} fontSize={11.5} fontWeight="700" fill={CHART.median}>50th</SvgText>
-              <SvgText x={canvasW - PAD_R + 8} y={endY("-2") + 4} fontSize={11.5} fontWeight="700" fill="#4F86D6">2nd</SvgText>
+              <SvgText x={canvasW - PAD_R - 4} y={endY("2") - 6} fontSize={11.5} fontWeight="700" fill="#4F86D6" textAnchor="end">98th</SvgText>
+              <SvgText x={canvasW - PAD_R - 4} y={endY("0") - 6} fontSize={11.5} fontWeight="700" fill={CHART.median} textAnchor="end">50th</SvgText>
+              <SvgText x={canvasW - PAD_R - 4} y={endY("-2") - 6} fontSize={11.5} fontWeight="700" fill="#4F86D6" textAnchor="end">2nd</SvgText>
 
               <Polyline points={dots} fill="none" stroke={CHART.ink} strokeOpacity={0.12} strokeWidth={9} strokeLinejoin="round" strokeLinecap="round" />
               <Polyline points={dots} fill="none" stroke={CHART.ink} strokeWidth={3.2} strokeLinejoin="round" strokeLinecap="round" />

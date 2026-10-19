@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { TextField } from "@/components/TextField";
 import { DateField } from "@/components/DateField";
-import { PrimaryButton } from "@/components/Buttons";
+import { FooterAction } from "@/components/FooterAction";
 import { usePeople } from "@/hooks/usePeople";
 import { NEUTRAL } from "@/theme/themes";
 import { addVaccine } from "@/api/portal";
@@ -48,7 +48,7 @@ export function AddVaccineScreen() {
   };
 
   return (
-    <Screen>
+    <Screen footer={<FooterAction label="Save vaccine" onPress={onSave} loading={save.isPending} />}>
       <BackHeader title="Add a vaccine" onBack={() => navigation.goBack()} />
       <Text style={styles.hint}>
         Add a vaccine {patientName} has had, the way it is written on the card. A clinic confirms it later; until then it shows in the list.
@@ -56,7 +56,6 @@ export function AddVaccineScreen() {
       {!!error && <ErrorBanner message={error} />}
       <TextField label="Vaccine, as written on the card" placeholder="e.g. Hexaxim 2" value={vaccine} onChangeText={setVaccine} />
       <DateField label="Date given" value={date} onChange={setDate} maximumDate={new Date()} />
-      <PrimaryButton label="Save vaccine" onPress={onSave} loading={save.isPending} style={{ marginTop: 16 }} />
     </Screen>
   );
 }

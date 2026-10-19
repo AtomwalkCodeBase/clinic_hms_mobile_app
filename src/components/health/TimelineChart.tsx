@@ -26,7 +26,7 @@ const LANE_H = 56;
 const AXIS_H = 38;
 const LABEL_W = 100;
 const PAD_L = 20;
-const PAD_R = 34;
+const PAD_R = 12;
 const PX_PER_MONTH = 34;    // room for each month: marks stay apart and are easy to press
 
 const SEVERITY: Record<TimelineSeverity, { color: string; shape: Shape }> = {

@@ -91,7 +91,7 @@ export function HealthScreen() {
   if (isInitialLoading) {
     return (
       <Screen bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, height: 128, backgroundColor: BRAND, borderRadius: 24 }]}>
+        <View style={[styles.hero, { padding: 16, height: 128, backgroundColor: BRAND, borderRadius: 24 }]}>
           <SkeletonBlock width={150} height={18} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={210} height={12} style={{ marginTop: 10, backgroundColor: "rgba(255,255,255,0.25)" }} />
         </View>
@@ -208,6 +208,6 @@ const styles = StyleSheet.create({
   switchDivider: { width: 1, height: 26, backgroundColor: NEUTRAL.border },
   countText: { fontSize: 14.5, fontWeight: "800", color: NEUTRAL.textPrimary },
   switchText: { fontSize: 14.5, fontWeight: "800", color: BRAND_TEXT },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 11, marginTop: 8 },
-  gadgetSize: { width: "47%" },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 11, marginTop: 8 },
+  gadgetSize: { width: "48.5%" },
 });

@@ -16,6 +16,7 @@ import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { GrowthChartSkeleton, TimelineChartSkeleton } from "@/components/health/ChartSkeleton";
 import { TimelineChart, TimelineMark, timelineList } from "@/components/health/TimelineChart";
 import { GrowthChart } from "@/components/health/GrowthChart";
 import { CHART, GROWTH_FLAG_LABEL, formatDate, formatMonths, ordinal } from "@/components/health/chartTheme";
@@ -225,7 +226,7 @@ function TimelineSection({ timeline, axis, selectedKey, onSelect }: {
   selectedKey?: string;
   onSelect: (m: TimelineMark) => void;
 }) {
-  if (!timeline) return <SkeletonBlock height={320} radius={CARD.radius} />;
+  if (!timeline) return <View style={styles.chartCard}><TimelineChartSkeleton /></View>;
   if (timeline.lanes.length === 0) return <EmptyState text="Nothing recorded in this period." />;
   if (axis === "list") {
     const marks = timelineList(timeline);
@@ -280,7 +281,7 @@ function GrowthSection({ data, indicator, fromDate }: {
   const [sheet, setSheet] = useState<"sort" | "show" | null>(null);
   const [opened, setOpened] = useState<number | null>(null);
 
-  if (!data) return <SkeletonBlock height={340} radius={CARD.radius} />;
+  if (!data) return <View style={styles.chartCard}><GrowthChartSkeleton /></View>;
   const inPeriod = data.points.map((p, i) => ({ p, i })).filter(({ p }) => !fromDate || p.date >= fromDate);
   if (inPeriod.length === 0) {
     return <EmptyState text={`No ${indicator.label.toLowerCase()} readings ${fromDate ? "in this period" : "yet. They are picked up from prescriptions automatically"}.`} />;
@@ -387,7 +388,7 @@ const styles = StyleSheet.create({
   cellIcon: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   cellValue: { fontSize: 18, fontWeight: "800", color: NEUTRAL.textPrimary, lineHeight: 20 },
   cellLabel: { fontSize: 10.5, color: NEUTRAL.textSecondary, lineHeight: 12 },
-  chartCard: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 10, marginBottom: CARD.gap },
+  chartCard: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 4, marginBottom: CARD.gap },
   card: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, borderWidth: 0.5, borderColor: NEUTRAL.border, padding: 12, marginBottom: CARD.gap },
   legend: { flexDirection: "row", flexWrap: "wrap", gap: 6, columnGap: 14, marginTop: 8, paddingHorizontal: 2 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },

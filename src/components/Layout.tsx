@@ -157,7 +157,7 @@ export function Screen({
 
 /**
  * The solid green band at the top of a page, straight under the green status bar - one piece with it. Put it as the
- * first thing in a Screen: the negative margins cancel the Screen's 16px padding so it runs edge to edge and flush with
+ * first thing in a Screen: the negative margins cancel the Screen's side padding so it runs edge to edge and flush with
  * the status bar. The page's title, back button and buttons go inside (dark on the mint).
  */
 export function HeaderBand({ children, color }: { children: React.ReactNode; color?: string }) {
@@ -224,14 +224,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: NEUTRAL.bg },
   safeInner: { flex: 1 },
   body: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 32 },
+  scrollContent: { padding: 16, paddingHorizontal: 10, paddingBottom: 32 },
   pinned: { flexGrow: 0, flexShrink: 1 },
-  pinnedBelow: { paddingHorizontal: 16, paddingTop: 4 },
-  pinnedContent: { padding: 16, paddingBottom: 0 },
-  scrollContentUnderHeader: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
+  pinnedBelow: { paddingHorizontal: 10, paddingTop: 4 },
+  pinnedContent: { padding: 16, paddingHorizontal: 10, paddingBottom: 0 },
+  scrollContentUnderHeader: { paddingHorizontal: 10, paddingTop: 4, paddingBottom: 32 },
   band: {
     flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: HEADER_GREEN,
-    marginHorizontal: -16, marginTop: -16, marginBottom: 14, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14,
+    marginHorizontal: -10, marginTop: -16, marginBottom: 14, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 14,
   },
   bandTitle: { flex: 1, fontWeight: "700", fontSize: 17, color: ON_BRAND },
   bandRight: { flexDirection: "row", alignItems: "center", gap: 8 },

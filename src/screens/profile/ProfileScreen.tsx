@@ -136,7 +136,7 @@ export function ProfileScreen() {
   if (isInitialLoading) {
     return (
       <Screen bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, alignItems: "center", height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
+        <View style={[styles.hero, { padding: 16, alignItems: "center", height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
           <SkeletonBlock width={72} height={72} radius={36} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={130} height={16} style={{ marginTop: 12, backgroundColor: "rgba(255,255,255,0.25)" }} />
         </View>

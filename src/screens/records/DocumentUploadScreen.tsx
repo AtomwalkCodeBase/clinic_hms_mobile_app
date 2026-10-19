@@ -9,6 +9,7 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { BackHeader, EmptyState, ErrorBanner, Screen } from "@/components/Layout";
 import { PrimaryButton } from "@/components/Buttons";
+import { FooterAction } from "@/components/FooterAction";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MessageDialog } from "@/components/MessageDialog";
 import { FileItem, ViewButton, ReadyButton } from "@/components/FileItem";
@@ -24,7 +25,7 @@ import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
 import { BatchSummaryCard } from "@/components/BatchSummaryCard";
 import { FilterPill, FilterSheet } from "@/components/TypeFilter";
-import { NEUTRAL, ON_BRAND } from "@/theme/themes";
+import { NEUTRAL } from "@/theme/themes";
 import { CARD_TEXT } from "@/theme/cardSizes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
@@ -437,11 +438,19 @@ export function DocumentUploadScreen() {
 
   const error = (pendingQ.error && apiErrorMessage(pendingQ.error)) || actionError;
   const pickerEntry = picker ? draft[picker.doc.id] : undefined;
-  const footer = tab === "review" && selectedCount > 0 ? (
-    <View style={styles.footer}>
-      <PrimaryButton label={`Move ${selectedCount} to Ready to Submit`} onPress={moveSelected} />
-    </View>
-  ) : null;
+  const footer = (
+    <FooterAction
+      label="Upload"
+      icon={Upload}
+      onPress={() => setUploadOpen(true)}
+      loading={uploading}
+      above={tab === "review" && selectedCount > 0 ? (
+        <View style={{ marginBottom: 10 }}>
+          <PrimaryButton label={`Move ${selectedCount} to Ready to Submit`} onPress={moveSelected} />
+        </View>
+      ) : undefined}
+    />
+  );
 
   return (
     <Screen
@@ -455,13 +464,7 @@ export function DocumentUploadScreen() {
             title="Bulk Upload"
             onBack={() => navigation.goBack()}
             right={
-              <>
-                <Pressable onPress={() => setUploadOpen(true)} disabled={uploading} accessibilityRole="button" accessibilityLabel="Upload" style={[styles.upload, uploading && { opacity: 0.6 }]}>
-                  {uploading ? <ActivityIndicator size="small" color={ON_BRAND} /> : <Upload size={18} color={ON_BRAND} strokeWidth={2.4} />}
-                  <Text style={[styles.uploadText, { color: ON_BRAND }]}>Upload</Text>
-                </Pressable>
-                <HelpButton onPress={() => setHelpOpen(true)} onDark />
-              </>
+              <HelpButton onPress={() => setHelpOpen(true)} onDark />
             }
           />
           {(uploading || groupWorking) && (
@@ -623,8 +626,6 @@ export function DocumentUploadScreen() {
 }
 
 const styles = StyleSheet.create({
-  upload: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: ON_BRAND },
-  uploadText: { fontSize: 15, fontWeight: "700" },
   submit: { paddingVertical: 8, marginBottom: 10 },
   tabsRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", rowGap: 8, gap: 8, marginBottom: 12 },
   tabPill: { paddingHorizontal: 13, minHeight: 38, justifyContent: "center", borderRadius: 20, borderWidth: 1 },
@@ -634,5 +635,4 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12.5, color: NEUTRAL.warning, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10, overflow: "hidden" },
   more: { alignItems: "center", paddingVertical: 12 },
   moreText: { fontSize: 13, fontWeight: "600" },
-  footer: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, backgroundColor: NEUTRAL.bg, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
 });

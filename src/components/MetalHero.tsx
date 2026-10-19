@@ -92,10 +92,10 @@ export function MetalHero({
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginHorizontal: -16, marginTop: -16, overflow: "hidden" },
+  wrap: { marginHorizontal: -10, marginTop: -16, overflow: "hidden" },
   curved: { borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  pad: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 26 },
-  compactPad: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 18 },
+  pad: { paddingHorizontal: 10, paddingTop: 18, paddingBottom: 26 },
+  compactPad: { paddingHorizontal: 10, paddingTop: 14, paddingBottom: 18 },
   content: { position: "relative" },
   backBtn: { marginBottom: 10 },
   blob: { position: "absolute" },

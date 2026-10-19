@@ -125,7 +125,7 @@ export function AppointmentsScreen() {
   if (isInitialLoading) {
     return (
       <Screen bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, height: 118, backgroundColor: BRAND, borderRadius: 24 }]}>
+        <View style={[styles.hero, { padding: 16, height: 118, backgroundColor: BRAND, borderRadius: 24 }]}>
           <SkeletonBlock width={180} height={16} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={220} height={11} style={{ marginTop: 8, backgroundColor: "rgba(255,255,255,0.25)" }} />
         </View>

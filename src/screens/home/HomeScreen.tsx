@@ -113,7 +113,7 @@ export function HomeScreen() {
   if (isInitialLoading) {
     return (
       <Screen bottomInset={false}>
-        <View style={[styles.hero, { padding: 20, height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
+        <View style={[styles.hero, { padding: 16, height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
           <View style={styles.heroTop}>
             <LogoPill size={40} />
           </View>
@@ -327,8 +327,8 @@ const styles = StyleSheet.create({
   bookArrow: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" },
   remChev: { fontSize: 18, color: NEUTRAL.textMuted },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8, marginTop: 4 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 4 },
-  qa: { width: "47%" },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 4 },
+  qa: { width: "48.5%" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   hospitalName: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
   doctorLine: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 4 },

@@ -5,7 +5,7 @@
  */
 export const CARD = {
   radius: 16,
-  padding: 16,
+  padding: 12,
   /** space between two stacked cards */
   gap: 12,
 };

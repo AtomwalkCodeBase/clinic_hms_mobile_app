@@ -59,13 +59,6 @@ function messageFor(err: unknown): string {
   return apiErrorMessage(err, "Something went wrong. Please try again.");
 }
 
-/** For a handler that catches an error and wants to tell the patient. */
-export function reportError(err: unknown, fallback = "Something went wrong. Please try again.", title?: string): void {
-  if (__DEV__) console.log("[error]", (err as any)?.stack || err);
-  const { apiErrorMessage } = require("@/api/client") as typeof import("@/api/client");
-  showError(apiErrorMessage(err, fallback), title);
-}
-
 let installed = false;
 
 export function installGlobalErrorHandling(): void {
