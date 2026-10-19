@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
+import { GrowthChartSkeleton } from "./ChartSkeleton";
 import Svg, { Circle, ClipPath, Defs, G, Line, LinearGradient, Polygon, Polyline, Rect, Stop, Text as SvgText } from "react-native-svg";
 import type { GrowthSeries } from "@/api/types";
 import { CHART, clamp, formatMonths, niceTicks } from "./chartTheme";
@@ -82,6 +83,7 @@ export function GrowthChart({ data, unit, fromDate, selected, onSelect, height =
 
   return (
     <View onLayout={(e) => setBox(e.nativeEvent.layout.width)} style={{ height }}>
+      {box === 0 && <GrowthChartSkeleton height={height} />}
       {box > 0 && (
         <View style={{ flexDirection: "row", height }}>
           <Svg width={AXIS_W} height={height}>

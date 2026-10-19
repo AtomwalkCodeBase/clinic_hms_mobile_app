@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { TimelineChartSkeleton } from "./ChartSkeleton";
 import Svg, { Circle, G, Line, Polygon, Polyline, Rect, Text as SvgText } from "react-native-svg";
 import type { HealthTimeline, ImmunizationRow, TimelineEpisode, TimelineLane, TimelineSeverity } from "@/api/types";
 import { BRAND_SOFT, NEUTRAL } from "@/theme/themes";
@@ -239,6 +240,7 @@ export function TimelineChart({ payload, axis, selectedKey, onSelect }: {
 
   return (
     <View onLayout={(e) => setBox(e.nativeEvent.layout.width)}>
+      {box === 0 && <TimelineChartSkeleton />}
       {box > 0 && (
         <View style={styles.chart}>
           <View style={{ width: LABEL_W }}>

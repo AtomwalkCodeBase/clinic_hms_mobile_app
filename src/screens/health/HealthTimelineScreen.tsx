@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { usePeople, usePersonSwitcher, paramsFor } from "@/hooks/usePeople";
@@ -88,13 +88,11 @@ export function HealthTimelineScreen() {
     queryKey: ["healthTimeline", awpid, period],
     queryFn: () => getHealthTimeline(awpid!, from),
     enabled: !!awpid,
-    placeholderData: keepPreviousData,
   });
   const growthQ = useQuery({
     queryKey: ["growth", awpid, indicator],
     queryFn: () => getGrowthSeries(awpid!, indicator),
     enabled: !!awpid && tab === "growth",
-    placeholderData: keepPreviousData,
   });
   const active = tab === "growth" ? [timelineQ, growthQ] : [timelineQ];
   useRefreshOnFocus(active);
@@ -123,7 +121,7 @@ export function HealthTimelineScreen() {
             right={<><HelpButton onPress={() => setHelpOpen(true)} onDark color={headerOn} /><MoreButton onPress={switcher.open} onDark color={headerOn} /></>}
           />
           {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={() => active.forEach((q) => q.refetch())} />}
-          {timeline ? <SummaryStrip timeline={timeline} /> : <SkeletonBlock height={104} radius={CARD.radius} style={{ marginBottom: CARD.gap }} />}
+          {timeline ? <SummaryStrip timeline={timeline} /> : <SummaryStripSkeleton />}
           <View style={styles.controls}>
             <View style={styles.toggle}>
               <SegmentedControl
@@ -183,6 +181,23 @@ export function HealthTimelineScreen() {
       <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} items={HELP} title="How to read this screen" />
       {switcher.sheet}
     </Screen>
+  );
+}
+
+/** The six numbers while they load: the same card, with a shimmering icon and number in each cell. */
+function SummaryStripSkeleton() {
+  return (
+    <View style={styles.strip}>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <View key={i} style={[styles.cell, i % 3 !== 2 && styles.cellDivider, i < 3 && styles.cellRule]}>
+          <SkeletonBlock width={28} height={28} radius={9} style={{ backgroundColor: "#DDE5EE" }} />
+          <View style={{ flex: 1, gap: 5 }}>
+            <SkeletonBlock width={22} height={14} style={{ backgroundColor: "#DDE5EE" }} />
+            <SkeletonBlock width="80%" height={9} style={{ backgroundColor: "#DDE5EE" }} />
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 

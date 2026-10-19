@@ -107,7 +107,7 @@ export async function pickImage(): Promise<PickedFile | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) return null;
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"],
     quality: 0.85,
   });
   if (result.canceled || !result.assets?.[0]) return null;
@@ -122,7 +122,7 @@ export async function pickImageFromCamera(): Promise<PickedFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) return null;
   const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"],
     quality: 0.85,
     allowsEditing: true,
     aspect: [1, 1],
