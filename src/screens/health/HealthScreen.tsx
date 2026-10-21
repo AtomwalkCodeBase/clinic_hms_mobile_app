@@ -10,7 +10,7 @@ import { Screen, ErrorBanner } from "@/components/Layout";
 import { MetalHero } from "@/components/MetalHero";
 import { GadgetCard } from "@/components/GadgetCard";
 import { SkeletonBlock, SkeletonGadgetCard } from "@/components/Skeleton";
-import { Syringe, Clock, Stethoscope, Users, ChevronDown, Plus } from "lucide-react-native";
+import { Clock, Stethoscope, Users, ChevronDown, Plus } from "lucide-react-native";
 import { familyAccentFor } from "@/theme/familyColors";
 import { usePeople, usePersonSwitcher, paramsFor } from "@/hooks/usePeople";
 import { getHealthSummary, getImmunization } from "@/api/portal";
@@ -60,7 +60,7 @@ export function HealthScreen() {
     enabled: !!selectedAwpid,
   });
   const summary = summaryQ.data ?? null;
-  // The overdue count on the Vaccinations card. Same key as the Vaccinations screen, so opening it afterwards is instant.
+  // The overdue count on the Health journey card. Same key as the Vaccines tab inside it, so opening it afterwards is instant.
   const showDue = !!selectedAwpid && isChild(selected?.date_of_birth ?? null);
   const immunizationQ = useQuery({
     queryKey: ["immunization", selectedAwpid],
@@ -83,7 +83,7 @@ export function HealthScreen() {
   useRefreshOnFocus(showDue ? [profileQ, familyQ, summaryQ, immunizationQ] : [profileQ, familyQ, summaryQ]);
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
-  const openGadget = (screen: "Vaccinations" | "HealthTimeline" | "HealthVisits") => {
+  const openGadget = (screen: "HealthJourney" | "HealthVisits") => {
     if (!selected) return;
     navigation.navigate(screen, paramsFor(selected));
   };
@@ -164,16 +164,8 @@ export function HealthScreen() {
       <View style={styles.grid}>
         <GadgetCard
           icon={Clock}
-          title="Health timeline"
-          onPress={() => openGadget("HealthTimeline")}
-          style={styles.gadgetSize}
-          radius={22}
-          cardPadding={20}
-        />
-        <GadgetCard
-          icon={Syringe}
-          title="Vaccinations"
-          onPress={() => openGadget("Vaccinations")}
+          title="Health journey"
+          onPress={() => openGadget("HealthJourney")}
           badge={dueCount > 0 ? `${dueCount} due` : undefined}
           style={styles.gadgetSize}
           radius={22}

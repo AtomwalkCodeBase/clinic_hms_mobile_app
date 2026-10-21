@@ -8,7 +8,7 @@ import type { LucideIcon } from "@/theme/icons";
 export interface HelpItem { icon: LucideIcon; title: string; text: string }
 
 /** The sheet behind a screen's "?" button: what the screen can do, including the actions that aren't labelled. */
-export function HelpSheet({ visible, onClose, items, title = "What you can do here" }: { visible: boolean; onClose: () => void; items: HelpItem[]; title?: string }) {
+export function HelpSheet({ visible, onClose, items, title = "What you can do here", large = false }: { visible: boolean; onClose: () => void; items: HelpItem[]; title?: string; large?: boolean }) {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   return (
@@ -17,16 +17,16 @@ export function HelpSheet({ visible, onClose, items, title = "What you can do he
         <View style={[styles.sheet, { paddingBottom: Math.max(18, insets.bottom + 10) }]} onStartShouldSetResponder={() => true}>
           <View style={styles.handle} />
           <View style={styles.head}>
-            <Text style={styles.title}>{title}</Text>
+            <Text style={[styles.title, large && styles.titleLarge]}>{title}</Text>
             <CloseButton onPress={onClose} />
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             {items.map((it) => (
               <View key={it.title} style={styles.item}>
-                <it.icon size={20} color={theme.fill} strokeWidth={2} style={{ marginTop: 1 }} />
+                <it.icon size={large ? 24 : 20} color={theme.fill} strokeWidth={2} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.itemTitle}>{it.title}</Text>
-                  <Text style={styles.itemText}>{it.text}</Text>
+                  <Text style={[styles.itemTitle, large && styles.itemTitleLarge]}>{it.title}</Text>
+                  <Text style={[styles.itemText, large && styles.itemTextLarge]}>{it.text}</Text>
                 </View>
               </View>
             ))}
@@ -47,6 +47,9 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   title: { fontSize: 15.5, fontWeight: "700", color: NEUTRAL.textPrimary },
   item: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  titleLarge: { fontSize: 18 },
+  itemTitleLarge: { fontSize: 16 },
+  itemTextLarge: { fontSize: 14.5, lineHeight: 21, marginTop: 3 },
   itemTitle: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
   itemText: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 2, lineHeight: 17 },
   done: { marginTop: 4, paddingVertical: 13, borderRadius: 24, alignItems: "center" },

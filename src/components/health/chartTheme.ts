@@ -33,27 +33,12 @@ export function formatDate(iso: string): string {
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
-/** "Mar 25" - a month on a date axis */
-export function formatMonthYear(ms: number): string {
-  const d = new Date(ms);
-  return `${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
-}
-
 /** 21 -> "21st", 22 -> "22nd", 4 -> "4th" */
 export function ordinal(n: number): string {
   const v = Math.round(n);
   const tens = v % 100;
   const suffix = tens >= 11 && tens <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[v % 10] ?? "th";
   return `${v}${suffix}`;
-}
-
-/** 0 -> "Birth", 9 -> "9 m", 30 -> "2 y 6 m" */
-export function formatMonths(m: number): string {
-  if (m < 1) return "Birth";
-  if (m < 24) return `${Math.round(m)} m`;
-  const y = Math.floor(m / 12);
-  const r = Math.round(m % 12);
-  return r ? `${y} y ${r} m` : `${y} y`;
 }
 
 /** How a growth flag from the server reads to a parent. */
