@@ -224,12 +224,16 @@ export function laneTicks(dob: string, from: string, to: string, axis: "age" | "
     }
     return out;
   }
-  const step = spanM <= 5 ? 1 : 3;
+  // A strip that squeezes the whole period into the width (an episode's own chart) gets fewer labels the longer the period
+  // is, so a condition that has lasted ten years shows a label every two years, not forty crowded ones. The long,
+  // scrollable chart has room, so it keeps a label every 3 months.
+  const step = fit ? (spanM <= 5 ? 1 : spanM <= 18 ? 3 : spanM <= 60 ? 12 : 24) : (spanM <= 5 ? 1 : 3);
   const f = new Date(`${from}T00:00:00`);
   let d = new Date(f.getFullYear(), f.getMonth() + (f.getDate() > 1 ? 1 : 0), 1);
   const end = toMs(to);
   while (d.getTime() <= end) {
-    if (d.getMonth() % step === 0) out.push({ iso: isoOf(d.getTime()), label: d.getMonth() === 0 ? String(d.getFullYear()) : MONTH_NAMES[d.getMonth()] });
+    const wanted = step >= 12 ? d.getMonth() === 0 && d.getFullYear() % (step / 12) === 0 : d.getMonth() % step === 0;
+    if (wanted) out.push({ iso: isoOf(d.getTime()), label: d.getMonth() === 0 ? String(d.getFullYear()) : MONTH_NAMES[d.getMonth()] });
     d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
   }
   return out;
