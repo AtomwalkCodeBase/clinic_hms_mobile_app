@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -85,13 +86,13 @@ export function DoctorDetailScreen() {
                 <View style={styles.filterRow}>
                   <Pressable
                     onPress={() => setAvailableOnly(false)}
-                    style={[styles.filterBtn, !availableOnly && { backgroundColor: theme.fill }]}
+                    style={[styles.filterBtn, !availableOnly && { backgroundColor: ACTION }]}
                   >
-                    <Text style={[styles.filterBtnText, !availableOnly && { color: theme.on }]}>All slots</Text>
+                    <Text style={[styles.filterBtnText, !availableOnly && { color: ON_ACTION }]}>All slots</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => setAvailableOnly(true)}
-                    style={[styles.filterBtn, styles.filterBtnOutline, availableOnly && { backgroundColor: theme.bg, borderColor: theme.fill }]}
+                    style={[styles.filterBtn, styles.filterBtnOutline, availableOnly && { backgroundColor: theme.bg, borderColor: ACTION }]}
                   >
                     {availableOnly && <Check size={11} color={theme.text} strokeWidth={3} />}
                     <Text style={[styles.filterBtnText, styles.filterBtnTextOutline, availableOnly && { color: theme.text }]}>
@@ -125,11 +126,11 @@ export function DoctorDetailScreen() {
                               style={[
                                 styles.slot,
                                 !s.available && styles.slotBooked,
-                                active && { backgroundColor: theme.fill, borderColor: theme.fill },
-                                !active && s.available && { borderColor: theme.fill },
+                                active && { backgroundColor: ACTION, borderColor: ACTION },
+                                !active && s.available && { borderColor: NEUTRAL.border },
                               ]}
                             >
-                              <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: theme.on }]}>
+                              <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: ON_ACTION }]}>
                                 {s.time}
                               </Text>
                               {!s.available && <Text style={styles.slotBookedCaption}>BOOKED</Text>}
@@ -147,11 +148,11 @@ export function DoctorDetailScreen() {
                 })()}
                 <View style={styles.legendRow}>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { borderColor: theme.fill, backgroundColor: NEUTRAL.surface }]} />
+                    <View style={[styles.legendSwatch, { borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface }]} />
                     <Text style={styles.legendText}>Available</Text>
                   </View>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { backgroundColor: theme.fill, borderColor: theme.fill }]} />
+                    <View style={[styles.legendSwatch, { backgroundColor: ACTION, borderColor: ACTION }]} />
                     <Text style={styles.legendText}>Selected</Text>
                   </View>
                   {!availableOnly && (

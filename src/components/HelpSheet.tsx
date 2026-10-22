@@ -1,4 +1,5 @@
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
@@ -31,8 +32,8 @@ export function HelpSheet({ visible, onClose, items, title = "What you can do he
               </View>
             ))}
           </ScrollView>
-          <Pressable onPress={onClose} style={[styles.done, { backgroundColor: theme.fill }]}>
-            <Text style={[styles.doneText, { color: theme.on }]}>Got it</Text>
+          <Pressable onPress={onClose} style={[styles.done, { backgroundColor: ACTION }]}>
+            <Text style={[styles.doneText, { color: ON_ACTION }]}>Got it</Text>
           </Pressable>
         </View>
       </Pressable>

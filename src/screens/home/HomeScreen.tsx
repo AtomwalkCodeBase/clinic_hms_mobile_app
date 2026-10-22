@@ -9,7 +9,6 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CalendarDays, ClipboardList, FileText, QrCode, Bell, ChevronRight, Upload } from "lucide-react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { Pill, statusTone } from "@/components/Pill";
@@ -19,7 +18,8 @@ import { IconBadge } from "@/components/IconBadge";
 import { GadgetCard } from "@/components/GadgetCard";
 import type { LucideIcon } from "@/theme/icons";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
-import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP, HEADER_GRADIENT } from "@/theme/themes";
+import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP } from "@/theme/themes";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { getStats, getMyBookings, getNotifications, getProfile, getDocumentCounts } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
@@ -196,22 +196,15 @@ export function HomeScreen() {
           {/* Promoted out of the quick-access grid — booking is what this app
               is actually for, not one tile among several. */}
           <Pressable onPress={onBookVisit} style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.92 }]}>
-            <LinearGradient
-              colors={HEADER_GRADIENT}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.bookGlow} pointerEvents="none" />
             <View style={styles.bookIcon}>
-              <CalendarDays size={22} color={ON_BRAND} strokeWidth={2.2} />
+              <CalendarDays size={22} color={ON_ACTION} strokeWidth={2.2} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.bookTitle}>Book an appointment</Text>
               <Text style={styles.bookSub}>Find a doctor and a slot</Text>
             </View>
             <View style={styles.bookArrow}>
-              <ChevronRight size={16} color={ON_BRAND} strokeWidth={2.4} />
+              <ChevronRight size={16} color={ON_ACTION} strokeWidth={2.4} />
             </View>
           </Pressable>
 
@@ -314,17 +307,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 14,
     marginBottom: 18,
-    shadowColor: BRAND_DEEP,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 6,
+    backgroundColor: ACTION,
   },
-  bookGlow: { position: "absolute", top: -30, right: -30, width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.14)" },
-  bookIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" },
-  bookTitle: { fontWeight: "700", fontSize: CARD_TEXT.title + 1, color: ON_BRAND },
-  bookSub: { fontSize: CARD_TEXT.meta, color: "rgba(4,38,28,0.75)", marginTop: 2 },
-  bookArrow: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" },
+  bookIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
+  bookTitle: { fontWeight: "700", fontSize: CARD_TEXT.title + 1, color: ON_ACTION },
+  bookSub: { fontSize: CARD_TEXT.meta, color: "rgba(255,255,255,0.8)", marginTop: 2 },
+  bookArrow: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
   remChev: { fontSize: 18, color: NEUTRAL.textMuted },
   sectionTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8, marginTop: 4 },
   grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 10, marginBottom: 4 },

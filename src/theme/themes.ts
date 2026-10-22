@@ -14,8 +14,9 @@ export const ON_BRAND = "#04261C";
 export const BRAND_TEXT = "#077A4B";
 export const BRAND_SOFT = "#96E4C4";
 export const BRAND_DEEP = "#0A8856";
-// Every green gradient runs from BRAND to the lighter BRAND_SOFT, left to right - never darker than the base.
-export const HEADER_GRADIENT = [BRAND, BRAND_SOFT] as const;
+// Headers run from a deeper green on the left to a lighter one on the right, under a glass highlight (GlassSheen).
+export const HEADER_GRADIENT = ["#058A5A", "#3DC690"] as const;
+export const HEADER_SHEEN = ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.34)", "rgba(255,255,255,0.08)"] as const;
 export const BRAND_TINT = "#E0F5EC";
 
 // The app's one accent colour: buttons, links, selected tabs and ticks. The brand mark (logo) is separate from this.
@@ -23,7 +24,7 @@ export const THEME: ThemeColors = { fill: BRAND, bg: BRAND_TINT, text: BRAND_TEX
 
 // The one solid colour of the status bar and of every header band under it (screens' `topColor`, MetalHero's top edge,
 // My Documents' header). Same value everywhere, so the status bar and the header read as one piece.
-export const HEADER_GREEN = BRAND;
+export const HEADER_GREEN = "#058A5A";
 
 export const NEUTRAL = {
   bg: "#F0F1F5",

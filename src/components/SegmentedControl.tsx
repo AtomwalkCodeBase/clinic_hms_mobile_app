@@ -1,6 +1,6 @@
 import { ScrollView, Pressable, Text, StyleSheet } from "react-native";
 import { NEUTRAL } from "@/theme/themes";
-import { useAppTheme } from "@/context/ThemeContext";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 
 export function SegmentedControl<T extends string>({
   options,
@@ -19,13 +19,12 @@ export function SegmentedControl<T extends string>({
   /** Bigger pills and text, for the main switch of a page (Upcoming / Past visits). */
   large?: boolean;
 }) {
-  const { theme } = useAppTheme();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.row}>
       {options.map((opt) => {
         const active = opt.key === value;
-        const fill = opt.color?.fill ?? theme.fill;
-        const on = opt.color?.on ?? theme.on;
+        const fill = opt.color?.fill ?? ACTION;
+        const on = opt.color?.on ?? ON_ACTION;
         return (
           <Pressable
             key={opt.key}

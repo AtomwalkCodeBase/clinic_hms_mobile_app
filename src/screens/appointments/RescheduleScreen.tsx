@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -110,10 +111,10 @@ export function RescheduleScreen() {
                 style={[
                   styles.slot,
                   !s.available && styles.slotDisabled,
-                  active && { backgroundColor: theme.fill, borderColor: theme.fill },
+                  active && { backgroundColor: ACTION, borderColor: ACTION },
                 ]}
               >
-                <Text style={[styles.slotText, !s.available && styles.slotTextDisabled, active && { color: theme.on }]}>
+                <Text style={[styles.slotText, !s.available && styles.slotTextDisabled, active && { color: ON_ACTION }]}>
                   {s.time}
                 </Text>
               </Pressable>

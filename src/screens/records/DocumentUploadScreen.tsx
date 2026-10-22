@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Animated, BackHandler } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -494,9 +495,9 @@ export function DocumentUploadScreen() {
                   onPress={() => setTab(t.key)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
-                  style={[styles.tabPill, { borderColor: on ? theme.fill : NEUTRAL.border, backgroundColor: on ? theme.fill : NEUTRAL.surface }]}
+                  style={[styles.tabPill, { borderColor: on ? ACTION : NEUTRAL.border, backgroundColor: on ? ACTION : NEUTRAL.surface }]}
                 >
-                  <Text style={[styles.tabText, { color: on ? theme.on : NEUTRAL.textPrimary }]} numberOfLines={1}>{t.label}</Text>
+                  <Text style={[styles.tabText, { color: on ? ON_ACTION : NEUTRAL.textPrimary }]} numberOfLines={1}>{t.label}</Text>
                 </Pressable>
               );
             })}

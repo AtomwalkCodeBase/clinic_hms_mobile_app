@@ -3,6 +3,7 @@ import { View, StyleSheet, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BackButton } from "@/components/IconButtons";
 import { HEADER_GRADIENT } from "@/theme/themes";
+import { GlassSheen } from "@/components/GlassSheen";
 
 // The brand mark stays a fixed dark green regardless of the user's chosen
 // accent theme (see theme/themes.ts) — this hero uses the same fixed
@@ -80,6 +81,7 @@ export function MetalHero({
           style={StyleSheet.absoluteFill}
         />
       )}
+      <GlassSheen />
       <Decoration />
       <View style={styles.content}>
         {!!onBack && (

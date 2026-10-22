@@ -7,6 +7,7 @@ import { FeedSkeleton, LaneChartSkeleton } from "@/components/health/ChartSkelet
 import { FloatingCard, type Anchor } from "@/components/health/FloatingCard";
 import { ChipRow, Legend, MarkDetail } from "@/components/health/JourneyBits";
 import { Marker } from "@/components/health/Marker";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { INK, MIN_TAP } from "@/components/health/journeyTheme";
 import { J } from "@/components/health/journeyStyles";
 import { formatRange, feedItems, groupByYear, visibleLanes, FEED_FILTERS, type FeedFilter, type FeedItem, type LaneModel, type Mark } from "@/utils/journey";
@@ -104,8 +105,8 @@ export function TimelineSection({
           const on = f.key === filter;
           return (
             <Pressable key={f.key} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => onFilter(f.key)}
-              style={[styles.chipBtn, on ? { backgroundColor: INK, borderColor: INK } : { backgroundColor: NEUTRAL.surface, borderColor: NEUTRAL.border }]}>
-              <Text style={{ fontSize: 13, color: on ? "#FFFFFF" : INK, fontWeight: on ? "700" : "400" }}>{f.label}</Text>
+              style={[styles.chipBtn, on ? { backgroundColor: ACTION, borderColor: ACTION } : { backgroundColor: NEUTRAL.surface, borderColor: NEUTRAL.border }]}>
+              <Text style={{ fontSize: 13, color: on ? ON_ACTION : INK, fontWeight: on ? "700" : "400" }}>{f.label}</Text>
             </Pressable>
           );
         })}

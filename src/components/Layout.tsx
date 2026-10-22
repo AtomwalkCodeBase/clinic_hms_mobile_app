@@ -7,6 +7,7 @@ import * as SystemUI from "expo-system-ui";
 import { BackButton } from "@/components/IconButtons";
 import { LinearGradient } from "expo-linear-gradient";
 import { HEADER_GREEN, HEADER_GRADIENT, NEUTRAL, ON_BRAND } from "@/theme/themes";
+import { GlassSheen } from "@/components/GlassSheen";
 import { useAppTheme } from "@/context/ThemeContext";
 import { TopProgressBar } from "@/components/TopProgressBar";
 
@@ -117,7 +118,10 @@ export function Screen({
     <View style={styles.safe}>
       <StatusBar style="dark" />
       {topColor === HEADER_GREEN ? (
-        <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ height: insets.top }} />
+        <View style={{ height: insets.top }}>
+          <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+          <GlassSheen />
+        </View>
       ) : (
         <View style={{ height: insets.top, backgroundColor: topColor }} />
       )}
@@ -164,6 +168,7 @@ export function HeaderBand({ children, color }: { children: React.ReactNode; col
   return (
     <View style={[styles.band, !!color && { backgroundColor: color }]}>
       {!color && <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />}
+      {!color && <GlassSheen />}
       {children}
     </View>
   );

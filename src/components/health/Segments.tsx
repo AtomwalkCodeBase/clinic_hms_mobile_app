@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { NEUTRAL } from "@/theme/themes";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { INK, MIN_TAP } from "./journeyTheme";
 
 type Option<T extends string> = { key: T; label: string };
@@ -15,8 +16,8 @@ export function PillTabs<T extends string>({ options, value, onChange, label }: 
         const on = o.key === value;
         return (
           <Pressable key={o.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => onChange(o.key)}
-            style={[styles.tab, on ? { backgroundColor: INK, borderColor: INK } : { backgroundColor: NEUTRAL.surface, borderColor: NEUTRAL.border }]}>
-            <Text style={[styles.tabText, { color: on ? "#FFFFFF" : INK }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{o.label}</Text>
+            style={[styles.tab, on ? { backgroundColor: ACTION, borderColor: ACTION } : { backgroundColor: NEUTRAL.surface, borderColor: NEUTRAL.border }]}>
+            <Text style={[styles.tabText, { color: on ? ON_ACTION : INK }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{o.label}</Text>
           </Pressable>
         );
       })}
