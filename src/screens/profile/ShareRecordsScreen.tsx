@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, TextInput, Share } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -270,9 +271,9 @@ export function ShareRecordsScreen() {
 
           <Text style={[styles.h, { marginTop: 18 }]}>2. Scan their screen &amp; confirm</Text>
           <Text style={styles.body}>A QR appears on the doctor's screen. Scan it and approve — no code to type.</Text>
-          <Pressable style={[styles.scanBtn, { backgroundColor: theme.fill }]} onPress={startScan}>
-            <ScanLine size={18} color={theme.on} />
-            <Text style={[styles.scanBtnText, { color: theme.on }]}>Scan to approve</Text>
+          <Pressable style={[styles.scanBtn, { backgroundColor: ACTION }]} onPress={startScan}>
+            <ScanLine size={18} color={ON_ACTION} />
+            <Text style={[styles.scanBtnText, { color: ON_ACTION }]}>Scan to approve</Text>
           </Pressable>
           <Pressable onPress={() => { setPairingInput(""); setPairingErr(""); setPhase("manual"); }} style={{ alignItems: "center", paddingVertical: 8 }}>
             <Text style={styles.cancel}>Can't scan? Enter the code from their screen</Text>

@@ -62,11 +62,14 @@ async function copyWithRetry(from: string, to: string, attempts = 6, delayMs = 2
  * the way cacheDirectory is, so staging here closes that window. Callers delete the staged copy
  * once the upload succeeds (see DocumentUploadContext.startUpload).
  */
-async function stageForUpload(sourceUri: string, name: string): Promise<string> {
+async function stageForUpload(sourceUri: string, name: string, index = 0): Promise<{ uri: string; size: number }> {
   await FileSystem.makeDirectoryAsync(UPLOAD_STAGING_DIR, { intermediates: true }).catch(() => {});
-  const dest = `${UPLOAD_STAGING_DIR}${Date.now()}-${name}`;
+  // The index keeps two same-named files picked in the same millisecond from overwriting each other.
+  const dest = `${UPLOAD_STAGING_DIR}${Date.now()}-${index}-${name}`;
   await copyWithRetry(sourceUri, dest);
-  return dest;
+  // The picker's own size is sometimes missing; the staged copy's size is the truth about what will be sent.
+  const info = await FileSystem.getInfoAsync(dest).catch(() => null);
+  return { uri: dest, size: info && info.exists ? info.size : 0 };
 }
 
 /**
@@ -94,12 +97,16 @@ export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
     copyToCacheDirectory: false,
   });
   if (result.canceled || !result.assets?.length) return [];
-  return Promise.all(result.assets.map(async (a) => {
+  const staged = await Promise.allSettled(result.assets.map(async (a, i) => {
     const rawName = a.name || "document";
     const mimeType = a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
-    const uri = await stageForUpload(a.uri, rawName);         // the raw name: a decoded "%2F" would turn into a path
-    return { uri, name: readableName(rawName), mimeType, size: a.size ?? 0 };
+    const copy = await stageForUpload(a.uri, rawName, i);      // the raw name: a decoded "%2F" would turn into a path
+    return { uri: copy.uri, name: readableName(rawName), mimeType, size: copy.size || a.size || 0 };
   }));
+  const files = staged.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  // One unreadable file must not lose the others; only when none could be read is it an error.
+  if (!files.length) throw new Error("Those files could not be read. Pick them again.");
+  return files;
 }
 
 /** Opens the photo library restricted to images. Returns null if the user cancels or denies permission. */
@@ -107,7 +114,7 @@ export async function pickImage(): Promise<PickedFile | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) return null;
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"],
     quality: 0.85,
   });
   if (result.canceled || !result.assets?.[0]) return null;
@@ -122,7 +129,7 @@ export async function pickImageFromCamera(): Promise<PickedFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) return null;
   const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"],
     quality: 0.85,
     allowsEditing: true,
     aspect: [1, 1],

@@ -23,7 +23,8 @@ function partition(files: UploadCandidate[]): { valid: UploadCandidate[]; skippe
   const skipped: SkippedFile[] = [];
   for (const f of files) {
     if (!ALLOWED_MIME.has(f.mimeType)) skipped.push({ name: f.name, reason: "Only PDF, JPG and PNG files are supported." });
-    else if (f.size > MAX_BYTES_PER_REQUEST) skipped.push({ name: f.name, reason: `${f.name} is too large to upload.` });
+    else if (f.size <= 0) skipped.push({ name: f.name, reason: "The file is empty (0 KB)." });
+    else if (f.size > MAX_BYTES_PER_REQUEST) skipped.push({ name: f.name, reason: "The file is larger than the 240 MB limit." });
     else valid.push(f);
   }
   return { valid, skipped };
@@ -168,7 +169,13 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
           : { ids: documentIds, patientAwpid, startedAt: Date.now() }));
         return { status: "started", mode, documentIds, skipped };
       } catch (err) {
-        return { status: "rejected", reason: apiErrorMessage(err, "Upload failed, try again."), unsent: valid.slice(sent) };
+        const reason = apiErrorMessage(err, "Upload failed, try again.");
+        // Earlier parts of a big upload may already be on the server; say so, so the patient does not send them twice.
+        return {
+          status: "rejected",
+          reason: sent ? `${sent} of ${valid.length} files were uploaded. The rest could not be: ${reason}` : reason,
+          unsent: valid.slice(sent),
+        };
       } finally {
         busyRef.current = false;
         setUploading(false);

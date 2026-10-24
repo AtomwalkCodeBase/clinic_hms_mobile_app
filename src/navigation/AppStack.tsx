@@ -15,9 +15,8 @@ import { DocumentUploadScreen } from "@/screens/records/DocumentUploadScreen";
 import { DocumentViewerScreen } from "@/screens/records/DocumentViewerScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { RescheduleScreen } from "@/screens/appointments/RescheduleScreen";
-import { VaccinationsScreen } from "@/screens/health/VaccinationsScreen";
+import { HealthJourneyScreen } from "@/screens/health/HealthJourneyScreen";
 import { AddVaccineScreen } from "@/screens/health/AddVaccineScreen";
-import { HealthTimelineScreen } from "@/screens/health/HealthTimelineScreen";
 import { HealthVisitsScreen } from "@/screens/health/HealthVisitsScreen";
 import { AddFamilyMemberScreen } from "@/screens/health/AddFamilyMemberScreen";
 import { PersonalDetailsScreen } from "@/screens/profile/PersonalDetailsScreen";
@@ -64,9 +63,8 @@ export function AppStack() {
       <Stack.Screen name="DocumentViewer" component={DocumentViewerScreen} options={{ presentation: "fullScreenModal", animation: "fade", contentStyle: { backgroundColor: "#0B0F14" } }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
-      <Stack.Screen name="Vaccinations" component={VaccinationsScreen} />
+      <Stack.Screen name="HealthJourney" component={HealthJourneyScreen} />
       <Stack.Screen name="AddVaccine" component={AddVaccineScreen} />
-      <Stack.Screen name="HealthTimeline" component={HealthTimelineScreen} />
       <Stack.Screen name="HealthVisits" component={HealthVisitsScreen} />
       <Stack.Screen name="AddFamilyMember" component={AddFamilyMemberScreen} />
       <Stack.Screen name="PersonalDetails" component={PersonalDetailsScreen} />

@@ -111,6 +111,13 @@ export function isLikelyNetworkError(err: unknown): boolean {
 export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
   const e = err as AxiosError<any>;
   const data = e?.response?.data;
+  // A rejected upload says why per file ("errors.files"); that is more useful than the general "nothing was saved".
+  const fileErrors = data?.errors?.files;
+  if (Array.isArray(fileErrors) && fileErrors.length) {
+    const lines = fileErrors.slice(0, 5).map((x: unknown) => (typeof x === "string" ? x : JSON.stringify(x)));
+    const more = fileErrors.length > 5 ? [`…and ${fileErrors.length - 5} more`] : [];
+    return [data?.message ?? "Upload rejected.", ...lines, ...more].join("\n");
+  }
   if (data?.message) return data.message;
   if (data?.error) return data.error;
   // DRF's own default error shapes — {detail: "..."} (permissions, 404,

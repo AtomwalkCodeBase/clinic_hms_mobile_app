@@ -10,7 +10,7 @@ import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import { Screen, EmptyState, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { Pill, statusTone, toneColor } from "@/components/Pill";
-import { SegmentedControl } from "@/components/SegmentedControl";
+import { SlidingTabs } from "@/components/SlidingTabs";
 import { SecondaryButton } from "@/components/Buttons";
 import { DetailSheet, DetailRow } from "@/components/DetailSheet";
 import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP, HEADER_GRADIENT } from "@/theme/themes";
@@ -156,14 +156,16 @@ export function AppointmentsScreen() {
       {!!offlineMsg && <ErrorBanner message={offlineMsg} />}
       {!!cancelMutation.error && <ErrorBanner message={apiErrorMessage(cancelMutation.error, "Couldn't cancel this appointment.")} />}
 
-      <SegmentedControl
+      <SlidingTabs
+        label="Visits"
+        look="large"
         options={[
           { key: "upcoming", label: "Upcoming" },
           { key: "past", label: "Past visits" },
         ]}
         value={segment}
         onChange={setSegment}
-        large
+        style={{ marginBottom: 12 }}
       />
 
       {shown.length === 0 ? (

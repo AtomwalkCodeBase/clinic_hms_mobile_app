@@ -1,8 +1,8 @@
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
-import { useAppTheme } from "@/context/ThemeContext";
 
 export interface ChoiceAction {
   label: string;
@@ -38,7 +38,6 @@ export function ChoiceSheet({
   large?: boolean;
   onClose: () => void;
 }) {
-  const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const isDismiss = (a: ChoiceAction) => !!a.cancel && /^(cancel|close)$/i.test(a.label.trim());
@@ -82,13 +81,13 @@ export function ChoiceSheet({
                 style={({ pressed }) => [
                   styles.opt,
                   large && styles.optLarge,
-                  a.primary && { backgroundColor: theme.fill, borderColor: theme.fill },
+                  a.primary && { backgroundColor: ACTION, borderColor: ACTION },
                   pressed && { opacity: 0.9 },
                 ]}
               >
-                <Text style={[styles.optLabel, large && styles.optLabelLarge, a.primary && { color: theme.on }]}>{a.label}</Text>
+                <Text style={[styles.optLabel, large && styles.optLabelLarge, a.primary && { color: ON_ACTION }]}>{a.label}</Text>
                 {!!a.sub && (
-                  <Text style={[styles.optSub, a.primary && { color: "rgba(4,38,28,0.75)" }]}>{a.sub}</Text>
+                  <Text style={[styles.optSub, a.primary && { color: "rgba(255,255,255,0.8)" }]}>{a.sub}</Text>
                 )}
               </Pressable>
             ),

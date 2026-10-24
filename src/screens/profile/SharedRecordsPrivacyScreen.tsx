@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronLeft, ChevronRight,
 } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
-import { SegmentedControl } from "@/components/SegmentedControl";
+import { SlidingTabs } from "@/components/SlidingTabs";
 import { ChoiceSheet, ChoiceAction } from "@/components/ChoiceSheet";
 import { FileItem, ViewButton, ShareToggle } from "@/components/FileItem";
 import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
@@ -379,7 +379,10 @@ export function SharedRecordsPrivacyScreen() {
               </View>
 
               {/* filters — navigate the list; broad rules (hide-all, sections, live category rules) live on the web privacy screen */}
-              <SegmentedControl
+              <SlidingTabs
+                label="Record type"
+                look="chips"
+                style={{ marginBottom: 12 }}
                 options={[
                   { key: "all", label: "All" },
                   { key: "lab_report", label: "Reports" },

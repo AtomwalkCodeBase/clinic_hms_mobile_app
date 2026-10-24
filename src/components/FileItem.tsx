@@ -144,13 +144,14 @@ export function ViewButton({ onPress }: { onPress: () => void }) {
 /** Bulk Upload: moves the file to "Ready to Submit". Same look as View. Greyed out until the file has a type. */
 export function ReadyButton({ onPress, enabled = true }: { onPress: () => void; enabled?: boolean }) {
   const color = enabled ? BRAND_TEXT : NEUTRAL.textMuted;
+  const line = enabled ? NEUTRAL.border : color;
   return (
     <Pressable
       onPress={onPress}
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel="Move to Ready to Submit"
-      style={[styles.outlineBtn, { borderColor: color }]}
+      style={[styles.outlineBtn, { borderColor: line }]}
     >
       <CheckCircle2 size={16} color={color} strokeWidth={2.3} />
       <Text style={[styles.outlineText, { color }]}>Ready to submit</Text>
@@ -202,9 +203,9 @@ const styles = StyleSheet.create({
   doctorMissing: { fontStyle: "italic", color: NEUTRAL.textMuted },
   editBtn: {
     flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: NEUTRAL.surface,
-    borderWidth: 1.2, borderColor: NEUTRAL.textPrimary, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5,
+    borderWidth: 1.2, borderColor: BRAND_TEXT, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5,
   },
-  editText: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary },
+  editText: { fontSize: 13, fontWeight: "700", color: BRAND_TEXT },
 
   whoText: { fontSize: 15.5, color: NEUTRAL.textSecondary, marginTop: 10 },
   whoName: { fontSize: 16.5, fontWeight: "800" },
@@ -219,6 +220,6 @@ const styles = StyleSheet.create({
   srcIcon: { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   srcValue: { fontSize: 16, fontWeight: "800", color: NEUTRAL.textPrimary },
 
-  outlineBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: BRAND_TEXT, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  outlineBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 7 },
   outlineText: { fontSize: 13, fontWeight: "800", color: BRAND_TEXT },
 });

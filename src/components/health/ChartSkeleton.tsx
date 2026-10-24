@@ -1,42 +1,80 @@
 import { StyleSheet, View } from "react-native";
 import { SkeletonBlock } from "@/components/Skeleton";
-import { CHART } from "./chartTheme";
+import { CARD } from "@/theme/cardSizes";
+import { NEUTRAL } from "@/theme/themes";
 
-// a touch darker than the shared placeholder so the shapes read on the chart's white and pale-grey rows
+// a touch darker than the shared placeholder so the shapes read on white
 const TONE = { backgroundColor: "#DDE5EE" };
 
-const LANE_H = 56;
-const LABEL_W = 100;
-const AXIS_W = 24;
+const MARKS = [[0.38, 0.72], [0.82], [0.12, 0.3, 0.55], [0.52], [0.28, 0.62], [0.7], [0.2, 0.8], [0.45]];
 
-type Mark = { at: number; bar?: number };
-const LANES: Mark[][] = [
-  [{ at: 0.38 }, { at: 0.72 }],
-  [{ at: 0.82 }],
-  [{ at: 0.12, bar: 0.74 }],
-  [{ at: 0.52 }],
-  [{ at: 0.28 }, { at: 0.62 }],
-];
-
-/** The timeline while it loads: the same frame as the chart (age row, one row per lane, a label at the left) with shimmering marks. */
-export function TimelineChartSkeleton() {
+/** The lane chart while it loads: a label and a few shimmering marks on every row, like the chart that replaces it. */
+export function LaneChartSkeleton({ rows = 6, compact = false }: { rows?: number; compact?: boolean }) {
+  const h = compact ? 40 : 46;
   return (
-    <View style={styles.frame}>
-      <View style={styles.axisRow}>
-        <View style={{ width: LABEL_W, paddingLeft: 12 }}><SkeletonBlock width={34} height={10} style={TONE} /></View>
-        <View style={styles.axisTicks}>
-          <SkeletonBlock width={42} height={10} style={TONE} />
-          <SkeletonBlock width={42} height={10} style={TONE} />
-          <SkeletonBlock width={42} height={10} style={TONE} />
+    <View accessibilityLabel="Loading the timeline">
+      {Array.from({ length: rows }).map((_, i) => (
+        <View key={i} style={[styles.lane, { height: h }, !compact && styles.laneRule]}>
+          <View style={{ width: compact ? 86 : 98 }}><SkeletonBlock width={`${60 + ((i * 13) % 30)}%`} height={10} style={TONE} /></View>
+          <View style={styles.marks}>
+            {MARKS[i % MARKS.length].map((at, k) => <SkeletonBlock key={k} width={16} height={16} radius={8} style={{ ...TONE, position: "absolute", left: `${at * 100}%` }} />)}
+          </View>
+        </View>
+      ))}
+      <View style={styles.axis}>
+        {[0, 1, 2].map((i) => <SkeletonBlock key={i} width={36} height={10} style={TONE} />)}
+      </View>
+    </View>
+  );
+}
+
+/** The growth chart while it loads: the expected-range band and a few dots. */
+export function GrowthChartSkeleton({ height = 230 }: { height?: number }) {
+  const plotH = height - 44;
+  const dots = [{ x: 0.06, y: 0.82 }, { x: 0.2, y: 0.66 }, { x: 0.36, y: 0.56 }, { x: 0.52, y: 0.46 }, { x: 0.7, y: 0.38 }, { x: 0.86, y: 0.3 }];
+  return (
+    <View style={{ height }} accessibilityLabel="Loading the growth chart">
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <View style={{ width: 36, justifyContent: "space-between", paddingVertical: 4, alignItems: "flex-start" }}>
+          {[0, 1, 2, 3].map((i) => <SkeletonBlock key={i} width={20} height={10} style={TONE} />)}
+        </View>
+        <View style={{ flex: 1, height: plotH }}>
+          <SkeletonBlock height={plotH * 0.5} radius={6} style={{ backgroundColor: "#E4ECF6", position: "absolute", left: 0, right: 0, top: plotH * 0.18 }} />
+          {dots.map((d, i) => <SkeletonBlock key={i} width={18} height={18} radius={9} style={{ position: "absolute", left: `${d.x * 100}%`, top: d.y * plotH, backgroundColor: "#CBD6E2" }} />)}
         </View>
       </View>
-      {LANES.map((marks, i) => (
-        <View key={i} style={[styles.lane, { backgroundColor: i % 2 ? "#FFFFFF" : "#F6F8FA" }]}>
-          <View style={{ width: LABEL_W, paddingLeft: 12 }}><SkeletonBlock width={i % 2 ? 56 : 70} height={12} style={TONE} /></View>
-          <View style={styles.track}>
-            {marks.map((m, k) => m.bar
-              ? <SkeletonBlock key={k} width={`${m.bar * 100}%`} height={16} radius={8} style={{ ...TONE, position: "absolute", left: `${m.at * 100}%`, top: (LANE_H - 16) / 2 }} />
-              : <SkeletonBlock key={k} width={18} height={18} radius={9} style={{ ...TONE, position: "absolute", left: `${m.at * 100}%`, top: (LANE_H - 18) / 2 }} />)}
+      <View style={[styles.axis, { paddingLeft: 36 }]}>
+        {[0, 1, 2].map((i) => <SkeletonBlock key={i} width={40} height={10} style={TONE} />)}
+      </View>
+    </View>
+  );
+}
+
+/** The summary tiles at the top of the overview while they load. */
+export function TilesSkeleton() {
+  return (
+    <View style={styles.tiles}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={styles.tile}>
+          <SkeletonBlock width="55%" height={16} style={TONE} />
+          <SkeletonBlock width="85%" height={10} style={{ ...TONE, marginTop: 8 }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Three timeline cards while the list loads. */
+export function FeedSkeleton() {
+  return (
+    <View>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={styles.feed}>
+          <SkeletonBlock width={12} height={12} radius={6} style={TONE} />
+          <View style={styles.feedCard}>
+            <SkeletonBlock width="45%" height={10} style={TONE} />
+            <SkeletonBlock width="70%" height={14} style={{ ...TONE, marginTop: 8 }} />
+            <SkeletonBlock width="55%" height={10} style={{ ...TONE, marginTop: 8 }} />
           </View>
         </View>
       ))}
@@ -44,36 +82,37 @@ export function TimelineChartSkeleton() {
   );
 }
 
-const DOTS = [{ x: 0.2, y: 0.62 }, { x: 0.5, y: 0.5 }, { x: 0.78, y: 0.4 }];
-
-/** The growth chart while it loads: the two axes, a shimmering expected-range band and three shimmering dots. */
-export function GrowthChartSkeleton({ height = 280 }: { height?: number }) {
-  const plotH = height - 64;
+/** The vaccines tab while it loads: the summary card and a few age-group rows. */
+export function VaccinesSkeleton() {
   return (
-    <View style={{ height }}>
-      <View style={{ flexDirection: "row", marginTop: 34 }}>
-        <View style={{ width: AXIS_W, height: plotH, justifyContent: "space-between", alignItems: "flex-end", paddingRight: 8 }}>
-          {[0, 1, 2, 3].map((i) => <SkeletonBlock key={i} width={16} height={10} style={TONE} />)}
-        </View>
-        <View style={[styles.plot, { height: plotH }]}>
-          <SkeletonBlock height={plotH * 0.5} radius={4} style={{ ...TONE, backgroundColor: "#E4ECF6", position: "absolute", left: 0, right: 0, top: plotH * 0.18 }} />
-          {DOTS.map((d, i) => (
-            <SkeletonBlock key={i} width={22} height={22} radius={11} style={{ position: "absolute", left: `${d.x * 100}%`, top: d.y * plotH, backgroundColor: "#CBD6E2" }} />
-          ))}
+    <View>
+      <View style={styles.card}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <SkeletonBlock width={64} height={64} radius={32} style={TONE} />
+          <View style={{ flex: 1 }}>
+            <SkeletonBlock width="80%" height={16} style={TONE} />
+            <SkeletonBlock width="60%" height={10} style={{ ...TONE, marginTop: 8 }} />
+          </View>
         </View>
       </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-around", marginLeft: AXIS_W, marginTop: 10 }}>
-        {[0, 1, 2].map((i) => <SkeletonBlock key={i} width={40} height={10} style={TONE} />)}
-      </View>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={[styles.card, { marginTop: 8 }]}>
+          <SkeletonBlock width="40%" height={14} style={TONE} />
+          <SkeletonBlock width="75%" height={10} style={{ ...TONE, marginTop: 8 }} />
+        </View>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: { borderRadius: 12, overflow: "hidden", borderWidth: 1, borderColor: CHART.grid },
-  axisRow: { flexDirection: "row", alignItems: "center", height: 38, backgroundColor: "#F0F3F6" },
-  axisTicks: { flex: 1, flexDirection: "row", justifyContent: "space-around" },
-  lane: { flexDirection: "row", alignItems: "center", height: LANE_H },
-  track: { flex: 1, height: LANE_H },
-  plot: { flex: 1, borderLeftWidth: 1.6, borderBottomWidth: 1.6, borderColor: CHART.label },
+  lane: { flexDirection: "row", alignItems: "center" },
+  laneRule: { borderBottomWidth: 1, borderBottomColor: "#E3E9ED" },
+  marks: { flex: 1, height: 20, justifyContent: "center" },
+  axis: { flexDirection: "row", justifyContent: "space-around", paddingTop: 8 },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tile: { width: "48.5%", backgroundColor: NEUTRAL.surface, borderRadius: 14, padding: 10 },
+  feed: { flexDirection: "row", gap: 12, marginBottom: 8, alignItems: "flex-start" },
+  feedCard: { flex: 1, backgroundColor: NEUTRAL.surface, borderRadius: 14, padding: 12 },
+  card: { backgroundColor: NEUTRAL.surface, borderRadius: CARD.radius, padding: 12 },
 });

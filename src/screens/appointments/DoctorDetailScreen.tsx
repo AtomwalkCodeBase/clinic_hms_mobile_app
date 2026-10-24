@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
-import { Check } from "lucide-react-native";
 import { Screen, BackHeader, ErrorBanner, SectionTitle, EmptyState } from "@/components/Layout";
 import { PrimaryButton } from "@/components/Buttons";
-import { SegmentedControl } from "@/components/SegmentedControl";
+import { SlidingTabs } from "@/components/SlidingTabs";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getDoctorDetail, getSlots } from "@/api/portal";
@@ -69,36 +69,28 @@ export function DoctorDetailScreen() {
 
           <View style={{ alignSelf: "stretch" }}>
             <SectionTitle>Choose a date</SectionTitle>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <SegmentedControl
-                options={dateOptions}
-                value={selectedDate}
-                onChange={(d) => { setSelectedDate(d); setSelectedTime(null); }}
-              />
-            </ScrollView>
+            <SlidingTabs
+              label="Date"
+              look="chips"
+              options={dateOptions}
+              value={selectedDate}
+              onChange={(d) => { setSelectedDate(d); setSelectedTime(null); }}
+              style={{ marginBottom: 12 }}
+            />
           </View>
 
           <View style={{ alignSelf: "stretch" }}>
             <View style={styles.slotHeaderRow}>
               <SectionTitle>Choose a time slot</SectionTitle>
               {slots.length > 0 && (
-                <View style={styles.filterRow}>
-                  <Pressable
-                    onPress={() => setAvailableOnly(false)}
-                    style={[styles.filterBtn, !availableOnly && { backgroundColor: theme.fill }]}
-                  >
-                    <Text style={[styles.filterBtnText, !availableOnly && { color: theme.on }]}>All slots</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setAvailableOnly(true)}
-                    style={[styles.filterBtn, styles.filterBtnOutline, availableOnly && { backgroundColor: theme.bg, borderColor: theme.fill }]}
-                  >
-                    {availableOnly && <Check size={11} color={theme.text} strokeWidth={3} />}
-                    <Text style={[styles.filterBtnText, styles.filterBtnTextOutline, availableOnly && { color: theme.text }]}>
-                      Available only
-                    </Text>
-                  </Pressable>
-                </View>
+                <SlidingTabs
+                  label="Slots to show"
+                  look="small"
+                  options={[{ key: "all", label: "All slots" }, { key: "free", label: "Available only" }]}
+                  value={availableOnly ? "free" : "all"}
+                  onChange={(k) => setAvailableOnly(k === "free")}
+                  style={styles.filterRow}
+                />
               )}
             </View>
             {slotsLoading ? (
@@ -125,11 +117,11 @@ export function DoctorDetailScreen() {
                               style={[
                                 styles.slot,
                                 !s.available && styles.slotBooked,
-                                active && { backgroundColor: theme.fill, borderColor: theme.fill },
-                                !active && s.available && { borderColor: theme.fill },
+                                active && { backgroundColor: ACTION, borderColor: ACTION },
+                                !active && s.available && { borderColor: NEUTRAL.border },
                               ]}
                             >
-                              <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: theme.on }]}>
+                              <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: ON_ACTION }]}>
                                 {s.time}
                               </Text>
                               {!s.available && <Text style={styles.slotBookedCaption}>BOOKED</Text>}
@@ -147,11 +139,11 @@ export function DoctorDetailScreen() {
                 })()}
                 <View style={styles.legendRow}>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { borderColor: theme.fill, backgroundColor: NEUTRAL.surface }]} />
+                    <View style={[styles.legendSwatch, { borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface }]} />
                     <Text style={styles.legendText}>Available</Text>
                   </View>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { backgroundColor: theme.fill, borderColor: theme.fill }]} />
+                    <View style={[styles.legendSwatch, { backgroundColor: ACTION, borderColor: ACTION }]} />
                     <Text style={styles.legendText}>Selected</Text>
                   </View>
                   {!availableOnly && (
@@ -216,11 +208,7 @@ const styles = StyleSheet.create({
   feeLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
   feeValue: { fontSize: 17, fontWeight: "800" },
   slotHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  filterRow: { flexDirection: "row", gap: 6 },
-  filterBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: NEUTRAL.surfaceAlt },
-  filterBtnOutline: { backgroundColor: NEUTRAL.surface, borderWidth: 1.5, borderColor: NEUTRAL.border },
-  filterBtnText: { fontSize: 10.5, fontWeight: "700", color: NEUTRAL.textSecondary },
-  filterBtnTextOutline: { color: NEUTRAL.textSecondary },
+  filterRow: { width: 170 },
   hiddenHint: { fontSize: 10, color: NEUTRAL.textMuted, marginTop: -2, marginBottom: 8 },
   slotsLoading: { fontSize: 12, color: NEUTRAL.textMuted, marginTop: 4, marginBottom: 8 },
   slotGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },

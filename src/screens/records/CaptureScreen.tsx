@@ -126,22 +126,33 @@ export function CaptureScreen() {
   };
 
   const uploadAll = useCallback(async () => {
-    if (shots.length === 0) return;
+    if (shots.length === 0 || capturing) return;
+    setCapturing(true);                                // a second tap while the photos are being moved would move them twice
     setError("");
+    // The photos are moved one by one; if one fails, the tray must still point at where every photo is now.
+    const current = [...shots];
+    const candidates: UploadCandidate[] = [];
     try {
-      const candidates = await Promise.all(shots.map((shotUri, i) => shotToCandidate(shotUri, i)));
+      for (let i = 0; i < current.length; i++) {
+        const candidate = await shotToCandidate(current[i], i);
+        candidates.push(candidate);
+        current[i] = candidate.uri;
+      }
       const outcome = queueUpload(candidates, uploadMode, patientAwpid);
       if (outcome.status !== "queued") {
         setError(outcome.reason);
-        setShots(candidates.map((c) => c.uri));       // the photos were moved to their upload names: keep the tray in step
+        setShots(current);
         return;
       }
       setShots([]);
       leaveAfterUpload();
     } catch {
+      setShots(current);
       setError("Couldn't prepare your photos for upload. Please try again.");
+    } finally {
+      setCapturing(false);
     }
-  }, [shots, queueUpload, uploadMode, patientAwpid, leaveAfterUpload]);
+  }, [shots, capturing, queueUpload, uploadMode, patientAwpid, leaveAfterUpload]);
 
   const switchMode = (m: Mode) => {
     if (m === mode) return;

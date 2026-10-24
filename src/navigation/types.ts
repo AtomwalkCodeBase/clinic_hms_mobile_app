@@ -54,9 +54,9 @@ export type AppStackParamList = {
   Reschedule: { bookingId: number; hospitalId: number; doctorId: number; doctorName: string; hospitalName: string; patientName: string };
   // Only the Health tab's header takes the family member's colour; the screens below always use the app theme.
   // headerColor / headerOn: the selected family member's colour for the header band only (Health tab sets them)
-  Vaccinations: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
+  // The form for adding a vaccine from the card; opened from the Vaccines tab of the Health journey.
   AddVaccine: { patientAwpid?: string; patientName: string };
-  HealthTimeline: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
+  HealthJourney: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
   HealthVisits: { patientAwpid?: string; patientName: string; headerColor?: string; headerOn?: string };
   AddFamilyMember: { member?: import("@/api/types").FamilyMember } | undefined;
   PersonalDetails: undefined;

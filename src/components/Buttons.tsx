@@ -1,14 +1,8 @@
 import { Pressable, Text, View, StyleSheet, ActivityIndicator, ViewStyle } from "react-native";
 import type { LucideIcon } from "@/theme/icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { HEADER_GRADIENT } from "@/theme/themes";
+import { BRAND_TEXT, NEUTRAL } from "@/theme/themes";
+import { ACTION, ON_ACTION, BUTTON_RADIUS, DANGER_LINE } from "@/theme/buttons";
 import { useAppTheme } from "@/context/ThemeContext";
-
-// A diagonal highlight overlaid on the flat theme fill — the same layered
-// technique MetalHero/IconBadge use for a glossy/metallic look — without
-// needing a bespoke gradient per accent color (theme.fill is a single hex,
-// user-switchable across 5 accents; this works on top of any of them).
-const GLOSS = ["rgba(255,255,255,0.35)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0)"] as const;
 
 interface ButtonProps {
   label: string;
@@ -20,44 +14,37 @@ interface ButtonProps {
   compact?: boolean;
 }
 
+/** The main button of a screen: flat action green with white text. A caller may pass its own backgroundColor (the red of a destructive confirm). */
 export function PrimaryButton({ label, onPress, loading, disabled, style, compact, icon: Icon }: ButtonProps & { icon?: LucideIcon }) {
-  const { theme } = useAppTheme();
-  // style may carry a caller-supplied backgroundColor (e.g. the danger-red
-  // override in ConfirmDialog) — honor it as the gloss's base instead of
-  // always forcing the theme accent underneath.
   const flatStyle = StyleSheet.flatten([style]) as { backgroundColor?: string } | undefined;
-  const baseColor = flatStyle?.backgroundColor || theme.fill;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.base,
-        styles.primaryShadow,
         compact && styles.compact,
-        { backgroundColor: baseColor, shadowColor: theme.text, opacity: disabled ? 0.5 : pressed ? 0.9 : 1, overflow: "hidden" },
+        { backgroundColor: flatStyle?.backgroundColor || ACTION, opacity: disabled ? 0.5 : pressed ? 0.9 : 1 },
         style,
       ]}
     >
-      {!flatStyle?.backgroundColor && (
-        <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
-      )}
-      <LinearGradient colors={GLOSS} locations={[0, 0.45, 1]} start={{ x: 0.1, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
       {loading ? (
-        <ActivityIndicator color={theme.on} size={compact ? "small" : undefined} />
+        <ActivityIndicator color={ON_ACTION} size={compact ? "small" : undefined} />
       ) : (
         <View style={styles.content}>
-          {Icon && <Icon size={compact ? 14 : 17} color={theme.on} strokeWidth={2.2} />}
-          <Text style={[styles.label, compact && styles.compactLabel, { color: theme.on }]}>{label}</Text>
+          {Icon && <Icon size={compact ? 14 : 17} color={ON_ACTION} strokeWidth={2.2} />}
+          <Text style={[styles.label, compact && styles.compactLabel, { color: ON_ACTION }]}>{label}</Text>
         </View>
       )}
     </Pressable>
   );
 }
 
+/** The quieter button: white with a thin line and green text (red for a destructive action). */
 export function SecondaryButton({ label, onPress, loading, disabled, style, danger, compact, color: colorOverride, icon: Icon }: ButtonProps & { danger?: boolean; color?: string; icon?: LucideIcon }) {
-  const { theme, neutral } = useAppTheme();
-  const color = danger ? neutral.danger : colorOverride || theme.text;
+  const { neutral } = useAppTheme();
+  const color = danger ? neutral.danger : colorOverride || BRAND_TEXT;
+  const line = danger ? DANGER_LINE : colorOverride || NEUTRAL.border;
   return (
     <Pressable
       onPress={onPress}
@@ -66,7 +53,7 @@ export function SecondaryButton({ label, onPress, loading, disabled, style, dang
         styles.base,
         styles.outline,
         compact && styles.compact,
-        { borderColor: color, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
+        { borderColor: line, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
         style,
       ]}
     >
@@ -86,25 +73,19 @@ const styles = StyleSheet.create({
   content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   base: {
     paddingVertical: 13,
-    borderRadius: 24,
+    borderRadius: BUTTON_RADIUS,
     alignItems: "center",
     justifyContent: "center",
-  },
-  primaryShadow: {
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
-    elevation: 3,
   },
   compact: {
     paddingVertical: 7,
     paddingHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: 12,
     alignSelf: "flex-start",
   },
   outline: {
     borderWidth: 1,
-    backgroundColor: "transparent",
+    backgroundColor: NEUTRAL.surface,
   },
   label: {
     fontWeight: "600",

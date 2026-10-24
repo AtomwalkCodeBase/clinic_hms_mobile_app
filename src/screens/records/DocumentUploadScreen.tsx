@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SlidingTabs } from "@/components/SlidingTabs";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Animated, BackHandler } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -483,23 +484,17 @@ export function DocumentUploadScreen() {
 
           {/* the two lists, and the type filter, in one row */}
           <View style={styles.tabsRow}>
-            {([
-              { key: "review" as Tab, label: `All files (${inReview.length})` },
-              { key: "ready" as Tab, label: `Ready to Submit (${ready.length})` },
-            ]).map((t) => {
-              const on = t.key === tab;
-              return (
-                <Pressable
-                  key={t.key}
-                  onPress={() => setTab(t.key)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                  style={[styles.tabPill, { borderColor: on ? theme.fill : NEUTRAL.border, backgroundColor: on ? theme.fill : NEUTRAL.surface }]}
-                >
-                  <Text style={[styles.tabText, { color: on ? theme.on : NEUTRAL.textPrimary }]} numberOfLines={1}>{t.label}</Text>
-                </Pressable>
-              );
-            })}
+            <SlidingTabs
+              label="Files"
+              look="chips"
+              scroll={false}
+              options={[
+                { key: "review" as Tab, label: `All files (${inReview.length})` },
+                { key: "ready" as Tab, label: `Ready to Submit (${ready.length})` },
+              ]}
+              value={tab}
+              onChange={setTab}
+            />
             <View style={{ flex: 1 }} />
             {tabList.length > 0 && (
               <FilterPill
@@ -628,8 +623,6 @@ export function DocumentUploadScreen() {
 const styles = StyleSheet.create({
   submit: { paddingVertical: 8, marginBottom: 10 },
   tabsRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", rowGap: 8, gap: 8, marginBottom: 12 },
-  tabPill: { paddingHorizontal: 13, minHeight: 38, justifyContent: "center", borderRadius: 20, borderWidth: 1 },
-  tabText: { fontSize: 13.5, fontWeight: "700" },
   sub: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
   link: { fontSize: CARD_TEXT.meta, fontWeight: "600" },
   hint: { fontSize: 12.5, color: NEUTRAL.warning, backgroundColor: NEUTRAL.warningBg, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10, overflow: "hidden" },

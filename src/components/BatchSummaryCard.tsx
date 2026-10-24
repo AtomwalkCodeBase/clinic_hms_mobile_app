@@ -22,8 +22,8 @@ function DocIllustration({ color }: { color: string }) {
 }
 
 /**
- * The header of the Bulk Upload screen once the files have been read: "Classification complete" and one sentence that
- * says what was found, each type in its own colour ("We found 3 prescriptions, 2 lab reports and 1 bill.").
+ * The header of the Bulk Upload screen once the files have been read: "Classification complete" and the count of each type
+ * found, each in its own colour ("3 prescriptions, 2 lab reports, 1 bill").
  */
 export function BatchSummaryCard({ counts }: { counts: { code: string; count: number }[] }) {
   const { theme } = useAppTheme();
@@ -36,14 +36,12 @@ export function BatchSummaryCard({ counts }: { counts: { code: string; count: nu
           <Text style={styles.title}>Classification complete</Text>
         </View>
         <Text style={styles.sentence}>
-          We found{" "}
           {counts.map((c, i) => {
             const s = docTypeStyle(c.code);
-            const last = i === counts.length - 1;
             return (
               <Text key={c.code}>
                 <Text style={{ color: s.ink, fontWeight: "800" }}>{c.count} {c.count === 1 ? s.singular : s.plural}</Text>
-                {last ? "." : i === counts.length - 2 ? " and " : ", "}
+                {i < counts.length - 1 ? ", " : ""}
               </Text>
             );
           })}

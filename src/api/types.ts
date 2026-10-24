@@ -354,24 +354,70 @@ export interface HealthSummary {
 }
 
 // The pediatric health endpoints (apps/documents/views_timeline.py). They return raw objects, not the {success,data} envelope.
-export type TimelineSeverity = "NORMAL" | "MILD" | "ABNORMAL" | "CRITICAL";
+type TimelineSeverity = "NORMAL" | "MILD" | "ABNORMAL" | "CRITICAL";
+
+interface TimelineEvent {
+  id?: number;
+  date: string;
+  severity: TimelineSeverity;
+  document_id: number | null;
+  text: string;
+  verified: boolean;
+  age_label: string;
+}
 
 export interface TimelineEpisode {
+  key: string;
   start: string;
   end: string | null;
+  last_seen: string;
   peak_severity: TimelineSeverity;
   peak_severity_label: string;
   onset_age: string;
   event_count: number;
+  document_ids: number[];
+  is_provisional: boolean;
+  events: TimelineEvent[];
+}
+
+/** Why a condition is marked "happens often". The server also sends a clinician hint; the app never shows it. */
+interface TimelineRecurrence {
+  group: string;
+  label: string;
+  is_recurrent: boolean;
+  triggered_on: string | null;
+  rule: { min_count: number; window_months: number } | null;
+  episodes_total: number;
+  episodes_last_12m: number;
+  context: string | null;
+  episode_keys: string[];
+}
+
+interface GrowthPointTimeline { date: string; age_months: number; value: number; z: number | null; percentile: number | null; flag: string | null; document_id: number | null }
+interface GrowthAlert { from: string; to: string; z_from: number; z_to: number; drop: number }
+
+export interface HospitalItem {
+  kind: "ADMISSION" | "LAB";
+  start: string;
+  end: string | null;
+  ward?: string;
+  reason?: string;
+  analyte?: string;
+  value?: number;
+  direction?: string;
+  is_critical: boolean;
+  label: string;
+  age_label: string;
+  document_id: number | null;
 }
 
 export type TimelineLane =
-  | { id: string; type: "birth"; label: string; items: { gestation_weeks: number | null; birth_weight_kg: number | null; nicu_admission: boolean; nicu_days: number | null; preterm: boolean }[] }
-  | { id: string; type: "growth"; label: string; series: Record<string, { date: string; value: number; percentile: number | null; flag: string | null }[]>; alerts: { from: string; to: string; drop: number }[] }
+  | { id: string; type: "birth"; label: string; items: { date: string; gestation_weeks: number | null; birth_weight_kg: number | null; nicu_admission: boolean; nicu_days: number | null; preterm: boolean; document_id: number | null }[] }
+  | { id: string; type: "growth"; label: string; series: Record<string, GrowthPointTimeline[]>; alerts: GrowthAlert[] }
   | { id: string; type: "immunization"; label: string; items: ImmunizationRow[] }
-  | { id: string; type: "chronic"; label: string; episode: TimelineEpisode & { events: { date: string; severity: TimelineSeverity; text: string; age_label: string }[] } }
-  | { id: string; type: "acute"; label: string; is_recurrent: boolean; episodes: TimelineEpisode[] }
-  | { id: string; type: "hospital"; label: string; items: { kind: "ADMISSION" | "LAB"; start: string; end: string | null; ward?: string; reason?: string; analyte?: string; value?: number; direction?: string; is_critical: boolean; label: string; age_label: string }[] };
+  | { id: string; type: "chronic"; label: string; episode: TimelineEpisode }
+  | { id: string; type: "acute"; label: string; is_recurrent: boolean; recurrence: TimelineRecurrence | null; episodes: TimelineEpisode[] }
+  | { id: string; type: "hospital"; label: string; items: HospitalItem[] };
 
 export interface HealthTimeline {
   patient: { dob: string; sex: string; age_label: string; uses_corrected_age: boolean };
@@ -389,7 +435,7 @@ export interface HealthTimeline {
 
 export type GrowthIndicator = "weight_kg" | "height_cm" | "head_circ_cm";
 
-export interface GrowthReading {
+interface GrowthReading {
   date: string;
   age_months: number;
   value: number;
@@ -405,7 +451,7 @@ export interface GrowthSeries {
   points: GrowthReading[];
 }
 
-export type ImmunizationStatus = "GIVEN" | "OVERDUE" | "DUE" | "UPCOMING" | "SCHEDULED";
+type ImmunizationStatus = "GIVEN" | "OVERDUE" | "DUE" | "UPCOMING" | "SCHEDULED";
 
 export interface ImmunizationRow {
   code: string;
@@ -425,6 +471,8 @@ export interface Immunization {
   summary: { given: number; overdue: number; due: number; upcoming: number; coverage_pct: number | null };
   rows: ImmunizationRow[];
   next_due: ImmunizationRow | null;
+  /** card entries the schedule could not match (e.g. a vaccine that is not on it); the clinic checks them */
+  unresolved?: { vaccine_text: string; id: number | null }[];
   source: string;
 }
 

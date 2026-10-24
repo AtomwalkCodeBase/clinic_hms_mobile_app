@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated, useWindowDimensions } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
@@ -7,8 +7,12 @@ import * as SystemUI from "expo-system-ui";
 import { BackButton } from "@/components/IconButtons";
 import { LinearGradient } from "expo-linear-gradient";
 import { HEADER_GREEN, HEADER_GRADIENT, NEUTRAL, ON_BRAND } from "@/theme/themes";
+import { GlassSheen } from "@/components/GlassSheen";
 import { useAppTheme } from "@/context/ThemeContext";
 import { TopProgressBar } from "@/components/TopProgressBar";
+
+/** How close to the bottom (in pixels) a scroll counts as "near the end". */
+const NEAR_END_PX = 700;
 
 export function Screen({
   children,
@@ -23,6 +27,7 @@ export function Screen({
   header,
   pinnedBelow,
   stickyHeaderIndices,
+  onNearEnd,
 }: {
   children: React.ReactNode;
   /** A block pinned at the top while `children` scroll beneath it. Pull-to-refresh lives up here: pulling the pinned
@@ -68,6 +73,9 @@ export function Screen({
    * routine refresh never covers or blanks real content. See
    * useRefreshOnFocus and TopProgressBar. */
   backgroundLoading?: boolean;
+  /** Called when the scroll gets within about a screen of the bottom (and when the content is too short to scroll), so a long
+   * list can add its next batch. */
+  onNearEnd?: () => void;
 }) {
   const Body = scroll ? ScrollView : View;
   const insets = useSafeAreaInsets();
@@ -103,6 +111,17 @@ export function Screen({
     }, [topColor])
   );
 
+  const viewport = useRef(0);
+  const nearEnd = (contentHeight: number, offset: number) => {
+    if (onNearEnd && viewport.current > 0 && contentHeight - offset - viewport.current < NEAR_END_PX) onNearEnd();
+  };
+  const scrollProps = scroll && onNearEnd ? {
+    scrollEventThrottle: 100,
+    onLayout: (e: LayoutChangeEvent) => { viewport.current = e.nativeEvent.layout.height; },
+    onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => nearEnd(e.nativeEvent.contentSize.height, e.nativeEvent.contentOffset.y),
+    onContentSizeChange: (_w: number, h: number) => nearEnd(h, 0),
+  } : undefined;
+
   const refreshControl = onRefresh ? (
     <RefreshControl
       refreshing={!!refreshing}
@@ -117,7 +136,10 @@ export function Screen({
     <View style={styles.safe}>
       <StatusBar style="dark" />
       {topColor === HEADER_GREEN ? (
-        <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ height: insets.top }} />
+        <View style={{ height: insets.top }}>
+          <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+          <GlassSheen />
+        </View>
       ) : (
         <View style={{ height: insets.top, backgroundColor: topColor }} />
       )}
@@ -145,6 +167,7 @@ export function Screen({
             contentContainerStyle={scroll ? (header ? styles.scrollContentUnderHeader : styles.scrollContent) : undefined}
             refreshControl={header ? undefined : refreshControl}
             keyboardShouldPersistTaps={header ? "handled" : undefined}
+            {...scrollProps}
           >
             {children}
           </Body>
@@ -164,6 +187,7 @@ export function HeaderBand({ children, color }: { children: React.ReactNode; col
   return (
     <View style={[styles.band, !!color && { backgroundColor: color }]}>
       {!color && <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />}
+      {!color && <GlassSheen />}
       {children}
     </View>
   );

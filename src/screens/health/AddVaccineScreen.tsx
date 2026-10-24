@@ -13,7 +13,11 @@ import { addVaccine } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
 
-/** A parent adds a vaccine from the card: the name as written on it and the day it was given. */
+/**
+ * A parent adds a vaccine from the card: the name as written on it and the day it was given. A page of its own (fields
+ * at the top, Save at the bottom) so the keyboard never covers what is being typed. The server checks the name against
+ * the schedule and says so when it does not match.
+ */
 export function AddVaccineScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "AddVaccine">>();
@@ -29,7 +33,7 @@ export function AddVaccineScreen() {
   const save = useMutation({
     mutationFn: () => addVaccine(awpid!, { vaccine_text: vaccine.trim(), given_on: date }),
     onSuccess: () => {
-      // the Vaccinations list and the count on the Health tab read this key
+      // the Vaccines tab, the timeline and the count on the Health tab all read these keys
       queryClient.invalidateQueries({ queryKey: ["immunization", awpid] });
       queryClient.invalidateQueries({ queryKey: ["healthTimeline", awpid] });
       navigation.goBack();
@@ -41,7 +45,8 @@ export function AddVaccineScreen() {
   });
 
   const onSave = () => {
-    if (!vaccine.trim()) return setError("Enter the vaccine name.");
+    if (!awpid) return;
+    if (!vaccine.trim()) return setError("Enter the vaccine name as written on the card.");
     if (!date) return setError("Enter the date it was given.");
     setError("");
     save.mutate();
@@ -54,8 +59,8 @@ export function AddVaccineScreen() {
         Add a vaccine {patientName} has had, the way it is written on the card. A clinic confirms it later; until then it shows in the list.
       </Text>
       {!!error && <ErrorBanner message={error} />}
-      <TextField label="Vaccine, as written on the card" placeholder="e.g. Hexaxim 2" value={vaccine} onChangeText={setVaccine} />
-      <DateField label="Date given" value={date} onChange={setDate} maximumDate={new Date()} />
+      <TextField label="Vaccine, as written on the card" placeholder="e.g. Hexaxim 2" value={vaccine} onChangeText={(t) => { setVaccine(t); setError(""); }} />
+      <DateField label="Date given" value={date} onChange={(d) => { setDate(d); setError(""); }} maximumDate={new Date()} />
     </Screen>
   );
 }

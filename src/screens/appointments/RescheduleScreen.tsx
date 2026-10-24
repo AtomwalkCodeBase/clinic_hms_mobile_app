@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { ACTION, ON_ACTION } from "@/theme/buttons";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, BackHeader, ErrorBanner, SectionTitle, EmptyState } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { PrimaryButton } from "@/components/Buttons";
-import { SegmentedControl } from "@/components/SegmentedControl";
+import { SlidingTabs } from "@/components/SlidingTabs";
 import { NEUTRAL } from "@/theme/themes";
-import { useAppTheme } from "@/context/ThemeContext";
 import { getSlots, rescheduleBooking } from "@/api/portal";
 import { apiErrorMessage, isLikelyNetworkError } from "@/api/client";
 import { useNetwork } from "@/context/NetworkContext";
@@ -28,7 +28,6 @@ export function RescheduleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "Reschedule">>();
   const { bookingId, hospitalId, doctorId, doctorName, hospitalName, patientName } = route.params;
-  const { theme } = useAppTheme();
   const { isOffline } = useNetwork();
 
   const dateOptions = [0, 1, 2, 3, 4, 5, 6].map(dateOffsetLabel);
@@ -89,9 +88,7 @@ export function RescheduleScreen() {
       {!!error && <ErrorBanner message={error} />}
 
       <SectionTitle>Choose a new date</SectionTitle>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <SegmentedControl options={dateOptions} value={selectedDate} onChange={setSelectedDate} />
-      </ScrollView>
+      <SlidingTabs label="Date" look="chips" options={dateOptions} value={selectedDate} onChange={setSelectedDate} style={{ marginBottom: 12 }} />
 
       <SectionTitle>Choose a time slot</SectionTitle>
       {slotsLoading ? (
@@ -110,10 +107,10 @@ export function RescheduleScreen() {
                 style={[
                   styles.slot,
                   !s.available && styles.slotDisabled,
-                  active && { backgroundColor: theme.fill, borderColor: theme.fill },
+                  active && { backgroundColor: ACTION, borderColor: ACTION },
                 ]}
               >
-                <Text style={[styles.slotText, !s.available && styles.slotTextDisabled, active && { color: theme.on }]}>
+                <Text style={[styles.slotText, !s.available && styles.slotTextDisabled, active && { color: ON_ACTION }]}>
                   {s.time}
                 </Text>
               </Pressable>
