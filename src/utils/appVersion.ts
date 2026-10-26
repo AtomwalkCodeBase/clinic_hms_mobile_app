@@ -1,21 +1,14 @@
+import Constants from "expo-constants";
 import * as Application from "expo-application";
 
 /**
- * Human-facing version shown at the top of the sign-in / unlock screens, e.g. "v1.0.2".
+ * Human-facing version shown on the sign-in / unlock screens and at the top right of the Profile page, e.g. "v1.0.2".
  *
- * nativeApplicationVersion is the version *name*, from app.json's `version`. The build number (Android versionCode) is
- * deliberately not shown: EAS counts it per build and people only need the version name.
- *
- * It is null on web and in bare JS contexts; inside Expo Go it reports Expo Go's own number, not the app's. The label
- * just degrades gracefully.
+ * It is the app's own version from app.json (`version`), read from the app's configuration. The phone's native version is
+ * only a fallback: inside Expo Go that one is Expo Go's own number (e.g. 57.0.9), not this app's. The build number
+ * (Android versionCode) is deliberately not shown: EAS counts it per build and people only need the version name.
  */
 export const APP_VERSION_LABEL = (() => {
-  const name = Application.nativeApplicationVersion;
+  const name = Constants.expoConfig?.version ?? Application.nativeApplicationVersion;
   return name ? `v${name}` : "";
-})();
-
-/** The build number EAS gives each build (Android versionCode), for the profile page; empty where there is none (Expo Go, web). */
-export const APP_VERSION_CODE_LABEL = (() => {
-  const code = Application.nativeBuildVersion;
-  return code ? `Version code ${code}` : "";
 })();

@@ -13,7 +13,7 @@ import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
 import { MetalHero } from "@/components/MetalHero";
-import { APP_VERSION_CODE_LABEL } from "@/utils/appVersion";
+import { APP_VERSION_LABEL } from "@/utils/appVersion";
 import { ListRow } from "@/components/ListRow";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP } from "@/theme/themes";
@@ -158,7 +158,7 @@ export function ProfileScreen() {
         <>
           {profile && (
             <MetalHero style={styles.hero} curved onBack={() => tabs.navigate("Home")}>
-              {!!APP_VERSION_CODE_LABEL && <Text style={styles.versionCode}>{APP_VERSION_CODE_LABEL}</Text>}
+              {!!APP_VERSION_LABEL && <Text style={styles.versionCode}>{APP_VERSION_LABEL}</Text>}
               <View style={styles.heroContent}>
                 <View style={styles.avwrap}>
                   <View style={styles.avatar}>
@@ -309,7 +309,8 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   hero: { marginBottom: 28 },
-  versionCode: { position: "absolute", top: 10, right: 16, fontSize: 11, fontWeight: "600", color: ON_BRAND, opacity: 0.8 },
+  // the same height and top as the 32px back button beside it, with the text centred in that box so the two line up
+  versionCode: { position: "absolute", top: 0, right: 6, height: 32, textAlignVertical: "center", includeFontPadding: false, fontSize: 11, fontWeight: "600", color: ON_BRAND, opacity: 0.8 },
   heroContent: { alignItems: "center", paddingVertical: 4 },
   avwrap: { position: "relative", marginBottom: 8 },
   avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
