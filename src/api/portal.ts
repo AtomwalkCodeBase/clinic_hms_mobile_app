@@ -499,6 +499,14 @@ export async function getDocumentTypes(): Promise<DocumentTypeOption[]> {
   return res.data.data.types;
 }
 
+/** `skipped`: files the server left out (empty or over the size limit) with why; the others were saved. Absent on an older server. */
+export type UploadResult = {
+  batch_id: number;
+  mode: UploadMode;
+  documents: { id: number; file_name: string; processing_status: string }[];
+  skipped?: { name: string; reason: string }[];
+};
+
 /**
  * POST /api/v1/records/upload/ — multipart. "instant" is exactly one file (its own fast queue); "bulk" is up to 50.
  * The files are only sent here; reading them takes the server a little longer, so follow the new documents with the
@@ -509,12 +517,12 @@ export async function uploadDocuments(
   mode: UploadMode,
   patientAwpid?: string,
   onProgress?: (fraction: number) => void,
-): Promise<{ batch_id: number; mode: UploadMode; documents: { id: number; file_name: string; processing_status: string }[] }> {
+): Promise<UploadResult> {
   const form = new FormData();
   files.forEach((f) => form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any));
   form.append("mode", mode);
   if (patientAwpid) form.append("patient_awpid", patientAwpid);
-  const res = await api.post<Envelope<{ batch_id: number; mode: UploadMode; documents: { id: number; file_name: string; processing_status: string }[] }>>(
+  const res = await api.post<Envelope<UploadResult>>(
     "/records/upload/",
     form,
     {

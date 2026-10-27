@@ -129,6 +129,8 @@ export function apiErrorMessage(err: unknown, fallback = "Something went wrong. 
     const first = Object.values(data).flat()[0];
     if (typeof first === "string" && first) return first;
   }
+  // The web server in front of the app turns away a request that is too big with a plain HTML page, before the API sees it.
+  if (e?.response?.status === 413) return "That upload was too large for the server to accept. Try sending fewer or smaller files at once.";
   // No structured body (e.g. a 500 HTML page or a network failure) — say so,
   // with the status, instead of a generic "try again" that hides everything.
   if (e?.response?.status) return `${fallback} (server error ${e.response.status})`;

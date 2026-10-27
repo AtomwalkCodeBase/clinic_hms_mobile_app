@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { shrinkPhoto } from "@/utils/imageCompress";
 
 export interface PickedFile {
   uri: string;
@@ -101,7 +102,9 @@ export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
     const rawName = a.name || "document";
     const mimeType = a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
     const copy = await stageForUpload(a.uri, rawName, i);      // the raw name: a decoded "%2F" would turn into a path
-    return { uri: copy.uri, name: readableName(rawName), mimeType, size: copy.size || a.size || 0 };
+    let size = copy.size || a.size || 0;
+    if (mimeType === "image/jpeg" || mimeType === "image/png") size = await shrinkPhoto(copy.uri, mimeType, size);      // photos only: a PDF is sent as it is
+    return { uri: copy.uri, name: readableName(rawName), mimeType, size };
   }));
   const files = staged.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   // One unreadable file must not lose the others; only when none could be read is it an error.

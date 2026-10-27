@@ -5,7 +5,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
-import { CheckCircle2, Hand, ListChecks, MoreVertical, Pencil, RefreshCw, Stethoscope, Trash2, Undo2, Upload } from "lucide-react-native";
+import { CheckCircle2, FileWarning, Hand, ListChecks, MoreVertical, Pencil, RefreshCw, Stethoscope, Trash2, Undo2, Upload } from "lucide-react-native";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { BackHeader, EmptyState, ErrorBanner, Screen } from "@/components/Layout";
@@ -22,6 +22,8 @@ import { HelpButton } from "@/components/IconButtons";
 import { SelectionStrip } from "@/components/SelectionBar";
 import { UploadSheet } from "@/components/UploadSheet";
 import { UploadStages } from "@/components/UploadStages";
+import { SkippedFilesNotice } from "@/components/SkippedFilesNotice";
+import { LIMITS_LINE } from "@/utils/uploadLimits";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
 import { BatchSummaryCard } from "@/components/BatchSummaryCard";
@@ -82,6 +84,7 @@ type Notice = { title: string; message: string; tone: "success" | "error" } | nu
 
 const HELP: HelpItem[] = [
   { icon: Upload, title: "Upload button", text: "At the top. Opens a sheet where you choose files or take photos with the camera." },
+  { icon: FileWarning, title: "File limits", text: `${LIMITS_LINE}. Photos are made smaller automatically; PDFs are sent as they are. A file over the limit is not uploaded: the app tells you which one and why, and all your other files go through.` },
   { icon: ListChecks, title: "View", text: "Opens the file here in the app so you can check it is the right one. Pinch or double-tap to zoom." },
   { icon: CheckCircle2, title: "Ready to submit", text: "On a file's card: moves it to the Ready to Submit tab. It is greyed out until the file has a type." },
   { icon: Hand, title: "Press and hold a file", text: "Selects it. Select more, then move them to Ready to Submit." },
@@ -225,13 +228,6 @@ export function DocumentUploadScreen() {
         setNotice({ title: outcome.status === "busy" ? "Upload in progress" : "Can't upload", message: outcome.reason, tone: "error" });
       } else {
         setTracked(new Set(outcome.documentIds));
-      }
-      if (outcome.status === "started" && outcome.skipped.length) {
-        setNotice({
-          title: `${outcome.skipped.length} file${outcome.skipped.length === 1 ? "" : "s"} skipped`,
-          message: outcome.skipped.map((s) => `${s.name} — ${s.reason}`).join("\n"),
-          tone: "error",
-        });
       }
     } catch (err) {
       setNotice({ title: "Can't upload", message: apiErrorMessage(err, "Couldn't upload those files."), tone: "error" });
@@ -477,6 +473,9 @@ export function DocumentUploadScreen() {
               read={read}
             />
           )}
+
+          {/* files left out of the upload (over the size limit, wrong kind), each with why; stays until dismissed */}
+          <SkippedFilesNotice />
 
           {!!error && <ErrorBanner message={error} onRetry={() => pendingQ.refetch()} />}
 

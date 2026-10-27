@@ -4,6 +4,7 @@ import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { ReadyState, useDocumentUpload } from "@/context/DocumentUploadContext";
 import { CARD } from "@/theme/cardSizes";
+import { SkippedFilesNotice } from "@/components/SkippedFilesNotice";
 
 /**
  * A slim bar for files just sent, from the moment the upload starts: its progress while the photo or file goes up (the
@@ -11,7 +12,7 @@ import { CARD } from "@/theme/cardSizes";
  * bar while the server reads it, then "ready to review" with a Review button (the same message goes out as a
  * notification if the app is in the background). Renders nothing when there is nothing to report.
  */
-export function UploadStatusBar({ onReview }: { onReview: (ready: ReadyState) => void }) {
+function UploadProgress({ onReview }: { onReview: (ready: ReadyState) => void }) {
   const { theme } = useAppTheme();
   const { uploading, uploadPct, fileCount, failedUpload, retryFailedUpload, clearFailedUpload, reading, ready, clearReady } = useDocumentUpload();
 
@@ -75,6 +76,16 @@ export function UploadStatusBar({ onReview }: { onReview: (ready: ReadyState) =>
   }
 
   return null;
+}
+
+/** The files left out of the upload (if any), above the progress of the ones that went. */
+export function UploadStatusBar({ onReview }: { onReview: (ready: ReadyState) => void }) {
+  return (
+    <>
+      <SkippedFilesNotice />
+      <UploadProgress onReview={onReview} />
+    </>
+  );
 }
 
 const styles = StyleSheet.create({

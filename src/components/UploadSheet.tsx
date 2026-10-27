@@ -5,6 +5,7 @@ import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import type { LucideIcon } from "@/theme/icons";
+import { LIMITS_LINE } from "@/utils/uploadLimits";
 
 /**
  * "Add documents": the one place the patient chooses how to add files, from Bulk Upload (several files) and from the
@@ -40,6 +41,7 @@ export function UploadSheet({
           </View>
           <Text style={styles.lead}>{many ? "Upload multiple files or take photos." : "Upload a single file or take a photo."}</Text>
           <Text style={styles.sub}>We read them and suggest a type for each.</Text>
+          <Text style={styles.limits}>{LIMITS_LINE}. Photos are made smaller automatically.</Text>
           {row(Files, many ? "Choose files" : "Choose a file", onFiles)}
           {row(Camera, many?"Take photos":"Take photo or scan", onCamera)}
         </View>
@@ -59,7 +61,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 21, fontWeight: "800", color: NEUTRAL.textPrimary, textAlign: "center" },
   close: { position: "absolute", right: 0, top: 3 },
   lead: { fontSize: 15, fontWeight: "600", color: NEUTRAL.textPrimary, textAlign: "center", marginTop: 6 },
-  sub: { fontSize: 13.5, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 3, marginBottom: 18 },
+  sub: { fontSize: 13.5, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 3 },
+  limits: { fontSize: 12, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 6, marginBottom: 18 },
   // The icon sits in the same place on every option, the title is centred between it and an equal empty box.
   opt: {
     flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: NEUTRAL.border,

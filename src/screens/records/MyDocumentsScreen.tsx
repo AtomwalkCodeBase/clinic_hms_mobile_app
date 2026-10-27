@@ -6,7 +6,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonRow } from "@/components/Skeleton";
-import { Search, ChevronDown, AlertCircle, Lock, Clock, Eye, Download, MoreVertical, Stethoscope, RefreshCw, CalendarDays, Files, LayoutList, Users, Plus } from "lucide-react-native";
+import { Search, ChevronDown, AlertCircle, Lock, Clock, Eye, Download, MoreVertical, Stethoscope, RefreshCw, CalendarDays, Files, FileWarning, LayoutList, Users, Plus } from "lucide-react-native";
+import { LIMITS_LINE } from "@/utils/uploadLimits";
 import { Screen, EmptyState, ErrorBanner, HeaderBand } from "@/components/Layout";
 import { BackButton } from "@/components/IconButtons";
 import { SecondaryButton } from "@/components/Buttons";
@@ -66,6 +67,7 @@ const monthOf = (key: string) => Number(key.slice(5, 7)) - 1;
 
 const HELP: HelpItem[] = [
   { icon: Plus, title: "Add record", text: "The button at the bottom: upload a file or take a photo of a record." },
+  { icon: FileWarning, title: "File limits", text: `${LIMITS_LINE}. Photos are made smaller automatically; PDFs are sent as they are. A file over the limit is not uploaded: the app tells you why.` },
   { icon: CalendarDays, title: "By date", text: "One card for each day you uploaded files, with how many there are. Pick a year and a month at the top, tap a day to open its files." },
   { icon: Files, title: "All files", text: "Every file in one list, newest first. Narrow it by year and month, by type, or search." },
   { icon: LayoutList, title: "Change view", text: "In the three dots at the top: switch between By date and All files." },

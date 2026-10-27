@@ -9,6 +9,7 @@ import { AppStackParamList } from "@/navigation/types";
 import * as FileSystem from "expo-file-system/legacy";
 import { useDocumentUpload, UploadCandidate } from "@/context/DocumentUploadContext";
 import { setViewingPerson } from "@/utils/viewingPerson";
+import { shrinkPhoto } from "@/utils/imageCompress";
 
 type Mode = "qr" | "photo";
 
@@ -27,7 +28,8 @@ async function shotToCandidate(shotUri: string, i: number): Promise<UploadCandid
   const uri = `${dir}${name}`;
   await FileSystem.moveAsync({ from: shotUri, to: uri });
   const info = await FileSystem.getInfoAsync(uri);
-  return { name, mimeType: "image/jpeg", size: info.exists ? info.size : 0, uri };
+  const size = info.exists ? await shrinkPhoto(uri, "image/jpeg", info.size) : 0;      // a camera photo is several MB; the limit is per file
+  return { name, mimeType: "image/jpeg", size, uri };
 }
 
 /**
