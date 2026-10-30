@@ -16,6 +16,7 @@ import { LogoPill } from "@/components/Logo";
 import { MetalHero } from "@/components/MetalHero";
 import { IconBadge } from "@/components/IconBadge";
 import { GadgetCard } from "@/components/GadgetCard";
+import { FailedUploadBar } from "@/components/UploadStatusBar";
 import type { LucideIcon } from "@/theme/icons";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
 import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP } from "@/theme/themes";
@@ -165,6 +166,7 @@ export function HomeScreen() {
             </Text>
           </MetalHero>
 
+          <FailedUploadBar />
           {!!error && <ErrorBanner message={apiErrorMessage(error, "Couldn't load your dashboard.")} onRetry={refetchAll} />}
 
           <Pressable

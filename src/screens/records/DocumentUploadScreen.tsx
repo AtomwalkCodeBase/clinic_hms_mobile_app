@@ -23,6 +23,7 @@ import { SelectionStrip } from "@/components/SelectionBar";
 import { UploadSheet } from "@/components/UploadSheet";
 import { UploadStages } from "@/components/UploadStages";
 import { SkippedFilesNotice } from "@/components/SkippedFilesNotice";
+import { FailedUploadBar } from "@/components/UploadStatusBar";
 import { LIMITS_LINE } from "@/utils/uploadLimits";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
 import { useConfirmPicked } from "@/components/ConfirmPickedDialog";
@@ -490,6 +491,9 @@ export function DocumentUploadScreen() {
 
           {/* files left out of the upload (over the size limit, wrong kind), each with why; stays until dismissed */}
           <SkippedFilesNotice />
+
+          {/* an upload that did not get through, with a try-again button (also after the app was closed) */}
+          <FailedUploadBar />
 
           {!!error && <ErrorBanner message={error} onRetry={() => pendingQ.refetch()} />}
 

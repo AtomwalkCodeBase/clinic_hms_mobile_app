@@ -66,11 +66,18 @@ export function ConfirmPickedDialog({ visible, files, onChoose }: { visible: boo
           </ScrollView>
 
           {canUpload && (
-            <PrimaryButton
-              label={ok.length === 1 ? "Upload" : `Upload ${ok.length} files`}
-              onPress={() => onChoose("upload")}
-              style={styles.full}
-            />
+            <>
+              <View style={styles.keepOpen}>
+                <Text style={styles.keepOpenText}>
+                  Kindly keep the app open until the upload is complete. Once it is done, you can switch to other apps while your documents are read in the background.
+                </Text>
+              </View>
+              <PrimaryButton
+                label={ok.length === 1 ? "Upload" : `Upload ${ok.length} files`}
+                onPress={() => onChoose("upload")}
+                style={styles.full}
+              />
+            </>
           )}
           <View style={styles.row2}>
             <SecondaryButton label="Edit" onPress={() => onChoose("edit")} style={styles.half} />
@@ -124,6 +131,8 @@ const styles = StyleSheet.create({
   badHead: { fontSize: 12.5, fontWeight: "700", color: NEUTRAL.danger },
   badName: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textPrimary },
   badWhy: { fontSize: 12, color: NEUTRAL.danger, marginTop: 1, lineHeight: 16 },
+  keepOpen: { alignSelf: "stretch", backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12, marginBottom: 10 },
+  keepOpenText: { fontSize: 12.5, lineHeight: 17, color: NEUTRAL.textSecondary, textAlign: "center" },
   full: { alignSelf: "stretch", marginBottom: 8 },
   row2: { flexDirection: "row", gap: 10, alignSelf: "stretch" },
   half: { flex: 1 },

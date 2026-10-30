@@ -7,6 +7,7 @@ import { apiErrorMessage } from "@/api/client";
 import { notifyDocumentsReady } from "@/utils/pushNotifications";
 import { isReviewable } from "@/utils/reviewDraft";
 import { useAuth } from "@/context/AuthContext";
+import { clearPending, loadPending, savePending } from "@/utils/pendingUploads";
 import { MAX_FILES, MAX_TOTAL_BYTES, batchProblem, fileProblem } from "@/utils/uploadLimits";
 
 /** One file to upload — built straight from a picked file or a camera shot, already on disk. */
@@ -157,6 +158,21 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
     }
   }, [isAuthenticated]);
 
+  // An upload cut off by the app closing, a crash or the phone switching off left its files and a note behind: offer
+  // them again with the same "try again" bar a failed upload gets.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    loadPending().then((p) => {
+      if (cancelled || !p || busyRef.current) return;
+      const message = p.files.length === 1
+        ? "1 file was waiting to be sent when the app closed."
+        : `${p.files.length} files were waiting to be sent when the app closed.`;
+      setFailedUpload((current) => current ?? { files: p.files, mode: p.mode, patientAwpid: p.patientAwpid, message });
+    });
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
+
   /** Sends the files. Resolves when the server has them (or has refused them); nothing is read yet at that point. */
   const runUpload = useCallback(
     async (valid: UploadCandidate[], skipped: SkippedFile[], mode: UploadMode, patientAwpid?: string): Promise<StartUploadOutcome & { unsent?: UploadCandidate[] }> => {
@@ -166,6 +182,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       setFileCount(valid.length);
       let sent = 0;
       try {
+        await savePending({ files: valid, mode, patientAwpid });      // so a cut-off upload can be offered again after a restart
         const requests = toRequests(valid);
         const documentIds: number[] = [];
         const leftOut: SkippedFile[] = [];          // files the server itself refused (it checks the limits again)
@@ -180,6 +197,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
           // owns — safe to delete now that the server has the bytes.
           group.forEach((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {}));
         }
+        await clearPending();
         if (leftOut.length) setSkippedFiles((prev) => [...prev, ...leftOut]);
         queryClient.invalidateQueries({ queryKey: ["documents"] });
         queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
@@ -192,11 +210,13 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       } catch (err) {
         const reason = apiErrorMessage(err, "Upload failed, try again.");
         // Earlier parts of a big upload may already be on the server; say so, so the patient does not send them twice.
-        return {
-          status: "rejected",
-          reason: sent ? `${sent} of ${valid.length} files were uploaded. The rest could not be: ${reason}` : reason,
-          unsent: valid.slice(sent),
-        };
+        const unsent = valid.slice(sent);
+        const message = sent ? `${sent} of ${valid.length} files were uploaded. The rest could not be: ${reason}` : reason;
+        if (unsent.length) {
+          setFailedUpload({ files: unsent, mode, patientAwpid, message });      // the "try again" bar, from any screen
+          await savePending({ files: unsent, mode, patientAwpid });
+        }
+        return { status: "rejected", reason: message, unsent };
       } finally {
         busyRef.current = false;
         setUploading(false);
@@ -211,6 +231,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       const prepared = prepare(files, mode);
       if ("refused" in prepared) return prepared.refused;
       if (busyRef.current) return BUSY;
+      setFailedUpload(null);
       setSkippedFiles(prepared.skipped);
       return runUpload(prepared.valid, prepared.skipped, mode, patientAwpid);
     },
@@ -228,11 +249,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       if (busyRef.current) return BUSY;
       setFailedUpload(null);
       if (!keepSkipped) setSkippedFiles(prepared.skipped);      // a retry sends files already checked: what was skipped before still stands
-      runUpload(prepared.valid, prepared.skipped, mode, patientAwpid).then((outcome) => {
-        if (outcome.status === "rejected" && outcome.unsent?.length) {
-          setFailedUpload({ files: outcome.unsent, mode, patientAwpid, message: outcome.reason });
-        }
-      });
+      runUpload(prepared.valid, prepared.skipped, mode, patientAwpid);      // a failure puts up the "try again" bar itself
       return { status: "queued", skipped: prepared.skipped };
     },
     [runUpload],
@@ -246,6 +263,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const clearSkippedFiles = useCallback(() => setSkippedFiles([]), []);
   const clearFailedUpload = useCallback(() => {
     failedUpload?.files.forEach((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {}));
+    clearPending();
     setFailedUpload(null);
   }, [failedUpload]);
 

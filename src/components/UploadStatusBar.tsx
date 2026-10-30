@@ -12,9 +12,32 @@ import { SkippedFilesNotice } from "@/components/SkippedFilesNotice";
  * bar while the server reads it, then "ready to review" with a Review button (the same message goes out as a
  * notification if the app is in the background). Renders nothing when there is nothing to report.
  */
+function FailedCard() {
+  const { theme } = useAppTheme();
+  const { failedUpload, retryFailedUpload, clearFailedUpload } = useDocumentUpload();
+  if (!failedUpload) return null;
+  return (
+    <View style={[styles.card, styles.readyCard]}>
+      <View style={[styles.tick, { backgroundColor: NEUTRAL.danger }]}>
+        <X size={12} color="#fff" strokeWidth={3} />
+      </View>
+      <Text style={styles.readyText}>Upload didn't finish. {failedUpload.message}</Text>
+      <Pressable onPress={retryFailedUpload} hitSlop={8}><Text style={[styles.action, { color: theme.text }]}>Try again</Text></Pressable>
+      <Pressable onPress={clearFailedUpload} hitSlop={10} accessibilityLabel="Discard"><X size={15} color={NEUTRAL.textMuted} /></Pressable>
+    </View>
+  );
+}
+
+/** Only the "upload didn't finish, try again" card, for the screens a patient lands on first (Home, Bulk Upload). */
+export function FailedUploadBar() {
+  const { failedUpload, uploading } = useDocumentUpload();
+  if (!failedUpload || uploading) return null;
+  return <FailedCard />;
+}
+
 function UploadProgress({ onReview }: { onReview: (ready: ReadyState) => void }) {
   const { theme } = useAppTheme();
-  const { uploading, uploadPct, fileCount, failedUpload, retryFailedUpload, clearFailedUpload, reading, ready, clearReady } = useDocumentUpload();
+  const { uploading, uploadPct, fileCount, failedUpload, reading, ready, clearReady } = useDocumentUpload();
 
   if (uploading) {
     return (
@@ -29,18 +52,7 @@ function UploadProgress({ onReview }: { onReview: (ready: ReadyState) => void })
     );
   }
 
-  if (failedUpload) {
-    return (
-      <View style={[styles.card, styles.readyCard]}>
-        <View style={[styles.tick, { backgroundColor: NEUTRAL.danger }]}>
-          <X size={12} color="#fff" strokeWidth={3} />
-        </View>
-        <Text style={styles.readyText}>Upload didn't finish. {failedUpload.message}</Text>
-        <Pressable onPress={retryFailedUpload} hitSlop={8}><Text style={[styles.action, { color: theme.text }]}>Try again</Text></Pressable>
-        <Pressable onPress={clearFailedUpload} hitSlop={10} accessibilityLabel="Discard"><X size={15} color={NEUTRAL.textMuted} /></Pressable>
-      </View>
-    );
-  }
+  if (failedUpload) return <FailedCard />;
 
   if (reading) {
     const pct = Math.max(8, Math.round((reading.finished / reading.total) * 100));      // never an empty bar
