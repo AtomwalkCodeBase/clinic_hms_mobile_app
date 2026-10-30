@@ -11,7 +11,6 @@ import { useAppTheme } from "@/context/ThemeContext";
 import { book, getMyBookings } from "@/api/portal";
 import { apiErrorMessage, isLikelyNetworkError } from "@/api/client";
 import { useNetwork } from "@/context/NetworkContext";
-import { ConsentRequired } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CheckCircle2 } from "lucide-react-native";
@@ -29,7 +28,6 @@ export function ConfirmBookingScreen() {
   const { isOffline } = useNetwork();
 
   const [complaint, setComplaint] = useState(params.chiefComplaint || "");
-  const [consent, setConsent] = useState<ConsentRequired | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
@@ -61,7 +59,7 @@ export function ConfirmBookingScreen() {
     }
   };
 
-  const submit = async (withConsent: boolean) => {
+  const submit = async () => {
     setError("");
     setMaybeBooked(false);
     setConfirmVisible(false);
@@ -79,25 +77,14 @@ export function ConfirmBookingScreen() {
         chief_complaint: complaint.trim() || undefined,
         payment_preference: "pay_at_desk",
         patient_awpid: params.patientAwpid,
-        data_sharing_consent: withConsent || undefined,
       });
-      if ("consent_required" in result) {
-        // Already agreed once and the server is still asking — don't silently
-        // re-render the same consent screen (reads as "the button did nothing").
-        if (withConsent) {
-          setError("Couldn't record your consent. Please try again.");
-          return;
-        }
-        setConsent(result);
-      } else {
-        navigation.replace("BookingSuccess", {
-          hospital: result.hospital,
-          doctor: result.doctor,
-          date: result.date,
-          time: result.time || undefined,
-          tokenNumber: result.token_number,
-        });
-      }
+      navigation.replace("BookingSuccess", {
+        hospital: result.hospital,
+        doctor: result.doctor,
+        date: result.date,
+        time: result.time || undefined,
+        tokenNumber: result.token_number,
+      });
     } catch (err) {
       if (isLikelyNetworkError(err)) {
         // The connection dropped — the booking may still have been created
@@ -123,25 +110,6 @@ export function ConfirmBookingScreen() {
       setLoading(false);
     }
   };
-
-  if (consent) {
-    return (
-      <Screen>
-        <BackHeader title="Share your medical history?" onBack={() => setConsent(null)} />
-        {!!error && <ErrorBanner message={error} />}
-        <Text style={styles.consentMsg}>{consent.message}</Text>
-        <Card>
-          {consent.share_categories.map((c) => (
-            <Text key={c} style={styles.consentItem}>
-              • {c}
-            </Text>
-          ))}
-        </Card>
-        <PrimaryButton label="I agree, continue booking" onPress={() => submit(true)} loading={loading} style={{ marginBottom: 8 }} />
-        <SecondaryButton label="Cancel" onPress={() => navigation.goBack()} />
-      </Screen>
-    );
-  }
 
   return (
     <Screen>
@@ -197,7 +165,7 @@ export function ConfirmBookingScreen() {
         confirmLabel="Confirm booking"
         cancelLabel="Edit details"
         loading={loading}
-        onConfirm={() => submit(false)}
+        onConfirm={submit}
         onCancel={() => setConfirmVisible(false)}
       />
     </Screen>
@@ -223,6 +191,4 @@ const styles = StyleSheet.create({
   feeLabel: { fontSize: 11, fontWeight: "600", color: NEUTRAL.textSecondary },
   feeValue: { fontSize: 17, fontWeight: "800" },
   payNote: { fontSize: 11.5, color: NEUTRAL.textMuted, marginTop: 12, marginBottom: 16, lineHeight: 16 },
-  consentMsg: { fontSize: 13, color: NEUTRAL.textPrimary, marginBottom: 14, lineHeight: 19 },
-  consentItem: { fontSize: 12.5, color: NEUTRAL.textSecondary, marginBottom: 4 },
 });

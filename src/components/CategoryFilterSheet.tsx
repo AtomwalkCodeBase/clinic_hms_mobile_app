@@ -50,8 +50,11 @@ export function CategoryFilterSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close} statusBarTranslucent>
-      <Pressable style={styles.sheetBackdrop} onPress={close}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(24, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
+      <View style={styles.sheetBackdrop}>
+        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
+            touch first and blocks the list from scrolling. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: Math.max(24, insets.bottom + 12) }]}>
           <View style={styles.sheetGrab} />
           <View style={styles.sheetHead}>
             <Text style={styles.sheetTitle}>Filter by category</Text>
@@ -81,7 +84,7 @@ export function CategoryFilterSheet({
             <Text style={styles.sheetDoneText}>Done</Text>
           </Pressable>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

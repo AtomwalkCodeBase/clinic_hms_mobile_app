@@ -25,6 +25,8 @@ import { UploadStages } from "@/components/UploadStages";
 import { SkippedFilesNotice } from "@/components/SkippedFilesNotice";
 import { LIMITS_LINE } from "@/utils/uploadLimits";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
+import { useConfirmPicked } from "@/components/ConfirmPickedDialog";
+import { useUploadGuidelines } from "@/components/UploadGuidelinesModal";
 import { TypePickerSheet } from "@/components/TypePickerSheet";
 import { BatchSummaryCard } from "@/components/BatchSummaryCard";
 import { FilterPill, FilterSheet } from "@/components/TypeFilter";
@@ -40,7 +42,7 @@ import { dismissDocument, getFamily, getMyDocuments, retryDocument, submitDecisi
 import type { PatientDocument } from "@/api/types";
 import { buildDecisions, canSelect, currentType, isEdited, isReviewable, stageOf, typeCounts } from "@/utils/reviewDraft";
 import { cardDate } from "@/utils/documentLabels";
-import { pickDocuments } from "@/utils/fileHelpers";
+import { discardPicked, pickDocuments } from "@/utils/fileHelpers";
 import { AppStackParamList } from "@/navigation/types";
 
 const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);
@@ -108,6 +110,8 @@ export function DocumentUploadScreen() {
   // below, the review and the submit all follow it.
   const [patientAwpid, setPatientAwpid] = useState<string | undefined>(route.params?.patientAwpid);
   const who = useWhoIsThisFor(patientAwpid);
+  const { confirm: confirmPicked, dialog: confirmDialog } = useConfirmPicked();
+  const { ask: askGuidelines, dialog: guidelinesDialog } = useUploadGuidelines();
   const familyQ = useQuery({ queryKey: ["family"], queryFn: getFamily });
   // Who the files on this screen are for, shown on every card. (Chosen in "Who is this for?" when files are added, or
   // carried in from My Documents.)
@@ -214,10 +218,19 @@ export function DocumentUploadScreen() {
   // ── actions ────────────────────────────────────────────────────────────────
   async function addFiles() {
     try {
+      if (!(await askGuidelines(true))) return;
       const target = await who.ask();
       if (!target) return;
       setPatientAwpid(target.awpid);
-      const picked = await pickDocuments();
+      // Whatever is chosen is shown first: Upload sends it, Edit chooses again, Cancel sends nothing.
+      let picked = await pickDocuments();
+      while (picked.length) {
+        const choice = await confirmPicked(picked);
+        if (choice === "upload") break;
+        await discardPicked(picked);
+        if (choice === "cancel") return;
+        picked = await pickDocuments();
+      }
       if (!picked.length) return;
       const outcome = await startUpload(
         picked.map((f) => ({ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri })),
@@ -235,6 +248,7 @@ export function DocumentUploadScreen() {
   }
 
   async function takePhotos() {
+    if (!(await askGuidelines(true))) return;
     const target = await who.ask();
     if (!target) return;
     setPatientAwpid(target.awpid);
@@ -545,6 +559,8 @@ export function DocumentUploadScreen() {
       )}
 
       {who.sheet}
+      {confirmDialog}
+      {guidelinesDialog}
 
       <UploadSheet
         visible={uploadOpen}

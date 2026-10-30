@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Platform, Image, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image, ScrollView } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -10,12 +10,18 @@ import * as FileSystem from "expo-file-system/legacy";
 import { useDocumentUpload, UploadCandidate } from "@/context/DocumentUploadContext";
 import { setViewingPerson } from "@/utils/viewingPerson";
 import { shrinkPhoto } from "@/utils/imageCompress";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Mode = "qr" | "photo";
 
 // How many photos one bulk capture session holds before it makes you upload and
 // start again — keeps the tray manageable. Add Document (instant) takes exactly one.
 const MAX_SHOTS = 20;
+
+// The bottom bar holds the shutter: 16 of padding above it and the 66 px button. The system navigation bar (Android) or the home indicator
+// (iOS) sits below that, and its height is added from the screen's safe-area inset, so the shutter is never under it.
+const BAR_CONTENT = 16 + 66;
+const TRAY_HEIGHT = 8 + 68 + 8;                          // the strip of photo thumbnails above the bar: padding, thumbnail, padding
 
 // The camera already saves each photo as a file and hands back its path, and the upload is one multipart request built
 // straight from a file path, so the photo is never turned into text. It is only moved (instantly) from the camera's cache
@@ -48,6 +54,10 @@ export function CaptureScreen() {
   const uploadMode = route.params?.mode ?? "instant";
   const maxShots = uploadMode === "instant" ? 1 : MAX_SHOTS;
   const { queueUpload } = useDocumentUpload();
+  const insets = useSafeAreaInsets();
+  const bottomPad = insets.bottom + 14;                  // the space under the shutter, above the system bar
+  const barHeight = BAR_CONTENT + bottomPad;
+  const topInset = insets.top + 10;                      // below the status bar (clock, battery)
 
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
@@ -183,6 +193,7 @@ export function CaptureScreen() {
 
   const isQr = mode === "qr";
   const atLimit = shots.length >= maxShots;
+  const aboveBar = barHeight + (!isQr && shots.length > 0 ? TRAY_HEIGHT : 0);     // the free space for the guide and the hint: not under the bar or the tray
 
   return (
     <View style={styles.fill}>
@@ -195,7 +206,7 @@ export function CaptureScreen() {
       />
 
       {/* mode toggle (only Add Document can scan a QR) */}
-      {uploadMode === "instant" && <View style={styles.toggleWrap}>
+      {uploadMode === "instant" && <View style={[styles.toggleWrap, { top: topInset }]}>
         <View style={styles.toggle}>
           <Pressable style={[styles.toggleBtn, isQr && styles.toggleBtnOn]} onPress={() => switchMode("qr")}>
             <QrCode size={13} color={isQr ? "#111" : "#fff"} />
@@ -210,13 +221,12 @@ export function CaptureScreen() {
 
       {/* overlay differs by mode */}
       {isQr ? (
-        <View style={styles.overlay} pointerEvents="none">
+        <View style={[styles.overlay, { bottom: aboveBar }]} pointerEvents="none">
           <View style={styles.reticle} />
           <Text style={styles.hint}>Hold the hospital QR code inside the frame.</Text>
         </View>
       ) : (
-        <View style={styles.overlay} pointerEvents="none">
-          <View style={styles.pageGuide} />
+        <View style={[styles.overlay, { bottom: aboveBar }]} pointerEvents="none">
           <Text style={styles.hint}>
             {atLimit
               ? (uploadMode === "instant" ? "Got it — tap Upload." : `That's ${maxShots} pages — upload them, then keep going.`)
@@ -227,11 +237,11 @@ export function CaptureScreen() {
         </View>
       )}
 
-      <CloseButton variant="overlay" style={styles.close} onPress={() => navigation.goBack()} />
+      <CloseButton variant="overlay" style={[styles.close, { top: topInset }]} onPress={() => navigation.goBack()} />
 
       {/* photo-mode tray */}
       {!isQr && shots.length > 0 && (
-        <View style={styles.tray}>
+        <View style={[styles.tray, { bottom: barHeight }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trayRow}>
             {shots.map((shotUri, i) => (
               <View key={i} style={styles.thumbWrap}>
@@ -245,7 +255,7 @@ export function CaptureScreen() {
         </View>
       )}
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { height: barHeight, paddingBottom: bottomPad }]}>
         {isQr ? (
           <View style={styles.qrStatus}>
             <QrCode size={13} color="#fff" />
@@ -272,7 +282,7 @@ export function CaptureScreen() {
       </View>
 
       {!!error && (
-        <View style={styles.errBar}>
+        <View style={[styles.errBar, { bottom: barHeight + 10 }]}>
           <Text style={styles.errText}>{error}</Text>
         </View>
       )}
@@ -289,27 +299,26 @@ const styles = StyleSheet.create({
   permCancel: { paddingVertical: 8 },
   permCancelText: { color: "#bbb", fontSize: 13 },
 
-  toggleWrap: { position: "absolute", left: 0, right: 0, top: Platform.OS === "ios" ? 56 : 26, alignItems: "center" },
+  toggleWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   toggle: { flexDirection: "row", backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 999, padding: 3 },
   toggleBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 18, borderRadius: 999 },
   toggleBtnOn: { backgroundColor: "#fff" },
   toggleText: { color: "#fff", fontSize: 12.5, fontWeight: "600" },
   toggleTextOn: { color: "#111" },
 
-  overlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
+  overlay: { position: "absolute", top: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center" },
   reticle: { width: "64%", aspectRatio: 1, borderWidth: 3, borderColor: "rgba(255,255,255,0.95)", borderRadius: 20 },
-  pageGuide: { width: "82%", height: "56%", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.5)", borderRadius: 10, borderStyle: "dashed" },
   hint: { color: "#fff", fontSize: 12.5, textAlign: "center", marginTop: 18, paddingHorizontal: 36, lineHeight: 18 },
 
-  close: { position: "absolute", top: Platform.OS === "ios" ? 56 : 24, left: 18 },
+  close: { position: "absolute", left: 18 },
 
-  tray: { position: "absolute", left: 0, right: 0, bottom: Platform.OS === "ios" ? 132 : 120, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.4)" },
+  tray: { position: "absolute", left: 0, right: 0, paddingVertical: 8 },
   trayRow: { paddingHorizontal: 14, gap: 8 },
   thumbWrap: { width: 52, height: 68, borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.6)" },
   thumb: { width: "100%", height: "100%" },
   thumbX: { position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: 8, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
 
-  bottomBar: { position: "absolute", left: 0, right: 0, bottom: 0, paddingBottom: Platform.OS === "ios" ? 40 : 26, paddingTop: 16, paddingHorizontal: 20, minHeight: 96, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.35)" },
+  bottomBar: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 16, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", justifyContent: "center" },
   qrStatus: { flexDirection: "row", alignItems: "center", gap: 7 },
   qrStatusText: { color: "#fff", fontSize: 12, fontWeight: "600" },
 
@@ -322,6 +331,6 @@ const styles = StyleSheet.create({
   uploadBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#fff", borderRadius: 999, paddingVertical: 9, paddingHorizontal: 14 },
   uploadBtnText: { color: "#111", fontSize: 12.5, fontWeight: "700" },
 
-  errBar: { position: "absolute", left: 16, right: 16, bottom: 118, backgroundColor: "rgba(185,28,28,0.95)", borderRadius: 10, padding: 12 },
+  errBar: { position: "absolute", left: 16, right: 16, backgroundColor: "rgba(185,28,28,0.95)", borderRadius: 10, padding: 12 },
   errText: { color: "#fff", fontSize: 12.5, textAlign: "center" },
 });

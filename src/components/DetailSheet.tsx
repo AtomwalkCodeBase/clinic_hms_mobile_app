@@ -24,18 +24,21 @@ export function DetailSheet({
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
+      <View style={styles.backdrop}>
+        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
+            touch first and blocks the list from scrolling. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom + 12) }]}>
           <View style={styles.handle} />
           <View style={styles.headerRow}>
             <Text style={styles.title}>{title}</Text>
             <CloseButton onPress={onClose} />
           </View>
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} nestedScrollEnabled>
             {children}
           </ScrollView>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

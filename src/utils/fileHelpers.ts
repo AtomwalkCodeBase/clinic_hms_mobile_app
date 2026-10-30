@@ -5,6 +5,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { shrinkPhoto } from "@/utils/imageCompress";
+import { ALLOWED_MIME } from "@/utils/uploadLimits";
 
 export interface PickedFile {
   uri: string;
@@ -86,6 +87,11 @@ function readableName(name: string): string {
   }
 }
 
+/** Deletes the copies pickDocuments made, for files the patient decided not to upload. */
+export async function discardPicked(files: { uri: string }[]): Promise<void> {
+  await Promise.all(files.map((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {})));
+}
+
 export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
   // copyToCacheDirectory: false — DocumentPicker's own cache copy lands in the app's raw
   // context.cacheDir, not the per-experience sandboxed folder Expo Go's FileSystem module reads
@@ -93,7 +99,7 @@ export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
   // the bytes are genuinely there. Staging straight from the picker's original content:// URI into
   // our own documentDirectory (which IS in the sandboxed folder) avoids that mismatch entirely.
   const result = await DocumentPicker.getDocumentAsync({
-    type: ["application/pdf", "image/*"],
+    type: ALLOWED_MIME,          // exactly what the server accepts: other kinds (Word, HEIC, WebP) cannot be chosen
     multiple,
     copyToCacheDirectory: false,
   });

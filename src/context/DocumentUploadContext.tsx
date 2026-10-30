@@ -7,31 +7,36 @@ import { apiErrorMessage } from "@/api/client";
 import { notifyDocumentsReady } from "@/utils/pushNotifications";
 import { isReviewable } from "@/utils/reviewDraft";
 import { useAuth } from "@/context/AuthContext";
-import { MAX_FILE_BYTES, tooBigReason } from "@/utils/uploadLimits";
+import { MAX_FILES, MAX_TOTAL_BYTES, batchProblem, fileProblem } from "@/utils/uploadLimits";
 
 /** One file to upload — built straight from a picked file or a camera shot, already on disk. */
 export type UploadCandidate = { name: string; mimeType: string; size: number; uri: string };
 export type SkippedFile = { name: string; reason: string };
 
-// What the server accepts per request (apps/records/serializers.py): 50 files and 250 MB in total.
-const MAX_FILES_PER_REQUEST = 50;
-const MAX_BYTES_PER_REQUEST = 240 * 1024 * 1024;
-const ALLOWED_MIME = new Set(["application/pdf", "image/jpeg", "image/png"]);
+// What the server accepts per request (apps/documents/serializers.py); the numbers live in utils/uploadLimits.
+const MAX_FILES_PER_REQUEST = MAX_FILES;
+const MAX_BYTES_PER_REQUEST = MAX_TOTAL_BYTES;
 
-/** The server re-checks everything; this just gives an obviously bad file an instant, specific message. */
-function partition(files: UploadCandidate[]): { valid: UploadCandidate[]; skipped: SkippedFile[] } {
+/** The server re-checks everything; this just gives an obviously bad file an instant, specific message. `discarded` are the
+ * files themselves: they are never sent, so their copies on the phone are deleted by the caller. */
+function partition(files: UploadCandidate[]): { valid: UploadCandidate[]; skipped: SkippedFile[]; discarded: UploadCandidate[] } {
   const valid: UploadCandidate[] = [];
   const skipped: SkippedFile[] = [];
+  const discarded: UploadCandidate[] = [];
   for (const f of files) {
-    if (!ALLOWED_MIME.has(f.mimeType)) skipped.push({ name: f.name, reason: "Only PDF, JPG and PNG files are supported." });
-    else if (f.size <= 0) skipped.push({ name: f.name, reason: "The file is empty (0 KB)." });
-    else if (f.size > MAX_FILE_BYTES) skipped.push({ name: f.name, reason: tooBigReason(f.size) });
-    else valid.push(f);
+    const problem = fileProblem(f);
+    if (problem) {
+      skipped.push({ name: f.name, reason: problem });
+      discarded.push(f);
+    } else valid.push(f);
   }
-  return { valid, skipped };
+  return { valid, skipped, discarded };
 }
 
-/** Splits the files into requests the server will take: at most 50 files and 240 MB each. */
+/** Candidates are always our own staged copies (fileHelpers / CaptureScreen), never a path the picker still owns. */
+const deleteCopies = (files: UploadCandidate[]) => files.forEach((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {}));
+
+/** Splits the files into requests the server will take: at most the file count and total size it allows per request. */
 function toRequests(files: UploadCandidate[]): UploadCandidate[][] {
   const requests: UploadCandidate[][] = [];
   let current: UploadCandidate[] = [];
@@ -55,8 +60,9 @@ const BUSY = { status: "busy" as const, reason: "Still uploading your last files
 function prepare(
   allFiles: UploadCandidate[],
   mode: UploadMode,
-): { refused: { status: "rejected"; reason: string } } | { valid: UploadCandidate[]; skipped: SkippedFile[] } {
-  const { valid, skipped } = partition(allFiles);
+): { refused: { status: "rejected"; reason: string } } | { valid: UploadCandidate[]; skipped: SkippedFile[]; discarded: UploadCandidate[] } {
+  const { valid, skipped, discarded } = partition(allFiles);
+  deleteCopies(discarded);          // a file that will not be sent has no use on the phone
   if (valid.length === 0) {
     if (allFiles.length === 0) return { refused: { status: "rejected", reason: "No files selected." } };
     return {
@@ -68,10 +74,16 @@ function prepare(
       },
     };
   }
+  const together = batchProblem(valid);
+  if (together) {
+    deleteCopies(valid);
+    return { refused: { status: "rejected", reason: `${together} Upload fewer files at a time.` } };
+  }
   if (mode === "instant" && valid.length !== 1) {
+    deleteCopies(valid);
     return { refused: { status: "rejected", reason: "Add Document takes one file at a time. Use Bulk Upload for several." } };
   }
-  return { valid, skipped };
+  return { valid, skipped, discarded };
 }
 
 const IN_PROGRESS = new Set(["queued", "extracting", "classifying"]);

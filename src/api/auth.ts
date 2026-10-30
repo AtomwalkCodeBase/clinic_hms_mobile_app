@@ -5,7 +5,7 @@ import type { Envelope, LoginResponse } from "./types";
  * POST /api/v1/auth/login/patient/ — {mobile, password} accepts mobile, AWPID, or email.
  * Response is wrapped in the {success,message,data} envelope — confirmed against
  * PatientLoginView's `return success(data=_make_tokens(payload), ...)` in
- * apps/auth_app/views.py:290. data contains only {access, refresh}.
+ * core/auth/views.py:290. data contains only {access, refresh}.
  */
 export async function loginPatient(mobile: string, password: string) {
   const res = await api.post<Envelope<LoginResponse>>("/auth/login/patient/", { mobile, password });
@@ -19,7 +19,7 @@ export async function logout(refresh: string | null) {
 /**
  * POST /api/v1/auth/otp/request/ — {purpose, identifier} -> {channel, masked_identifier}
  * purpose="registration_patient" requires an email identifier — mobile OTP
- * isn't wired up yet (see apps/auth_app/otp_views.py's own comment: a paid
+ * isn't wired up yet (see core/auth/otp_views.py's own comment: a paid
  * SMS gateway isn't configured, email is free via the already-live SMTP).
  */
 export async function registerRequestOtp(email: string) {

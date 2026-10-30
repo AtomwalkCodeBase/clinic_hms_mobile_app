@@ -19,7 +19,7 @@ import { AuthStackParamList } from "@/navigation/types";
 // (not just "recommended") because the backend's registration OTP purpose
 // only accepts an email identifier — there's no mobile-OTP path (that
 // needs a paid SMS gateway that isn't wired up yet, see
-// apps/auth_app/otp_views.py) — so there is no account-creation path that
+// core/auth/otp_views.py) — so there is no account-creation path that
 // skips verification.
 type Step = "details" | "otp" | "password";
 

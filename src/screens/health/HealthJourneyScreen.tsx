@@ -138,7 +138,7 @@ export function HealthJourneyScreen() {
       onNearEnd={nearEnd}
     >
       {panes}
-      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} items={HELP} title="How to read this screen" large />
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} items={HELP} title="How to read this screen" />
       {switcher.sheet}
     </Screen>
   );

@@ -45,8 +45,11 @@ export function ChoiceSheet({
   const rest = actions.filter((a) => !isDismiss(a));
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(26, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
+      <View style={styles.backdrop}>
+        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
+            touch first and blocks the list from scrolling. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: Math.max(26, insets.bottom + 12) }]}>
           <View style={styles.grab} />
           <CloseButton
             onPress={() => {
@@ -94,7 +97,7 @@ export function ChoiceSheet({
           )}
           </ScrollView>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

@@ -1,12 +1,12 @@
 // Shapes mirror the real Django responses read directly from
-// apps/patients/portal_views.py and apps/auth_app/views.py — not guessed.
+// apps/patients/views.py and core/auth/views.py — not guessed.
 
 interface Tokens {
   access: string;
   refresh: string;
 }
 
-// Confirmed against _make_tokens() in apps/auth_app/views.py:46 — the
+// Confirmed against _make_tokens() in core/auth/views.py:46 — the
 // response body only ever contains the two tokens, wrapped in the
 // {success,message,data} envelope. user_id/email/full_name/awpid/role are
 // embedded as JWT *claims* inside the access token itself, not returned as
@@ -76,13 +76,6 @@ export interface Booking {
   patient_awpid: string | null;
 }
 
-export interface ConsentRequired {
-  consent_required: true;
-  hospital_name: string;
-  share_categories: string[];
-  message: string;
-}
-
 /* ── "Share Records" — patient side of the laptop flow ── */
 export interface RecordsShareCreated {
   token: string;
@@ -90,11 +83,6 @@ export interface RecordsShareCreated {
   link: string;
   status: string;
   window_hours: number;
-}
-export interface RecordsShareConsentPrompt {
-  consent_required: true;
-  share_categories: string[];
-  private_count: number;
 }
 export type RecordsShareScope = "all" | "default";
 export interface RecordsShareDecision {
@@ -165,7 +153,7 @@ export type DocumentTypeCode =
   | "prescription" | "lab_report" | "imaging_report" | "discharge_summary" | "consultation_note"
   | "medical_bill" | "vaccination_record" | "referral_letter" | "medical_certificate" | "other";
 
-/** queued -> extracting -> classifying -> completed | review_required | failed (apps/records/models.py). */
+/** queued -> extracting -> classifying -> completed | review_required | failed (apps/documents/models.py). */
 export type ProcessingStatus = "queued" | "extracting" | "classifying" | "completed" | "review_required" | "failed";
 
 export interface PatientDocument {
@@ -274,57 +262,6 @@ export interface Specialty {
   doctor_count: number;
 }
 
-interface LabReportItem {
-  parameter_name: string;
-  result_value: string;
-  unit: string;
-  reference_range: string;
-  is_abnormal: boolean;
-}
-
-export interface LabOrder {
-  id: number;
-  hospital_db: string;
-  hospital: string;
-  test_name: string;
-  price: string | null;
-  turnaround_hours: number;
-  status: "ordered" | "collected" | "processing" | "completed" | "cancelled";
-  patient_choice: "pending" | "in_house" | "outside";
-  payment_preference: string;
-  payment_status: "unpaid" | "pending_online" | "paid";
-  ordered_at: string;
-  report: {
-    id: number;
-    status: "pending" | "delivered";
-    result_summary: string;
-    has_file: boolean;
-    delivered_at: string | null;
-    items?: LabReportItem[];
-  } | null;
-  attached_document: { id: number; title: string; created_at: string } | null;
-  source_ref: string;
-}
-
-// PortalPrescriptionListView's shape — "every prescription any doctor has
-// written for this patient", resolved via the full Appointment ->
-// OPDEncounter -> Prescription chain (not narrowed to one encounter per
-// appointment the way PortalMyRecordsView's display records are), with the
-// same in-house/outside choice tracking LabOrder already has.
-export interface PrescriptionOrder {
-  id: string;
-  hospital_db: string;
-  hospital: string;
-  rx_number: string | null;
-  doctor_name: string | null;
-  status: "active" | "dispensed" | "expired";
-  patient_choice: "pending" | "in_house" | "outside";
-  payment_preference: string;
-  payment_status: string;
-  created_at: string;
-  items: { drug_name: string; dosage: string; frequency: string; quantity: number }[];
-}
-
 export interface Profile {
   awpid: string;
   full_name: string;
@@ -346,7 +283,6 @@ export interface Profile {
 export interface HealthSummary {
   patient_name: string;
   blood_group: string;
-  active_allergies: { substance: string; reaction: string; severity: string }[];
   active_diagnoses: { description: string; onset_date: string }[];
   last_visit: string | null;
   last_hospital: string | null;
@@ -472,7 +408,7 @@ export interface Immunization {
   rows: ImmunizationRow[];
   next_due: ImmunizationRow | null;
   /** card entries the schedule could not match (e.g. a vaccine that is not on it); the clinic checks them */
-  unresolved?: { vaccine_text: string; id: number | null }[];
+  unresolved?: { vaccine_text: string; immunization_record_id: number | null }[];
   source: string;
 }
 
@@ -485,7 +421,7 @@ export interface FamilyMember {
 }
 
 // Confirmed against PortalNotificationsView's actual return
-// (apps/patients/portal_views.py:2487) — "id" is a composite string
+// (apps/patients/views.py:2487) — "id" is a composite string
 // ("<hospital_db>:<log_id>" for real reminders, "vaccine:<label>" for
 // vaccination-due ones, which have no backing row and can't be marked read).
 export interface NotificationItem {

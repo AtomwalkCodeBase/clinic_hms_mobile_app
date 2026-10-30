@@ -9,25 +9,28 @@ import type { LucideIcon } from "@/theme/icons";
 export interface HelpItem { icon: LucideIcon; title: string; text: string }
 
 /** The sheet behind a screen's "?" button: what the screen can do, including the actions that aren't labelled. */
-export function HelpSheet({ visible, onClose, items, title = "What you can do here", large = false }: { visible: boolean; onClose: () => void; items: HelpItem[]; title?: string; large?: boolean }) {
+export function HelpSheet({ visible, onClose, items, title = "What you can do here" }: { visible: boolean; onClose: () => void; items: HelpItem[]; title?: string }) {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(18, insets.bottom + 10) }]} onStartShouldSetResponder={() => true}>
+      <View style={styles.backdrop}>
+        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
+            touch first and blocks the list from scrolling. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: Math.max(18, insets.bottom + 10) }]}>
           <View style={styles.handle} />
           <View style={styles.head}>
-            <Text style={[styles.title, large && styles.titleLarge]}>{title}</Text>
+            <Text style={styles.title}>{title}</Text>
             <CloseButton onPress={onClose} />
           </View>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.list} contentContainerStyle={styles.listContent} nestedScrollEnabled>
             {items.map((it) => (
               <View key={it.title} style={styles.item}>
-                <it.icon size={large ? 24 : 20} color={theme.fill} strokeWidth={2} style={{ marginTop: 1 }} />
+                <it.icon size={22} color={theme.fill} strokeWidth={2} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.itemTitle, large && styles.itemTitleLarge]}>{it.title}</Text>
-                  <Text style={[styles.itemText, large && styles.itemTextLarge]}>{it.text}</Text>
+                  <Text style={styles.itemTitle}>{it.title}</Text>
+                  <Text style={styles.itemText}>{it.text}</Text>
                 </View>
               </View>
             ))}
@@ -36,7 +39,7 @@ export function HelpSheet({ visible, onClose, items, title = "What you can do he
             <Text style={[styles.doneText, { color: ON_ACTION }]}>Got it</Text>
           </Pressable>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -46,13 +49,12 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 18, paddingTop: 8, maxHeight: "86%" },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: NEUTRAL.border, alignSelf: "center", marginBottom: 10 },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  title: { fontSize: 15.5, fontWeight: "700", color: NEUTRAL.textPrimary },
+  title: { fontSize: 16.5, fontWeight: "700", color: NEUTRAL.textPrimary },
+  list: { flexShrink: 1 },
+  listContent: { paddingBottom: 4 },
   item: { flexDirection: "row", gap: 12, marginBottom: 14 },
-  titleLarge: { fontSize: 18 },
-  itemTitleLarge: { fontSize: 16 },
-  itemTextLarge: { fontSize: 14.5, lineHeight: 21, marginTop: 3 },
-  itemTitle: { fontSize: 13.5, fontWeight: "600", color: NEUTRAL.textPrimary },
-  itemText: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 2, lineHeight: 17 },
+  itemTitle: { fontSize: 14.5, fontWeight: "600", color: NEUTRAL.textPrimary },
+  itemText: { fontSize: 13.5, color: NEUTRAL.textSecondary, marginTop: 2, lineHeight: 19 },
   done: { marginTop: 4, paddingVertical: 13, borderRadius: 24, alignItems: "center" },
   doneText: { fontSize: 14, fontWeight: "700" },
 });

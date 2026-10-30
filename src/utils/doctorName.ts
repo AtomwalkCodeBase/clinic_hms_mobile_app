@@ -1,7 +1,7 @@
 /**
  * The one rule for a doctor's name the patient types: letters and spaces, plus the apostrophe, hyphen and dot that real
  * names carry (D'Souza, Anand-Kumar, A. K. Rao), at most 60 characters. The "Dr." is never typed or stored: the app
- * writes it. The server applies the same rule (apps/records/doctor_names.py), so this is only the early warning.
+ * writes it. The server applies the same rule (apps/documents/doctor_names.py), so this is only the early warning.
  */
 export const DOCTOR_NAME_MAX = 60;
 

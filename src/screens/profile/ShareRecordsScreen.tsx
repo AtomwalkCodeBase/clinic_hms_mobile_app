@@ -6,7 +6,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { Clock, Check, ShieldCheck, ShieldAlert, ScanLine, Download, Link2 } from "lucide-react-native";
+import { Clock, ShieldCheck, ShieldAlert, ScanLine, Download, Link2 } from "lucide-react-native";
 import { CloseButton } from "@/components/IconButtons";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
@@ -14,11 +14,11 @@ import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import {
-  createRecordsShare, recordsShareDecision, getRecordsShareMine,
+  createRecordsShare, recordsShareDecision, getRecordsShareMine, getRecordsPrivacy,
   endRecordsShare, recordsShareDownloadDecision,
 } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { RecordsShareCreated, RecordsShareDecision, RecordsShareGrant, RecordsShareScope } from "@/api/types";
+import { RecordsShareCreated, RecordsShareGrant, RecordsShareScope } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { CARD, CARD_TEXT } from "@/theme/cardSizes";
 
@@ -62,8 +62,6 @@ export function ShareRecordsScreen() {
   const pairingRef = useRef("");
   const [pairingInput, setPairingInput] = useState("");
   const [pairingErr, setPairingErr] = useState("");
-  const [categories, setCategories] = useState<string[]>([]);
-  const [privateCount, setPrivateCount] = useState(0);
   // The one-time bulk choice made on the consent screen — defaults to
   // respecting the patient's standing privacy, same as every share before
   // this existed. "all" is an explicit opt-in, never the default.
@@ -89,6 +87,14 @@ export function ShareRecordsScreen() {
   useRefreshOnFocus(grantsQ);
   const grants = grantsQ.data ?? [];
   const loadGrants = grantsQ.refetch;
+
+  // How many records the patient keeps private: asked of the consent screen, so a doctor is never shown them by accident.
+  const privacyQ = useQuery({
+    queryKey: ["recordsPrivacyCount"],
+    queryFn: () => getRecordsPrivacy({ page: 1, page_size: 10 }),
+    enabled: phase === "consent",
+  });
+  const privateCount = privacyQ.data?.summary.private ?? 0;
 
   async function createLink() {
     setBusy(true); setError("");
@@ -125,7 +131,7 @@ export function ShareRecordsScreen() {
     if (pairing) {
       // Normal path — the QR carried the pairing, go straight to consent.
       pairingRef.current = pairing;
-      decide(true, false);
+      setPhase("consent");
     } else {
       // Old-style QR with no pairing — fall back to typing it.
       setPairingInput(""); setPairingErr("");
@@ -133,54 +139,25 @@ export function ShareRecordsScreen() {
     }
   }
 
-  // Fallback: the patient reads the 6-character code under the QR and types
-  // it. A wrong one is a 400 (with tries left); too many locks it (423); the
-  // doctor not having opened the link yet is 409.
-  async function submitManual() {
+  // Fallback: the patient reads the 6-character code under the QR and types it. The server checks it when access is
+  // allowed (a wrong one is a 400 with the tries left, too many lock it with a 423, the doctor not having opened
+  // the link yet is a 409 - see decide()).
+  function submitManual() {
     if (!created || pairingInput.length < 6) return;
     pairingRef.current = pairingInput.toUpperCase();
-    setBusy(true); setPairingErr("");
-    try {
-      const r = await recordsShareDecision(created.token, true, false, pairingRef.current);
-      if ("consent_required" in r) {
-        setCategories(r.share_categories);
-        setPrivateCount(r.private_count);
-        setPhase("consent");
-      } else {
-        setGrantedUntil((r as any).expires_at || null);
-        setPhase("done");
-        loadGrants();
-      }
-    } catch (e: any) {
-      const st = e?.response?.status;
-      if (st === 423) {
-        setError("Too many wrong tries — this link is locked. Ask the doctor to open a new one.");
-        reset();
-      } else if (st === 409) {
-        setPairingErr("The doctor hasn't opened the link yet. Wait for the code to show on their screen.");
-      } else if (st === 400) {
-        const leftN = e?.response?.data?.errors?.attempts_left;
-        setPairingErr(leftN != null ? `Wrong code — ${leftN} ${leftN === 1 ? "try" : "tries"} left.` : "That doesn't match the doctor's screen.");
-        setPairingInput("");
-      } else {
-        setPairingErr(apiErrorMessage(e, "Couldn't check that code."));
-      }
-    } finally { setBusy(false); }
+    setPairingErr("");
+    setPhase("consent");
   }
 
-  async function decide(approve: boolean, consent: boolean) {
+  async function decide(approve: boolean) {
     if (!created) return;
     setBusy(true); setError("");
     try {
-      const r = await recordsShareDecision(created.token, approve, consent, pairingRef.current || pairingInput, shareScope);
-      if ("consent_required" in r) {
-        setCategories(r.share_categories);
-        setPrivateCount(r.private_count);
-        setPhase("consent");
-      } else if (!approve) {
+      const r = await recordsShareDecision(created.token, approve, pairingRef.current || pairingInput, shareScope);
+      if (!approve) {
         reset();
       } else {
-        setGrantedUntil((r as RecordsShareDecision).expires_at);
+        setGrantedUntil(r.expires_at);
         setPhase("done");
         loadGrants();
       }
@@ -191,13 +168,16 @@ export function ShareRecordsScreen() {
         setError("Too many wrong tries — this link is locked. Ask the doctor to open a new one.");
         reset();
       } else if (st === 409 || st === 400) {
-        // Doctor hasn't opened it yet, or the scanned code was stale — let
+        // Doctor hasn't opened it yet, or the code was wrong or stale — let
         // the patient read it off the screen and type it.
         pairingRef.current = "";
+        const leftN = e?.response?.data?.errors?.attempts_left;
         setPairingInput(""); setPairingErr(
           st === 409
             ? "The doctor hasn't opened the link yet. Once the code shows on their screen, enter it here."
-            : "That code was out of date. Enter the one on the doctor's screen now.",
+            : leftN != null
+              ? `Wrong code — ${leftN} ${leftN === 1 ? "try" : "tries"} left. Enter the one on the doctor's screen.`
+              : "That code was out of date. Enter the one on the doctor's screen now.",
         );
         setPhase("manual");
       } else {
@@ -207,8 +187,7 @@ export function ShareRecordsScreen() {
   }
 
   function reset() {
-    setPhase("home"); setCreated(null); setNote(""); setCategories([]);
-    setPrivateCount(0); setShareScope("default");
+    setPhase("home"); setCreated(null); setNote(""); setShareScope("default");
     setGrantedUntil(null); scannedRef.current = false; setError("");
     pairingRef.current = ""; setPairingInput(""); setPairingErr("");
   }
@@ -308,16 +287,8 @@ export function ShareRecordsScreen() {
         <Card style={styles.card}>
           <Text style={styles.h}>Share your records for 2 hours?</Text>
           <Text style={styles.body}>
-            {created?.link ? "This doctor" : "They"} will be able to see:
+            This doctor will be able to see your health summary, diagnoses, vitals, prescriptions, vaccinations and reports, except anything you have marked private.
           </Text>
-          <View style={styles.checkList}>
-            {categories.map((c) => (
-              <View key={c} style={styles.checkRow}>
-                <Check size={13} color={theme.text} strokeWidth={2.6} style={styles.checkIcon} />
-                <Text style={styles.checkText}>{c}</Text>
-              </View>
-            ))}
-          </View>
 
           {privateCount > 0 && (
             <>
@@ -353,7 +324,7 @@ export function ShareRecordsScreen() {
             </>
           )}
 
-          <PrimaryButton label="Allow access" onPress={() => decide(true, true)} loading={busy} style={{ marginTop: 14, marginBottom: 8 }} />
+          <PrimaryButton label="Allow access" onPress={() => decide(true)} loading={busy} style={{ marginTop: 14, marginBottom: 8 }} />
           <SecondaryButton label="Cancel" onPress={reset} disabled={busy} />
         </Card>
       )}
@@ -482,10 +453,6 @@ const styles = StyleSheet.create({
   scanBtnText: { fontSize: 14, fontWeight: "700" },
   cancel: { fontSize: 12.5, fontWeight: "600", color: NEUTRAL.textSecondary },
 
-  checkList: { gap: 6, marginTop: 10, marginBottom: 16 },
-  checkRow: { flexDirection: "row", gap: 6 },
-  checkIcon: { marginTop: 2, flexShrink: 0 },
-  checkText: { flex: 1, fontSize: CARD_TEXT.body, color: NEUTRAL.textPrimary, lineHeight: 17 },
 
   scopeLabel: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 8 },
   scopeOption: {

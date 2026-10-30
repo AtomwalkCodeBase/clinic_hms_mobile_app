@@ -38,7 +38,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 365)} year${Math.floor(days / 365) === 1 ? "" : "s"} ago`;
 }
 
-// Mirrors the backend's own rules (apps/patients/portal_views.py) so the
+// Mirrors the backend's own rules (apps/patients/views.py) so the
 // buttons only ever appear when the action would actually succeed.
 const CANCELLABLE_STATUSES = ["scheduled", "waiting", "vitals_done"];
 const RESCHEDULABLE_STATUSES = ["scheduled", "waiting"];

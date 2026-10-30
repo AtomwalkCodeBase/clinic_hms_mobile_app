@@ -65,12 +65,15 @@ export function FilterSheet({
   const pick = (code: string) => { onSelect(code); onClose(); };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom + 12) }]} onStartShouldSetResponder={() => true}>
+      <View style={styles.backdrop}>
+        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
+            touch first and blocks the list from scrolling. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom + 12) }]}>
           <View style={styles.handle} />
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.sub}>{subtitle}</Text>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }} nestedScrollEnabled>
             <Pressable onPress={() => pick("")} style={({ pressed }) => [styles.row, pressed && { backgroundColor: NEUTRAL.surfaceAlt }]}>
               <AllIcon size={23} color={theme.fill} strokeWidth={2} />
               <Text style={styles.rowText}>{allLabel}</Text>
@@ -94,7 +97,7 @@ export function FilterSheet({
             <Pressable onPress={() => pick("")} style={styles.clear}><Text style={[styles.clearText, { color: theme.text }]}>{clearLabel}</Text></Pressable>
           )}
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }

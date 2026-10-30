@@ -14,7 +14,7 @@ import { AuthStackParamList } from "@/navigation/types";
 
 // Mirrors the web app's ForgotPasswordFlow.jsx: identify -> code -> new
 // password -> done, all driven by the generic OTP endpoints
-// (apps/auth_app/otp_views.py) with purpose="password_reset_patient".
+// (core/auth/otp_views.py) with purpose="password_reset_patient".
 type Step = "identify" | "code" | "password" | "done";
 
 export function ForgotPasswordScreen() {

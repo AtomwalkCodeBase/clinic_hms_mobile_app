@@ -1,6 +1,5 @@
 import { Image } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
-import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 
 // A phone photo is 3000-4000 px and several MB; a page of text stays perfectly readable (and OCR works) at 2000 px.
 const MAX_SIDE = 2000;
@@ -19,6 +18,9 @@ const dimensions = (uri: string) =>
  */
 export async function shrinkPhoto(uri: string, mimeType: string, size: number): Promise<number> {
   try {
+    // Loaded here, not at the top: a build made before expo-image-manipulator was added has no native code for it, and
+    // importing it would crash the whole app at start. Without it the photo is simply uploaded as it is.
+    const { manipulateAsync, SaveFormat } = require("expo-image-manipulator") as typeof import("expo-image-manipulator");
     const { width, height } = await dimensions(uri);
     const longest = Math.max(width, height);
     if (size > 0 && size <= LEAVE_ALONE_BYTES && longest <= MAX_SIDE) return size;

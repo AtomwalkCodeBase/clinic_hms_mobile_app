@@ -44,6 +44,9 @@ export function UploadSheet({
           <Text style={styles.limits}>{LIMITS_LINE}. Photos are made smaller automatically.</Text>
           {row(Files, many ? "Choose files" : "Choose a file", onFiles)}
           {row(Camera, many?"Take photos":"Take photo or scan", onCamera)}
+          <Pressable onPress={onClose} style={styles.cancel} accessibilityRole="button" accessibilityLabel="Cancel">
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
         </View>
       </Pressable>
     </Modal>
@@ -69,5 +72,7 @@ const styles = StyleSheet.create({
     borderRadius: 18, paddingVertical: 16, paddingHorizontal: 16, marginBottom: 12, backgroundColor: NEUTRAL.surface,
   },
   optIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  cancel: { alignItems: "center", paddingVertical: 12 },
+  cancelText: { fontSize: 15, fontWeight: "700", color: NEUTRAL.textSecondary },
   optTitle: { flex: 1, fontSize: 18, fontWeight: "800", color: NEUTRAL.textPrimary, textAlign: "center" },
 });

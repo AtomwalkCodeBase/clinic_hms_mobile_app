@@ -23,19 +23,18 @@ import { UploadStatusBar } from "@/components/UploadStatusBar";
 import { DayList, DocumentsMode } from "@/components/DateView";
 import { filesLabel } from "@/components/DayCard";
 import { useWhoIsThisFor } from "@/components/WhoIsThisFor";
+import { useConfirmPicked } from "@/components/ConfirmPickedDialog";
+import { useUploadGuidelines } from "@/components/UploadGuidelinesModal";
 import { FooterAction } from "@/components/FooterAction";
 import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { apiErrorMessage } from "@/api/client";
-import {
-  getMyDocuments, getDocumentCounts, getDocumentDays,
-  getPrescriptions, getLabOrders, choosePrescription, chooseLabOrder,
-} from "@/api/portal";
+import { getMyDocuments, getDocumentCounts, getDocumentDays } from "@/api/portal";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
 import { useDocumentActions } from "@/hooks/useDocumentActions";
-import { pickDocuments } from "@/utils/fileHelpers";
+import { discardPicked, pickDocuments } from "@/utils/fileHelpers";
 import { setViewingPerson, useViewingPerson } from "@/utils/viewingPerson";
-import { PatientDocument, PrescriptionOrder, LabOrder } from "@/api/types";
+import { PatientDocument } from "@/api/types";
 import type { DocumentDay } from "@/api/portal";
 import { AppStackParamList } from "@/navigation/types";
 
@@ -88,7 +87,7 @@ export function MyDocumentsScreen() {
   // Whose documents are showing: the patient themself, or one family member. Kept in memory only (utils/viewingPerson.ts).
   const patientAwpid = useViewingPerson();
   const {
-    cardFor, dialogs, actionError, setActionError, setNotice, privacyQ, privSession, privEnabled,
+    cardFor, dialogs, actionError, setNotice, privacyQ, privSession, privEnabled,
     familyQ, members, member, personName, personTag, nameColor, labelOf,
   } = useDocumentActions(patientAwpid);
   // A family member who is no longer linked: fall back to the patient themself.
@@ -118,13 +117,13 @@ export function MyDocumentsScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [q, setQ] = useState("");
   const [visible, setVisible] = useState(PAGE);
-  const [showPending, setShowPending] = useState(false);
-  const [choosing, setChoosing] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const { queueUpload, ready } = useDocumentUpload();
   const who = useWhoIsThisFor(patientAwpid);
+  const { confirm: confirmPicked, dialog: confirmDialog } = useConfirmPicked();
+  const { ask: askGuidelines, dialog: guidelinesDialog } = useUploadGuidelines();
   // The one document just added with "+", opened to confirm (or change) its type once the bar says it has been read.
   const [instant, setInstant] = useState<{ id: number; awpid?: string } | null>(null);
 
@@ -194,18 +193,6 @@ export function MyDocumentsScreen() {
     (mode === "date" && daysQ.error && apiErrorMessage(daysQ.error)) || "";
   const error = loadError || actionError;
 
-  // Two independent, soft-failing queries — a failure in either never blocks the documents list.
-  const pendingRxQ = useQuery({
-    queryKey: ["prescriptionOrders", patientAwpid],
-    queryFn: () => getPrescriptions(patientAwpid).catch(() => [] as PrescriptionOrder[]),
-  });
-  const pendingLabQ = useQuery({
-    queryKey: ["labOrders", patientAwpid],
-    queryFn: () => getLabOrders(patientAwpid).catch(() => [] as LabOrder[]),
-  });
-  const pendingRx = (pendingRxQ.data ?? []).filter((r) => r.patient_choice === "pending");
-  const pendingLab = (pendingLabQ.data ?? []).filter((l) => l.patient_choice === "pending");
-
   // Per-category numbers for the type filter and how many uploads still wait for review.
   const countsQ = useQuery({ queryKey: ["documentCounts", patientAwpid], queryFn: () => getDocumentCounts(patientAwpid) });
   const counts = countsQ.data;
@@ -214,23 +201,20 @@ export function MyDocumentsScreen() {
     await Promise.all([
       mode === "date" ? daysQ.refetch() : docsFirstQ.refetch(),
       mode === "all" && totalPages > 1 ? docsRestQ.refetch() : Promise.resolve(),
-      pendingRxQ.refetch(),
-      pendingLabQ.refetch(),
       countsQ.refetch(),
     ]);
-  }, [mode, daysQ.refetch, docsFirstQ.refetch, docsRestQ.refetch, totalPages, pendingRxQ.refetch, pendingLabQ.refetch, countsQ.refetch]);
+  }, [mode, daysQ.refetch, docsFirstQ.refetch, docsRestQ.refetch, totalPages, countsQ.refetch]);
   const refetchAll = useCallback(async () => {
     await Promise.all([load(), privacyQ.refetch(), familyQ.refetch()]);
   }, [load, privacyQ.refetch, familyQ.refetch]);
   useRefreshOnFocus(
     mode === "date"
-      ? [daysQ, pendingRxQ, pendingLabQ, privacyQ, countsQ]
-      : [docsFirstQ, docsRestQ, pendingRxQ, pendingLabQ, privacyQ, countsQ],
+      ? [daysQ, privacyQ, countsQ]
+      : [docsFirstQ, docsRestQ, privacyQ, countsQ],
   );
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
   const isFetchingAny =
-    (mode === "date" ? daysQ.isFetching : docsFirstQ.isFetching || docsRestQ.isFetching) ||
-    pendingRxQ.isFetching || pendingLabQ.isFetching;
+    mode === "date" ? daysQ.isFetching : docsFirstQ.isFetching || docsRestQ.isFetching;
 
   // The years that have files and, for the year picked (or every year), the months that have files - each with its
   // file count, newest first.
@@ -335,9 +319,18 @@ export function MyDocumentsScreen() {
   // been read, then offers to confirm the type. (For many files at once there is the Bulk Upload screen.)
   async function pickAndUpload() {
     try {
+      if (!(await askGuidelines(false))) return;
       const target = await who.ask();
       if (!target) return;
-      const files = await pickDocuments(false);
+      // Whatever is chosen is shown first: Upload sends it, Edit chooses again, Cancel sends nothing.
+      let files = await pickDocuments(false);
+      while (files.length) {
+        const choice = await confirmPicked(files);
+        if (choice === "upload") break;
+        await discardPicked(files);
+        if (choice === "cancel") return;
+        files = await pickDocuments(false);
+      }
       if (!files.length) return;
       const f = files[0];
       const outcome = queueUpload(
@@ -354,6 +347,7 @@ export function MyDocumentsScreen() {
   }
 
   async function takePhoto() {
+    if (!(await askGuidelines(false))) return;
     const target = await who.ask();
     if (target) navigation.navigate("DocumentCapture", { mode: "instant", ...(target.awpid ? { patientAwpid: target.awpid } : {}) });
   }
@@ -364,76 +358,10 @@ export function MyDocumentsScreen() {
     setTimeout(action, 320);
   }
 
-  async function choose(kind: "rx" | "lab", item: PrescriptionOrder | LabOrder, ch: "in_house" | "outside") {
-    setChoosing(`${kind}${item.id}`);
-    try {
-      if (kind === "rx") {
-        const r = item as PrescriptionOrder;
-        await choosePrescription({
-          hospital_db: r.hospital_db, prescription_id: r.id, patient_choice: ch,
-          payment_preference: ch === "in_house" ? "pay_at_pharmacy" : undefined,
-        });
-      } else {
-        const l = item as LabOrder;
-        await chooseLabOrder({ hospital_db: l.hospital_db, request_id: l.id, patient_choice: ch });
-      }
-      queryClient.invalidateQueries({ queryKey: ["prescriptionOrders", patientAwpid] });
-      queryClient.invalidateQueries({ queryKey: ["labOrders", patientAwpid] });
-    } catch (err) {
-      setActionError(apiErrorMessage(err, "Couldn't save your choice."));
-    } finally {
-      setChoosing(null);
-    }
-  }
-
-  const pendingCount = pendingRx.length + pendingLab.length;
-
   // The scrolling body as a flat list of children, so each month label can be a sticky header: it stays at the top of
   // the list while that month's documents scroll under it, until the next month's label takes over.
   const bodyNodes: React.ReactNode[] = [];
   const stickyIdx: number[] = [];
-  if (pendingCount > 0) {
-    bodyNodes.push(
-      <View key="pend" style={styles.pend}>
-        <Pressable onPress={() => setShowPending((v) => !v)} style={styles.pendHead}>
-          <AlertCircle size={14} color={NEUTRAL.warning} strokeWidth={2.2} />
-          <Text style={styles.pendTxt}>
-            {pendingCount} item{pendingCount === 1 ? "" : "s"} need a pharmacy / lab choice
-          </Text>
-          <ChevronDown
-            size={14}
-            color={NEUTRAL.warning}
-            strokeWidth={2.4}
-            style={{ transform: [{ rotate: showPending ? "180deg" : "0deg" }] }}
-          />
-        </Pressable>
-        {showPending && (
-          <View style={{ marginTop: 8, gap: 8 }}>
-            {pendingRx.map((r) => (
-              <View key={`rx${r.id}`} style={styles.pendItem}>
-                <Text style={styles.pendItemT} numberOfLines={1}>
-                  {r.doctor_name ? `Dr. ${r.doctor_name}` : "Prescription"} · {r.hospital}
-                </Text>
-                <View style={styles.pendBtns}>
-                  <SecondaryButton label="Buy here" compact loading={choosing === `rx${r.id}`} onPress={() => choose("rx", r, "in_house")} />
-                  <SecondaryButton label="Elsewhere" compact onPress={() => choose("rx", r, "outside")} />
-                </View>
-              </View>
-            ))}
-            {pendingLab.map((l) => (
-              <View key={`lab${l.id}`} style={styles.pendItem}>
-                <Text style={styles.pendItemT} numberOfLines={1}>{l.test_name} · {l.hospital}</Text>
-                <View style={styles.pendBtns}>
-                  <SecondaryButton label="In-house" compact loading={choosing === `lab${l.id}`} onPress={() => choose("lab", l, "in_house")} />
-                  <SecondaryButton label="Outside" compact onPress={() => choose("lab", l, "outside")} />
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-    );
-  }
   if (mode === "date") {
     bodyNodes.push(
       <DayList
@@ -671,6 +599,8 @@ export function MyDocumentsScreen() {
       {dialogs}
 
       {who.sheet}
+      {confirmDialog}
+      {guidelinesDialog}
 
       <InstantReviewSheet
         documentId={instant?.id ?? null}
@@ -712,12 +642,6 @@ const styles = StyleSheet.create({
   srch: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: NEUTRAL.surface, borderWidth: 0.5, borderColor: NEUTRAL.border, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 10 },
   srchIn: { flex: 1, fontSize: 12.5, color: NEUTRAL.textPrimary, padding: 0 },
 
-  pend: { backgroundColor: NEUTRAL.warningBg, borderRadius: 12, padding: 10, marginBottom: 12 },
-  pendHead: { flexDirection: "row", alignItems: "center", gap: 8 },
-  pendTxt: { flex: 1, fontSize: 11.5, fontWeight: "700", color: NEUTRAL.warning },
-  pendItem: { backgroundColor: NEUTRAL.surface, borderRadius: 10, padding: 10 },
-  pendItemT: { fontSize: 11.5, fontWeight: "600", color: NEUTRAL.textPrimary, marginBottom: 8 },
-  pendBtns: { flexDirection: "row", gap: 6 },
 
   grpHead: { backgroundColor: NEUTRAL.bg, marginHorizontal: -10, paddingHorizontal: 10, paddingTop: 6, paddingBottom: 8 },
   grpLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: NEUTRAL.textMuted },

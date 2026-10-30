@@ -96,7 +96,7 @@ export function isLikelyNetworkError(err: unknown): boolean {
 /**
  * Standardized error message extraction — most views return the standard
  * {message} shape (core/response.py), but a chunk of
- * apps/patients/portal_views.py (PortalBookView among them) predates that
+ * apps/patients/views.py (PortalBookView among them) predates that
  * helper and hand-rolls Response({"error": "..."}, status=...) instead, same
  * intent, different key. Without the .error fallback, every specific, real
  * reason a booking/action failed (date in the past, slot just taken, hospital

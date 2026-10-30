@@ -37,7 +37,7 @@ const SWATCHES = [
 ] as const;
 
 // Substring match against the free-text specialty name, same approach as
-// the backend's own _SPECIALITY_SYNONYMS (apps/patients/portal_views.py)
+// the backend's own _SPECIALITY_SYNONYMS (apps/patients/views.py)
 // — hospital admins type specialties in freehand, so this matches on
 // meaningful fragments rather than requiring an exact name.
 const KEYWORD_MAP: { match: string[]; icon: LucideIcon; swatch: number }[] = [

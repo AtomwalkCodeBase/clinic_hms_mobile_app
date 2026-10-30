@@ -30,12 +30,6 @@ export function HealthSummaryScreen() {
               <Text style={styles.tileLabel}>BLOOD GROUP</Text>
               <Text style={[styles.tileValue, { color: NEUTRAL.danger }]}>{summary.blood_group || "Not recorded"}</Text>
             </Card>
-            <Card style={styles.tile}>
-              <Text style={styles.tileLabel}>ALLERGIES</Text>
-              <Text style={styles.tileValue}>
-                {summary.active_allergies.length ? summary.active_allergies.map((a) => a.substance).join(", ") : "None reported"}
-              </Text>
-            </Card>
           </View>
 
           <Text style={styles.sectionLabel}>ACTIVE DIAGNOSES</Text>

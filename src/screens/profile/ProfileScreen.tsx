@@ -8,7 +8,7 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Camera, IdCard, HeartPulse, Users, Building2, Headphones, Droplet, AlertTriangle, Lock, Fingerprint } from "lucide-react-native";
+import { Camera, IdCard, HeartPulse, Users, Building2, Headphones, Droplet, Lock, Fingerprint } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
@@ -132,8 +132,6 @@ export function ProfileScreen() {
     }
   };
 
-  const allergyCount = summary?.active_allergies.length ?? 0;
-
   if (isInitialLoading) {
     return (
       <Screen bottomInset={false}>
@@ -217,11 +215,6 @@ export function ProfileScreen() {
                 <Text style={[styles.statValue, { color: NEUTRAL.danger }]}>{summary.blood_group || "Not set"}</Text>
               </View>
               <View style={[styles.statCol, styles.statBorder]}>
-                <AlertTriangle size={16} color="#993556" strokeWidth={2.2} />
-                <Text style={styles.statLabel}>Allergies</Text>
-                <Text style={styles.statValue}>{allergyCount ? `${allergyCount} known` : "None"}</Text>
-              </View>
-              <View style={styles.statCol}>
                 <Users size={16} color="#0C447C" strokeWidth={2.2} />
                 <Text style={styles.statLabel}>Family</Text>
                 <Text style={styles.statValue}>{family.length}</Text>
@@ -242,7 +235,7 @@ export function ProfileScreen() {
       <ListRow
         icon={HeartPulse}
         title="Health summary"
-        subtitle="Blood group, allergies, diagnoses"
+        subtitle="Blood group, diagnoses"
         onPress={() => navigation.navigate("HealthSummary")}
         tinted
       />

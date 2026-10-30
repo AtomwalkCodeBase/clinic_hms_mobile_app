@@ -2,7 +2,6 @@ import { api } from "./client";
 import type {
   Booking,
   BookingResult,
-  ConsentRequired,
   DoctorCard,
   DoctorDetail,
   Envelope,
@@ -13,15 +12,13 @@ import type {
   HealthTimeline,
   Hospital,
   Immunization,
-  LabOrder,
   MedicalRecord,
   NotificationItem,
   Pagination,
   PatientDocument,
-  PrescriptionOrder,
   Profile,
+  RecordsPrivacyDoc,
   RecordsPrivacyPayload,
-  RecordsShareConsentPrompt,
   RecordsShareCreated,
   RecordsShareDecision,
   RecordsShareGrant,
@@ -34,7 +31,23 @@ import type {
 // Note: newer portal views (hospitals/search/doctors/slots/book/my-bookings)
 // return raw objects, not the {success,data} envelope older auth/register
 // views use — this file calls each endpoint with the shape actually read
-// from apps/patients/portal_views.py.
+// from apps/patients/views.py.
+//
+// The server names every primary key after its table ("medical_document_id", "patient_booking_id",
+// "staff_user_id"); the screens call all of them `id`. The renaming is done here, once, as each response comes in,
+// so nothing outside this file needs to know the server's names.
+
+/** A doctor card (search, list, detail): the server's `staff_user_id` is the doctor's `id`. */
+function doctorOf<T extends DoctorCard>(raw: any): T {
+  const { staff_user_id, ...rest } = raw;
+  return { ...rest, id: staff_user_id } as T;
+}
+
+/** A My Documents row (list, detail, the answer to a change): `medical_document_id` is the document's `id`. */
+function documentOf<T extends { id: number }>(raw: any): T {
+  const { medical_document_id, ...rest } = raw;
+  return { ...rest, id: medical_document_id } as T;
+}
 
 export async function getHospitals() {
   const res = await api.get<{ results: Hospital[] }>("/portal/hospitals/");
@@ -47,8 +60,8 @@ export async function getStats() {
 }
 
 export async function search(params: { q?: string; specialty?: string; city?: string; sort?: string }) {
-  const res = await api.get<{ hospitals: Hospital[]; doctors: DoctorCard[] }>("/portal/search/", { params });
-  return res.data;
+  const res = await api.get<{ hospitals: Hospital[]; doctors: any[] }>("/portal/search/", { params });
+  return { hospitals: res.data.hospitals, doctors: res.data.doctors.map((d) => doctorOf<DoctorCard>(d)) };
 }
 
 export async function getSpecialties() {
@@ -57,13 +70,13 @@ export async function getSpecialties() {
 }
 
 export async function getDoctors(hospitalId: number) {
-  const res = await api.get<{ results: DoctorCard[] }>(`/portal/hospitals/${hospitalId}/doctors/`);
-  return res.data.results;
+  const res = await api.get<{ results: any[] }>(`/portal/hospitals/${hospitalId}/doctors/`);
+  return res.data.results.map((d) => doctorOf<DoctorCard>(d));
 }
 
 export async function getDoctorDetail(hospitalId: number, doctorId: number) {
-  const res = await api.get<DoctorDetail>(`/portal/hospitals/${hospitalId}/doctors/${doctorId}/`);
-  return res.data;
+  const res = await api.get<any>(`/portal/hospitals/${hospitalId}/doctors/${doctorId}/`);
+  return doctorOf<DoctorDetail>(res.data);
 }
 
 export async function getSlots(hospitalId: number, doctorId: number, date?: string) {
@@ -81,24 +94,11 @@ interface BookPayload {
   chief_complaint?: string;
   payment_preference?: string;
   patient_awpid?: string;
-  data_sharing_consent?: boolean;
 }
 
-/**
- * POST /api/v1/portal/book/
- * First booking at a new hospital returns HTTP 428 with
- * {consent_required, hospital_name, share_categories, message} instead of
- * creating the appointment — the caller must re-submit with
- * data_sharing_consent: true after showing that to the patient.
- */
-export async function book(payload: BookPayload): Promise<BookingResult | ConsentRequired> {
-  // 428 (first-booking consent gate) is an expected outcome, not a failure —
-  // let it resolve so the caller can show the consent prompt. Any 2xx is a
-  // real booking; don't pin to 201 only (a backend that answers 200 would
-  // otherwise throw here and the screen would look frozen).
-  const res = await api.post("/portal/book/", payload, {
-    validateStatus: (s) => (s >= 200 && s < 300) || s === 428,
-  });
+/** POST /api/v1/portal/book/ — books the slot; a taken slot is a 409 and a date outside the booking window a 400. */
+export async function book(payload: BookPayload): Promise<BookingResult> {
+  const res = await api.post<BookingResult>("/portal/book/", payload);
   return res.data;
 }
 
@@ -109,10 +109,12 @@ export async function book(payload: BookPayload): Promise<BookingResult | Consen
 // more" is what actually reaches deep history once someone has more than
 // a page of past visits.
 export async function getMyBookings(page = 1, pageSize = 20) {
-  const res = await api.get<{ results: Booking[]; pagination: Pagination }>("/portal/my-bookings/", {
+  const res = await api.get<{ results: any[]; pagination: Pagination }>("/portal/my-bookings/", {
     params: { page, page_size: pageSize },
   });
-  return res.data;
+  // the server's `patient_booking_id` is the booking's `id`
+  const results = res.data.results.map(({ patient_booking_id, ...rest }): Booking => ({ ...rest, id: patient_booking_id } as Booking));
+  return { results, pagination: res.data.pagination };
 }
 
 /** POST /portal/my-bookings/<id>/cancel/ — patient self-service cancellation. */
@@ -124,33 +126,6 @@ export async function cancelBooking(id: number) {
 /** POST /portal/my-bookings/<id>/reschedule/ {scheduled_date, scheduled_time?} */
 export async function rescheduleBooking(id: number, payload: { scheduled_date: string; scheduled_time?: string }) {
   const res = await api.post<RescheduleResult>(`/portal/my-bookings/${id}/reschedule/`, payload);
-  return res.data;
-}
-
-/**
- * GET /portal/prescriptions/ — "every prescription any doctor has written",
- * with in-house/outside choice + rx_number/payment state. Distinct from
- * getMyRecords()'s prescription arrays below: this is resolved via the full
- * Appointment -> OPDEncounter -> Prescription chain (PortalPrescriptionListView),
- * not narrowed to "the first encounter/prescription per appointment" the
- * way the display records PortalMyRecordsView builds are — mirrors
- * getLabOrders/chooseLabOrder's shape (same "buy in-house or elsewhere"
- * pattern PortalLabOrderListView already has on the lab side).
- */
-export async function getPrescriptions(patientAwpid?: string) {
-  const res = await api.get<{ results: PrescriptionOrder[]; pagination: any }>("/portal/prescriptions/", {
-    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
-  });
-  return res.data.results;
-}
-
-export async function choosePrescription(payload: {
-  hospital_db: string;
-  prescription_id: string;
-  patient_choice: "in_house" | "outside";
-  payment_preference?: "pay_online" | "pay_at_pharmacy";
-}) {
-  const res = await api.post<Envelope<null>>("/portal/prescriptions/choice/", payload);
   return res.data;
 }
 
@@ -178,19 +153,10 @@ export async function getProfile() {
   return res.data.data;
 }
 
-/**
- * POST /portal/emergency/token/ — mints a short-lived (20 min) QR the
- * patient shows a doctor outside their network. Every call is a fresh
- * disclosure decision (see core/emergency_access.py) — the first call always
- * omits consent_confirmed and gets back the 428 share-categories prompt,
- * same validateStatus trick as book() above so that 428 lands as a normal
- * return value instead of a thrown error. Only the 200 body is enveloped
- * ({success, data}); the 428 body is raw, matching PortalEmergencyTokenView.
- */
 /* ── "Share Records" — the patient side of the doctor-has-a-laptop flow.
  * The clinician's laptop shows a QR/code + link; the patient scans or types
  * it here, approves once (2-hour window), and can end it or release
- * individual downloads afterwards. Backend: apps/patients/records_share_views.py */
+ * individual downloads afterwards. Backend: apps/patients/views.py */
 
 /** The patient starts the flow: mint a pending session + a link to hand to the doctor. */
 export async function createRecordsShare(note?: string): Promise<RecordsShareCreated> {
@@ -204,12 +170,11 @@ export async function createRecordsShare(note?: string): Promise<RecordsShareCre
  * `pairing` — the 6-character code on the doctor's screen, lifted out of the
  * scanned QR (…?p=XXXXXX) or typed by hand. A wrong one is a real 400 (with
  * errors.attempts_left); a locked session is 423; the doctor not having
- * opened the link yet is 409. The right pairing but no consent yet is 428 +
- * share_categories.
+ * opened the link yet is 409.
  *
  * `shareScope` is the one-time bulk choice made on the consent screen:
  * "all" shares this grant's private records too (this doctor only, this
- * visit only — see registry.RecordsShareRequest.share_all); "default" (the
+ * visit only — see RecordsShareRequest.share_all); "default" (the
  * default here) keeps the patient's standing privacy in effect, same as
  * before this parameter existed. Only meaningful on the approving call —
  * harmless to pass on a decline.
@@ -217,29 +182,24 @@ export async function createRecordsShare(note?: string): Promise<RecordsShareCre
 export async function recordsShareDecision(
   token: string,
   approve: boolean,
-  consent_confirmed = false,
   pairing = "",
   shareScope: RecordsShareScope = "default",
-): Promise<RecordsShareDecision | RecordsShareConsentPrompt> {
-  const res = await api.post(
+): Promise<RecordsShareDecision> {
+  const res = await api.post<Envelope<RecordsShareDecision>>(
     `/portal/records-share/${token}/decision/`,
-    { approve, consent_confirmed, pairing, share_scope: shareScope },
-    { validateStatus: (s) => s === 200 || s === 428 },
+    { approve, pairing, share_scope: shareScope },
   );
-  if (res.status === 428) {
-    return {
-      consent_required: true,
-      share_categories: res.data?.errors?.share_categories || [],
-      private_count: res.data?.errors?.private_count || 0,
-    };
-  }
   return res.data.data;
 }
 
 /** The patient's "who currently has access" list, with any pending download request. */
 export async function getRecordsShareMine(): Promise<RecordsShareGrant[]> {
-  const res = await api.get("/portal/records-share/mine/");
-  return res.data.data.grants || [];
+  const res = await api.get<Envelope<{ grants: any[] }>>("/portal/records-share/mine/");
+  // a pending download names its document `medical_document_id` on the server
+  return (res.data.data.grants || []).map((g): RecordsShareGrant => ({
+    ...g,
+    pending_download: g.pending_download ? documentOf<{ id: number; title: string }>(g.pending_download) : null,
+  }));
 }
 
 export async function endRecordsShare(token: string) {
@@ -255,7 +215,7 @@ export async function recordsShareDownloadDecision(token: string, approve: boole
 // ── Shared-records privacy ──────────────────────────────────────────────────
 // The patient's standing "what a doctor sees when I share my records" config,
 // the per-record lock used from My Reports, and the per-visit reveal on a
-// live grant. Backend: apps/patients/records_share_views.py.
+// live grant. Backend: apps/patients/views.py.
 
 export interface RecordsPrivacyQuery {
   /** 1-based page; the list is paged on category boundaries */
@@ -274,10 +234,11 @@ export interface RecordsPrivacyQuery {
 export async function getRecordsPrivacy(
   query: RecordsPrivacyQuery = {},
 ): Promise<RecordsPrivacyPayload> {
-  const res = await api.get<Envelope<RecordsPrivacyPayload>>("/portal/records-privacy/", {
+  const res = await api.get<Envelope<RecordsPrivacyPayload & { documents: any[] }>>("/portal/records-privacy/", {
     params: query,
   });
-  return res.data.data;
+  const data = res.data.data;
+  return { ...data, documents: data.documents.map((d) => documentOf<RecordsPrivacyDoc>(d)) };
 }
 
 /**
@@ -445,7 +406,7 @@ export async function getMyDocuments(
     uploadedOn?: string;
   },
 ) {
-  const res = await api.get<{ results: PatientDocument[]; pagination: Pagination }>("/portal/documents/", {
+  const res = await api.get<{ results: any[]; pagination: Pagination }>("/portal/documents/", {
     params: {
       page,
       ...(patientAwpid ? { patient_awpid: patientAwpid } : {}),
@@ -456,18 +417,19 @@ export async function getMyDocuments(
       ...(opts?.uploadedOn ? { uploaded_on: opts.uploadedOn } : {}),
     },
   });
-  return res.data;
+  return { results: res.data.results.map((d) => documentOf<PatientDocument>(d)), pagination: res.data.pagination };
 }
 
+/** GET /portal/documents/<id>/ — the row, and `file_data`: a short-lived signed link to the file (a data URI on older servers). */
 export async function getDocumentDetail(id: number, opts?: { download?: boolean; patientAwpid?: string }) {
-  const res = await api.get<Envelope<PatientDocument & { file_data: string; handwritten_doc_id?: number | null }>>(
+  const res = await api.get<Envelope<any>>(
     `/portal/documents/${id}/`,
     { params: { ...(opts?.download ? { download: 1 } : {}), ...(opts?.patientAwpid ? { patient_awpid: opts.patientAwpid } : {}) } },
   );
-  return res.data.data;
+  return documentOf<PatientDocument & { file_data: string; handwritten_doc_id?: number | null }>(res.data.data);
 }
 
-// ── Upload and review (apps/records) ─────────────────────────────────────────
+// ── Upload and review (apps/documents) ─────────────────────────────────────────
 // One multipart call sends the files; the server reads and classifies them in the background. The patient then
 // confirms each file's type (submitDecisions) and only then does it appear in My Documents.
 
@@ -522,7 +484,7 @@ export async function uploadDocuments(
   files.forEach((f) => form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any));
   form.append("mode", mode);
   if (patientAwpid) form.append("patient_awpid", patientAwpid);
-  const res = await api.post<Envelope<UploadResult>>(
+  const res = await api.post<Envelope<UploadResult & { documents: any[] }>>(
     "/records/upload/",
     form,
     {
@@ -531,7 +493,8 @@ export async function uploadDocuments(
       onUploadProgress: (e) => onProgress?.(e.total ? e.loaded / e.total : 0),
     },
   );
-  return res.data.data;
+  const data = res.data.data;
+  return { ...data, documents: data.documents.map((d) => documentOf<UploadResult["documents"][number]>(d)) };
 }
 
 /** GET /api/v1/portal/documents/counts/ — the My Documents dropdown counts (every category, zeros included). */
@@ -588,40 +551,14 @@ export async function dismissDocument(id: number, patientAwpid?: string): Promis
  * "Dr." ("" removes it). The server also checks letters and spaces only; it answers with the updated row.
  */
 export async function updateDoctorName(id: number, doctorName: string, patientAwpid?: string): Promise<PatientDocument> {
-  const res = await api.patch<Envelope<PatientDocument>>(
+  const res = await api.patch<Envelope<any>>(
     `/portal/documents/${id}/`,
     { doctor_name: doctorName },
     { params: patientAwpid ? { patient_awpid: patientAwpid } : {} },
   );
-  return res.data.data;
+  return documentOf<PatientDocument>(res.data.data);
 }
 
-/** PortalLabOrderListView returns a raw object, not the {success,data} envelope. */
-export async function getLabOrders(patientAwpid?: string) {
-  const res = await api.get<{ results: LabOrder[]; pagination: any }>("/portal/lab-orders/", {
-    params: patientAwpid ? { patient_awpid: patientAwpid } : {},
-  });
-  return res.data.results;
-}
-
-export async function chooseLabOrder(payload: {
-  hospital_db: string;
-  request_id: number;
-  patient_choice: "in_house" | "outside";
-  payment_preference?: "pay_online" | "pay_at_lab";
-}) {
-  const res = await api.post<Envelope<null>>("/portal/lab-orders/choice/", payload);
-  return res.data;
-}
-
-/**
- * GET /portal/lab-orders/<hospital_db>/<request_id>/report/ — the actual
- * uploaded in-house lab report file (a short-lived signed URL under
- * file_data, not a data URI — downloadDataUri handles both). Only call this
- * when the order's report.has_file is true and it's been delivered; the
- * backend 404s / 400s otherwise. `result_summary` rides along so a caller
- * doesn't need the list row to show it.
- */
 export async function getNotifications(patientAwpid?: string) {
   const res = await api.get<Envelope<{ results: NotificationItem[]; unread_count: number }>>("/portal/notifications/", {
     params: patientAwpid ? { patient_awpid: patientAwpid } : {},
