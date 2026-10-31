@@ -9,7 +9,7 @@ import { isReviewable } from "@/utils/reviewDraft";
 import { useAuth } from "@/context/AuthContext";
 import { UploadFailedModal } from "@/components/UploadFailedModal";
 import { UploadingModal } from "@/components/UploadingModal";
-import { clearPending, loadPending, savePending } from "@/utils/pendingUploads";
+import { clearPending, loadPending, removeOrphans, savePending } from "@/utils/pendingUploads";
 import { MAX_FILES, MAX_TOTAL_BYTES, batchProblem, fileProblem } from "@/utils/uploadLimits";
 
 /** Why an upload did not get through, in words a patient can act on. A reason the server gives (a file too big, the wrong
@@ -165,6 +165,8 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const sessionRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const [failureNotice, setFailureNotice] = useState<string | null>(null);
+  // The retry note for the batch being sent could not be saved (most likely the phone is full): say so in the window.
+  const [noRetryNote, setNoRetryNote] = useState(false);
 
   // Signing out (or an expired session) ends this person's upload tracking: the next account must not see the previous
   // one's "reading" bar, "ready to review" bar or retry bar, and an upload still on its way is stopped.
@@ -191,7 +193,9 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
     if (!isAuthenticated) return;
     let cancelled = false;
     loadPending().then((p) => {
-      if (cancelled || !p || busyRef.current) return;
+      if (cancelled || busyRef.current) return;
+      removeOrphans(p ? p.files.map((f) => f.uri) : []);      // copies of files chosen but never sent or cancelled
+      if (!p) return;
       const message = p.files.length === 1
         ? "1 file was waiting to be sent when the app closed."
         : `${p.files.length} files were waiting to be sent when the app closed.`;
@@ -216,7 +220,8 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       setFileCount(valid.length);
       let sent = 0;
       try {
-        await savePending({ files: valid, mode, patientAwpid });      // so a cut-off upload can be offered again after a restart
+        // so a cut-off upload can be offered again after a restart; if the note can't be saved, the window says so
+        setNoRetryNote(!(await savePending({ files: valid, mode, patientAwpid })));
         const requests = toRequests(valid);
         const documentIds: number[] = [];
         const leftOut: SkippedFile[] = [];          // files the server itself refused (it checks the limits again)
@@ -251,9 +256,10 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
         const unsent = valid.slice(sent);
         const message = sent ? `${sent} of ${valid.length} files were uploaded. The rest could not be: ${reason}` : reason;
         if (unsent.length) {
-          setFailedUpload({ files: unsent, mode, patientAwpid, message });      // the "try again" bar, from any screen
-          if (announce) setFailureNotice(message);      // an upload that went on in the background: say so wherever the patient is
-          await savePending({ files: unsent, mode, patientAwpid });
+          const kept = await savePending({ files: unsent, mode, patientAwpid });
+          const shown = kept ? message : `${message} Keep the app open: if you close it, you will need to choose these files again.`;
+          setFailedUpload({ files: unsent, mode, patientAwpid, message: shown });      // the "try again" bar, from any screen
+          if (announce) setFailureNotice(shown);      // an upload that went on in the background: say so wherever the patient is
         }
         return { status: "rejected", reason: message, unsent };
       } finally {
@@ -375,6 +381,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
         stage={uploading ? "sending" : "done"}
         pct={uploadPct}
         count={fileCount}
+        noRetryNote={noRetryNote}
         onHide={() => setModalHidden(true)}
       />
 

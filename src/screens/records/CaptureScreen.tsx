@@ -10,6 +10,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { useDocumentUpload, UploadCandidate } from "@/context/DocumentUploadContext";
 import { setViewingPerson } from "@/utils/viewingPerson";
 import { shrinkPhoto } from "@/utils/imageCompress";
+import { isPhoneFull, PHONE_FULL } from "@/utils/storageErrors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Mode = "qr" | "photo";
@@ -107,7 +108,7 @@ export function CaptureScreen() {
       }
       leaveAfterUpload();
     } catch (err) {
-      setError("Couldn't use the camera. Try again.");
+      setError(isPhoneFull(err) ? PHONE_FULL : "Couldn't use the camera. Try again.");
       handledQr.current = false;
       setCapturing(false);
     }
@@ -126,8 +127,8 @@ export function CaptureScreen() {
     try {
       const shotUri = await grabFrame();
       if (shotUri) setShots((s) => (s.length >= maxShots ? s : [...s, shotUri]));
-    } catch {
-      setError("Couldn't use the camera. Try again.");
+    } catch (err) {
+      setError(isPhoneFull(err) ? PHONE_FULL : "Couldn't use the camera. Try again.");
     }
     setCapturing(false);
   }, [capturing, shots.length, grabFrame, maxShots]);
@@ -158,9 +159,9 @@ export function CaptureScreen() {
       }
       setShots([]);
       leaveAfterUpload();
-    } catch {
+    } catch (err) {
       setShots(current);
-      setError("Couldn't prepare your photos for upload. Please try again.");
+      setError(isPhoneFull(err) ? PHONE_FULL : "Couldn't prepare your photos for upload. Please try again.");
     } finally {
       setCapturing(false);
     }

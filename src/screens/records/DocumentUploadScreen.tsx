@@ -234,7 +234,7 @@ export function DocumentUploadScreen() {
       }
       if (!picked.length) return;
       const outcome = await startUpload(
-        picked.map((f) => ({ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri })),
+        picked.filter((f) => !f.problem).map((f) => ({ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri })),
         "bulk",
         target.awpid,
       );

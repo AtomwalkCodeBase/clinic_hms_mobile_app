@@ -11,12 +11,28 @@ const DIR = `${FileSystem.documentDirectory}pending-uploads/`;
 const NOTE = `${DIR}pending.json`;
 
 /** Remembers a batch before it is sent, so an upload cut off by the app closing or the phone switching off can be offered again. */
-export async function savePending(p: PendingUpload): Promise<void> {
+export async function savePending(p: PendingUpload): Promise<boolean> {
   try {
     await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }).catch(() => {});
     await FileSystem.writeAsStringAsync(NOTE, JSON.stringify(p));
+    return true;
   } catch {
-    // Not being able to remember a batch must never stop it from being sent.
+    // Not being able to remember a batch must never stop it from being sent; the caller tells the patient instead.
+    return false;
+  }
+}
+
+/** Deletes copies in the staging folder that no pending note points to (left behind when the app was closed before a
+ * chosen batch was sent or cancelled). Call once the note has been read, when nothing is being staged. */
+export async function removeOrphans(keep: string[]): Promise<void> {
+  try {
+    const names = await FileSystem.readDirectoryAsync(DIR);
+    const kept = new Set(keep);
+    await Promise.all(names
+      .filter((n) => n !== "pending.json" && !kept.has(`${DIR}${n}`))
+      .map((n) => FileSystem.deleteAsync(`${DIR}${n}`, { idempotent: true }).catch(() => {})));
+  } catch {
+    // No folder yet, or it can't be read: nothing to tidy.
   }
 }
 

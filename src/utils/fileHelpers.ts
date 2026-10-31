@@ -5,7 +5,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { shrinkPhoto } from "@/utils/imageCompress";
-import { ALLOWED_MIME } from "@/utils/uploadLimits";
+import { ALLOWED_MIME, MAX_FILE_BYTES, tooBigReason } from "@/utils/uploadLimits";
+import { copyFailReason } from "@/utils/storageErrors";
 
 export interface PickedFile {
   uri: string;
@@ -13,6 +14,8 @@ export interface PickedFile {
   mimeType: string;
   /** Bytes, when the picker reports it (DocumentPicker does; not always populated by every source). */
   size?: number;
+  /** Set when the file could not be taken (copy failed, or a PDF over the size limit): why, in words for the patient. Such a file has no `uri`. */
+  problem?: string;
 }
 
 const UPLOAD_STAGING_DIR = `${FileSystem.documentDirectory}pending-uploads/`;
@@ -68,7 +71,12 @@ async function stageForUpload(sourceUri: string, name: string, index = 0): Promi
   await FileSystem.makeDirectoryAsync(UPLOAD_STAGING_DIR, { intermediates: true }).catch(() => {});
   // The index keeps two same-named files picked in the same millisecond from overwriting each other.
   const dest = `${UPLOAD_STAGING_DIR}${Date.now()}-${index}-${name}`;
-  await copyWithRetry(sourceUri, dest);
+  try {
+    await copyWithRetry(sourceUri, dest);
+  } catch (err) {
+    await FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => {});      // a half-written copy would only use up more space
+    throw err;
+  }
   // The picker's own size is sometimes missing; the staged copy's size is the truth about what will be sent.
   const info = await FileSystem.getInfoAsync(dest).catch(() => null);
   return { uri: dest, size: info && info.exists ? info.size : 0 };
@@ -89,7 +97,7 @@ function readableName(name: string): string {
 
 /** Deletes the copies pickDocuments made, for files the patient decided not to upload. */
 export async function discardPicked(files: { uri: string }[]): Promise<void> {
-  await Promise.all(files.map((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {})));
+  await Promise.all(files.filter((f) => f.uri).map((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {})));
 }
 
 export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
@@ -104,18 +112,24 @@ export async function pickDocuments(multiple = true): Promise<PickedFile[]> {
     copyToCacheDirectory: false,
   });
   if (result.canceled || !result.assets?.length) return [];
-  const staged = await Promise.allSettled(result.assets.map(async (a, i) => {
+  // One file that cannot be taken must not lose the others, and must not vanish either: it comes back with its reason
+  // (`problem`), and the confirm dialog lists it with the files that cannot be uploaded.
+  return Promise.all(result.assets.map(async (a, i): Promise<PickedFile> => {
     const rawName = a.name || "document";
     const mimeType = a.mimeType || (a.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
-    const copy = await stageForUpload(a.uri, rawName, i);      // the raw name: a decoded "%2F" would turn into a path
-    let size = copy.size || a.size || 0;
-    if (mimeType === "image/jpeg" || mimeType === "image/png") size = await shrinkPhoto(copy.uri, mimeType, size);      // photos only: a PDF is sent as it is
-    return { uri: copy.uri, name: readableName(rawName), mimeType, size };
+    const name = readableName(rawName);
+    // A PDF is sent as it is, so one over the limit is refused before the phone spends time and space copying it. (A
+    // photo is copied first: it is made smaller below and may then fit.)
+    if (mimeType === "application/pdf" && a.size && a.size > MAX_FILE_BYTES) return { uri: "", name, mimeType, size: a.size, problem: tooBigReason(a.size) };
+    try {
+      const copy = await stageForUpload(a.uri, rawName, i);      // the raw name: a decoded "%2F" would turn into a path
+      let size = copy.size || a.size || 0;
+      if (mimeType === "image/jpeg" || mimeType === "image/png") size = await shrinkPhoto(copy.uri, mimeType, size);      // photos only: a PDF is sent as it is
+      return { uri: copy.uri, name, mimeType, size };
+    } catch (err) {
+      return { uri: "", name, mimeType, size: a.size ?? 0, problem: copyFailReason(err) };
+    }
   }));
-  const files = staged.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-  // One unreadable file must not lose the others; only when none could be read is it an error.
-  if (!files.length) throw new Error("Those files could not be read. Pick them again.");
-  return files;
 }
 
 /** Opens the photo library restricted to images. Returns null if the user cancels or denies permission. */

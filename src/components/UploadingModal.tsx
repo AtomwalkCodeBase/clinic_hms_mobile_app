@@ -9,12 +9,14 @@ import { useAppTheme } from "@/context/ThemeContext";
  * Hide) and go on using the app; the status bar carries on showing the progress.
  */
 export function UploadingModal({
-  visible, stage, pct, count, onHide,
+  visible, stage, pct, count, noRetryNote = false, onHide,
 }: {
   visible: boolean;
   stage: "sending" | "done";
   pct: number;
   count: number;
+  /** The batch could not be saved for a retry: say that an interrupted upload means choosing the files again. */
+  noRetryNote?: boolean;
   onHide: () => void;
 }) {
   const { theme } = useAppTheme();
@@ -40,6 +42,11 @@ export function UploadingModal({
               <Text style={styles.body}>
                 Please keep the app open until the upload is complete. It can take a little while on a slow connection.
               </Text>
+              {noRetryNote && (
+                <Text style={styles.warn}>
+                  We couldn't save these files for a retry. If the upload is interrupted, you will need to choose them again.
+                </Text>
+              )}
             </>
           ) : (
             <Text style={styles.body}>
@@ -68,6 +75,7 @@ const styles = StyleSheet.create({
   fill: { height: "100%", borderRadius: 4 },
   pct: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textSecondary, marginTop: 8, marginBottom: 10 },
   body: { fontSize: 13.5, lineHeight: 19, color: NEUTRAL.textSecondary, textAlign: "center", marginBottom: 6 },
+  warn: { fontSize: 12.5, lineHeight: 17, color: NEUTRAL.danger, textAlign: "center", marginBottom: 6 },
   hide: { alignSelf: "stretch", alignItems: "center", paddingVertical: 12 },
   hideText: { fontSize: 14.5, fontWeight: "700", color: NEUTRAL.textSecondary },
 });

@@ -332,7 +332,8 @@ export function MyDocumentsScreen() {
         files = await pickDocuments(false);
       }
       if (!files.length) return;
-      const f = files[0];
+      const f = files.find((x) => !x.problem);
+      if (!f) return;
       const outcome = queueUpload(
         [{ name: f.name || "upload", mimeType: f.mimeType || "application/octet-stream", size: f.size || 0, uri: f.uri }],
         "instant",

@@ -13,7 +13,7 @@ export type PickedChoice = "upload" | "edit" | "cancel";
  * files cannot be (and why), and three choices - Upload, Edit (choose again) and Cancel (send nothing).
  */
 export function ConfirmPickedDialog({ visible, files, onChoose }: { visible: boolean; files: PickedFile[]; onChoose: (choice: PickedChoice) => void }) {
-  const checked = files.map((f) => ({ file: f, problem: fileProblem({ mimeType: f.mimeType, size: f.size ?? 0 }) }));
+  const checked = files.map((f) => ({ file: f, problem: f.problem ?? fileProblem({ mimeType: f.mimeType, size: f.size ?? 0 }) }));
   const ok = checked.filter((c) => !c.problem);
   const bad = checked.filter((c) => c.problem);
   // Too many files, too many photos or too big in total: nothing can be sent until the patient chooses again.
