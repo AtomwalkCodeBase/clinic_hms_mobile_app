@@ -5,7 +5,7 @@ import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import type { LucideIcon } from "@/theme/icons";
-import { LIMITS_LINE } from "@/utils/uploadLimits";
+import { LIMITS_LINE, SINGLE_LIMITS_LINE } from "@/utils/uploadLimits";
 
 /**
  * "Add documents": the one place the patient chooses how to add files, from Bulk Upload (several files) and from the
@@ -41,7 +41,7 @@ export function UploadSheet({
           </View>
           <Text style={styles.lead}>{many ? "Upload multiple files or take photos." : "Upload a single file or take a photo."}</Text>
           <Text style={styles.sub}>We read them and suggest a type for each.</Text>
-          <Text style={styles.limits}>{LIMITS_LINE}. Photos are made smaller automatically.</Text>
+          <Text style={styles.limits}>{many ? LIMITS_LINE : SINGLE_LIMITS_LINE}. Photos are made smaller automatically.</Text>
           {row(Files, many ? "Choose files" : "Choose a file", onFiles)}
           {row(Camera, many?"Take photos":"Take photo or scan", onCamera)}
           <Pressable onPress={onClose} style={styles.cancel} accessibilityRole="button" accessibilityLabel="Cancel">

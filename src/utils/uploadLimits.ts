@@ -41,6 +41,9 @@ export function sizeText(bytes: number): string {
 /** The limits in one line, for the places that tell the patient what can be uploaded. */
 export const LIMITS_LINE = `PDF, JPG or PNG · up to ${sizeText(MAX_FILE_BYTES)} per file · up to ${MAX_FILES} files and ${MAX_PHOTOS} photos (${sizeText(MAX_TOTAL_BYTES)}) at a time`;
 
+/** The same, for the places that take one file at a time (Add Document). */
+export const SINGLE_LIMITS_LINE = `PDF, JPG or PNG · up to ${sizeText(MAX_FILE_BYTES)}`;
+
 /** The reason a file is over the per-file limit; the server says the same thing in the same words. */
 export function tooBigReason(bytes: number): string {
   return `The file is ${sizeText(bytes)}; the limit is ${sizeText(MAX_FILE_BYTES)} per file.`;
