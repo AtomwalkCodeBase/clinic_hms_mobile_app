@@ -479,6 +479,7 @@ export async function uploadDocuments(
   mode: UploadMode,
   patientAwpid?: string,
   onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<UploadResult> {
   const form = new FormData();
   files.forEach((f) => form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any));
@@ -490,6 +491,7 @@ export async function uploadDocuments(
     {
       headers: { "Content-Type": "multipart/form-data" },
       timeout: 10 * 60 * 1000,
+      signal,      // lets a sign-out stop an upload that is still on its way
       onUploadProgress: (e) => onProgress?.(e.total ? e.loaded / e.total : 0),
     },
   );

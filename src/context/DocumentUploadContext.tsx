@@ -7,9 +7,21 @@ import { apiErrorMessage } from "@/api/client";
 import { notifyDocumentsReady } from "@/utils/pushNotifications";
 import { isReviewable } from "@/utils/reviewDraft";
 import { useAuth } from "@/context/AuthContext";
+import { UploadFailedModal } from "@/components/UploadFailedModal";
 import { UploadingModal } from "@/components/UploadingModal";
 import { clearPending, loadPending, savePending } from "@/utils/pendingUploads";
 import { MAX_FILES, MAX_TOTAL_BYTES, batchProblem, fileProblem } from "@/utils/uploadLimits";
+
+/** Why an upload did not get through, in words a patient can act on. A reason the server gives (a file too big, the wrong
+ * kind) is shown as it is; the rest are named by what went wrong. */
+function uploadReason(err: unknown): string {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  if (status && status >= 500) return "Our server had a problem and couldn't take your files. Please try again in a moment.";
+  if (status === 401) return "Your sign-in has ended. Please sign in again, then upload your files.";
+  if (status === 403) return "You don't have permission to upload for this person.";
+  if (status === 429) return "Too many uploads in a short time. Please wait a minute and try again.";
+  return apiErrorMessage(err, "Upload failed, try again.");
+}
 
 /** One file to upload — built straight from a picked file or a camera shot, already on disk. */
 export type UploadCandidate = { name: string; mimeType: string; size: number; uri: string };
@@ -149,12 +161,23 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const [skippedFiles, setSkippedFiles] = useState<SkippedFile[]>([]);
   // setState is async — two quick taps could both read a stale "not busy" and start two uploads.
   const busyRef = useRef(false);
+  // Counts sign-outs: an upload that started before one must not touch the screens of whoever signs in next.
+  const sessionRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const [failureNotice, setFailureNotice] = useState<string | null>(null);
 
   // Signing out (or an expired session) ends this person's upload tracking: the next account must not see the previous
-  // one's "reading" bar, "ready to review" bar or retry bar.
+  // one's "reading" bar, "ready to review" bar or retry bar, and an upload still on its way is stopped.
   const { isAuthenticated } = useAuth();
   useEffect(() => {
     if (!isAuthenticated) {
+      sessionRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      busyRef.current = false;
+      setUploading(false);
+      setUploadDone(false);
+      setFailureNotice(null);
       setWatch(null);
       setReady(null);
       setFailedUpload(null);
@@ -179,8 +202,13 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
 
   /** Sends the files. Resolves when the server has them (or has refused them); nothing is read yet at that point. */
   const runUpload = useCallback(
-    async (valid: UploadCandidate[], skipped: SkippedFile[], mode: UploadMode, patientAwpid?: string): Promise<StartUploadOutcome & { unsent?: UploadCandidate[] }> => {
+    async (valid: UploadCandidate[], skipped: SkippedFile[], mode: UploadMode, patientAwpid?: string, announce = false): Promise<StartUploadOutcome & { unsent?: UploadCandidate[] }> => {
+      const session = sessionRef.current;
+      const stale = () => session !== sessionRef.current;      // signed out since this upload began
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
       busyRef.current = true;
+      setFailureNotice(null);
       setUploadDone(false);
       setModalHidden(false);
       setUploading(true);
@@ -193,9 +221,10 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
         const documentIds: number[] = [];
         const leftOut: SkippedFile[] = [];          // files the server itself refused (it checks the limits again)
         for (const group of requests) {
-          const result = await uploadDocuments(group, mode, patientAwpid, (fraction) =>
-            setUploadPct(Math.round(((sent + group.length * fraction) / valid.length) * 100)),
-          );
+          const result = await uploadDocuments(group, mode, patientAwpid, (fraction) => {
+            if (!stale()) setUploadPct(Math.round(((sent + group.length * fraction) / valid.length) * 100));
+          }, ctrl.signal);
+          if (stale()) return { status: "rejected", reason: "You were signed out.", unsent: [] };
           result.documents.forEach((d) => documentIds.push(d.id));
           leftOut.push(...(result.skipped ?? []));
           sent += group.length;
@@ -215,18 +244,23 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
           : { ids: documentIds, patientAwpid, startedAt: Date.now() }));
         return { status: "started", mode, documentIds, skipped: [...skipped, ...leftOut] };
       } catch (err) {
-        const reason = apiErrorMessage(err, "Upload failed, try again.");
+        // Signed out meanwhile: the upload was stopped on purpose, and nothing of it is shown to the next person.
+        if (stale()) return { status: "rejected", reason: "You were signed out.", unsent: [] };
+        const reason = uploadReason(err);
         // Earlier parts of a big upload may already be on the server; say so, so the patient does not send them twice.
         const unsent = valid.slice(sent);
         const message = sent ? `${sent} of ${valid.length} files were uploaded. The rest could not be: ${reason}` : reason;
         if (unsent.length) {
           setFailedUpload({ files: unsent, mode, patientAwpid, message });      // the "try again" bar, from any screen
+          if (announce) setFailureNotice(message);      // an upload that went on in the background: say so wherever the patient is
           await savePending({ files: unsent, mode, patientAwpid });
         }
         return { status: "rejected", reason: message, unsent };
       } finally {
-        busyRef.current = false;
-        setUploading(false);
+        if (!stale()) {
+          busyRef.current = false;
+          setUploading(false);
+        }
       }
     },
     [queryClient],
@@ -256,7 +290,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       if (busyRef.current) return BUSY;
       setFailedUpload(null);
       if (!keepSkipped) setSkippedFiles(prepared.skipped);      // a retry sends files already checked: what was skipped before still stands
-      runUpload(prepared.valid, prepared.skipped, mode, patientAwpid);      // a failure puts up the "try again" bar itself
+      runUpload(prepared.valid, prepared.skipped, mode, patientAwpid, true);      // a failure puts up the "try again" bar and a notice itself
       return { status: "queued", skipped: prepared.skipped };
     },
     [runUpload],
@@ -330,6 +364,12 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       }}
     >
       {children}
+      <UploadFailedModal
+        visible={!!failureNotice}
+        message={failureNotice ?? ""}
+        onRetry={() => { setFailureNotice(null); retryFailedUpload(); }}
+        onClose={() => setFailureNotice(null)}
+      />
       <UploadingModal
         visible={(uploading || uploadDone) && !modalHidden}
         stage={uploading ? "sending" : "done"}
