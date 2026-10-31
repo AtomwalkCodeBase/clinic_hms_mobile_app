@@ -7,6 +7,7 @@ import { apiErrorMessage } from "@/api/client";
 import { notifyDocumentsReady } from "@/utils/pushNotifications";
 import { isReviewable } from "@/utils/reviewDraft";
 import { useAuth } from "@/context/AuthContext";
+import { UploadingModal } from "@/components/UploadingModal";
 import { clearPending, loadPending, savePending } from "@/utils/pendingUploads";
 import { MAX_FILES, MAX_TOTAL_BYTES, batchProblem, fileProblem } from "@/utils/uploadLimits";
 
@@ -135,6 +136,9 @@ const DocumentUploadContext = createContext<DocumentUploadContextValue | null>(n
 
 export function DocumentUploadProvider({ children }: { children: React.ReactNode }) {
   const [uploading, setUploading] = useState(false);
+  // The window shown while files go up ("keep the app open") and, for a few seconds, once the server has them.
+  const [uploadDone, setUploadDone] = useState(false);
+  const [modalHidden, setModalHidden] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [fileCount, setFileCount] = useState(0);
   const queryClient = useQueryClient();
@@ -177,6 +181,8 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
   const runUpload = useCallback(
     async (valid: UploadCandidate[], skipped: SkippedFile[], mode: UploadMode, patientAwpid?: string): Promise<StartUploadOutcome & { unsent?: UploadCandidate[] }> => {
       busyRef.current = true;
+      setUploadDone(false);
+      setModalHidden(false);
       setUploading(true);
       setUploadPct(0);
       setFileCount(valid.length);
@@ -198,6 +204,7 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
           group.forEach((f) => FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => {}));
         }
         await clearPending();
+        setUploadDone(true);
         if (leftOut.length) setSkippedFiles((prev) => [...prev, ...leftOut]);
         queryClient.invalidateQueries({ queryKey: ["documents"] });
         queryClient.invalidateQueries({ queryKey: ["documentCounts"] });
@@ -305,6 +312,13 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
     return () => clearTimeout(t);
   }, [watch]);
 
+  // The "upload complete" note closes by itself after a few seconds.
+  useEffect(() => {
+    if (!uploadDone) return;
+    const t = setTimeout(() => setUploadDone(false), 5000);
+    return () => clearTimeout(t);
+  }, [uploadDone]);
+
   const clearReady = useCallback(() => setReady(null), []);
 
   return (
@@ -316,6 +330,14 @@ export function DocumentUploadProvider({ children }: { children: React.ReactNode
       }}
     >
       {children}
+      <UploadingModal
+        visible={(uploading || uploadDone) && !modalHidden}
+        stage={uploading ? "sending" : "done"}
+        pct={uploadPct}
+        count={fileCount}
+        onHide={() => setModalHidden(true)}
+      />
+
     </DocumentUploadContext.Provider>
   );
 }
