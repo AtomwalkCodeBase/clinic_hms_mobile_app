@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import { useState } from "react";
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,18 +17,16 @@ const BG = "#0B0F14";
 
 /**
  * The full-screen viewer for a document (a photo or a PDF). It shows a skeleton page and "Loading document...", then the
- * real file replaces it. A strip of the other files in the same list sits at the bottom. View only: there is no
- * Download here.
+ * real file replaces it. It shows the one file that was opened. View only: there is no Download here.
  */
 export function DocumentViewerScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { ids, index, patientAwpid } = useRoute<RouteProp<AppStackParamList, "DocumentViewer">>().params;
   const insets = useSafeAreaInsets();
-  const [current, setCurrent] = useState(Math.min(Math.max(index, 0), ids.length - 1));
   const [shownId, setShownId] = useState<number | null>(null);      // the file that has drawn: drop its skeleton
   const [failedId, setFailedId] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const id = ids[current];
+  const id = ids[Math.min(Math.max(index, 0), ids.length - 1)];
   const shown = shownId === id;
   const failed = failedId === id;
 
@@ -40,9 +38,6 @@ export function DocumentViewerScreen() {
   const doc = q.data;
   const src = (doc as any)?.file_data as string | undefined;
   const isPdf = (doc?.mime_type || "").includes("pdf") || /\.pdf$/i.test(doc?.file_name || "");
-
-  const stripRef = useRef<ScrollView>(null);
-  useEffect(() => { stripRef.current?.scrollTo({ x: Math.max(0, current * 50 - 120), animated: true }); }, [current]);
 
   const noFile = q.isError || failed || (!!doc && !src);
   const title = doc?.file_name || doc?.title || "";
@@ -75,15 +70,6 @@ export function DocumentViewerScreen() {
         )}
       </View>
 
-      {ids.length > 1 && (
-        <ScrollView ref={stripRef} horizontal showsHorizontalScrollIndicator={false} style={styles.stripWrap} contentContainerStyle={[styles.strip, { paddingBottom: Math.max(12, insets.bottom + 6) }]}>
-          {ids.map((x, i) => (
-            <Pressable key={x} onPress={() => setCurrent(i)} accessibilityRole="button" accessibilityLabel={`Open file ${i + 1}`} style={[styles.thumb, i === current && styles.thumbOn]}>
-              <Text style={styles.thumbNo}>{i + 1}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
     </View>
   );
 }
@@ -120,9 +106,4 @@ const styles = StyleSheet.create({
   errSub: { color: "#9fb0c3", fontSize: 12.5, marginTop: 6 },
   retry: { marginTop: 14, backgroundColor: BRAND, paddingHorizontal: 22, paddingVertical: 10, borderRadius: 20 },
   retryText: { color: ON_BRAND, fontSize: 13, fontWeight: "700" },
-  stripWrap: { flexGrow: 0, backgroundColor: BG },
-  strip: { gap: 8, paddingHorizontal: 12, paddingTop: 10 },
-  thumb: { width: 42, height: 54, borderRadius: 5, overflow: "hidden", opacity: 0.55, borderWidth: 2, borderColor: "transparent", backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
-  thumbNo: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
-  thumbOn: { opacity: 1, borderColor: BRAND },
 });
