@@ -76,8 +76,8 @@ export function DocumentDayScreen() {
           <HeaderBand>
             <BackButton onPress={() => navigation.goBack()} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.title} numberOfLines={1}>{dayTitle(date)}</Text>
-              <Text style={styles.sub} numberOfLines={1}>
+              <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{dayTitle(date)}</Text>
+              <Text style={styles.sub} numberOfLines={2}>
                 {total == null ? " " : filesLabel(total)}{category ? ` · ${labelOf(category)}` : ""} · {personName}
               </Text>
             </View>

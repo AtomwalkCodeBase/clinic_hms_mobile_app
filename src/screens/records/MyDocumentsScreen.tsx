@@ -452,7 +452,7 @@ export function MyDocumentsScreen() {
             >
               <Text style={styles.kicker}>My Documents</Text>
               <View style={styles.nameRow}>
-                <Text style={styles.name} numberOfLines={1}>{personName}</Text>
+                <Text style={styles.name} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{personName}</Text>
                 {!!members.length && <ChevronDown size={18} color={ON_BRAND} strokeWidth={2.6} />}
                 <View style={styles.tag}>
                   <Text style={styles.tagText}>{personTag}</Text>

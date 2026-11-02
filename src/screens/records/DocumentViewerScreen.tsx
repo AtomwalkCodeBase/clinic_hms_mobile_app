@@ -52,7 +52,7 @@ export function DocumentViewerScreen() {
       <StatusBar style="light" />
       <View style={styles.top}>
         <BackButton onPress={() => navigation.goBack()} variant="circle" diameter={34} size={19} color="#FFFFFF" background="rgba(255,255,255,0.15)" />
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
       </View>
 
       <View style={styles.stage}>

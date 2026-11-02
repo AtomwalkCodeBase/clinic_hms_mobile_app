@@ -212,7 +212,7 @@ export function BackHeader({
   return (
     <HeaderBand color={color}>
       <BackButton onPress={onBack} color={onColor} />
-      <Text style={[styles.bandTitle, !!onColor && { color: onColor }]} numberOfLines={1}>{title}</Text>
+      <Text style={[styles.bandTitle, !!onColor && { color: onColor }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
       {right ? <View style={styles.bandRight}>{right}</View> : null}
     </HeaderBand>
   );
