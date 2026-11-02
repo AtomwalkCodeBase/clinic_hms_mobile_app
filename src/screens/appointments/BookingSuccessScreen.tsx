@@ -7,6 +7,7 @@ import { PrimaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { AppStackParamList } from "@/navigation/types";
+import { formatTime12 } from "@/utils/indianTime";
 
 export function BookingSuccessScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -26,7 +27,7 @@ export function BookingSuccessScreen() {
         </Text>
         <Text style={styles.subtitle}>
           {date}
-          {time ? `, ${time}` : ""}
+          {time ? `, ${formatTime12(time)}` : ""}
         </Text>
 
         {tokenNumber != null && (

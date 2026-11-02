@@ -46,7 +46,7 @@ export function DocumentViewerScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
       <View style={styles.top}>
-        <BackButton onPress={() => navigation.goBack()} variant="circle" diameter={34} size={19} color="#FFFFFF" background="rgba(255,255,255,0.15)" />
+        <BackButton onPress={() => navigation.goBack()} color="#FFFFFF" />
         <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
       </View>
 

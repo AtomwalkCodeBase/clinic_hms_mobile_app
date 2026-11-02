@@ -4,7 +4,8 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Screen, BackHeader, EmptyState, ErrorBanner } from "@/components/Layout";
 import { PrimaryButton } from "@/components/Buttons";
-import { Card } from "@/components/Card";
+import { Hospital as HospitalIcon, MapPin, Search } from "lucide-react-native";
+import { TapCard } from "@/components/TapCard";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { search, getDoctors, getHospitals, getSpecialties } from "@/api/portal";
@@ -13,6 +14,10 @@ import { DoctorCard, Hospital, Specialty } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { getSpecialtyStyle } from "@/theme/specialtyStyle";
 import { CARD_TEXT } from "@/theme/cardSizes";
+
+function HospitalCard({ h, onOpen }: { h: Hospital; onOpen: (h: Hospital) => void }) {
+  return <TapCard icon={HospitalIcon} title={h.name} subtitle={h.city || h.state || undefined} subIcon={MapPin} onPress={() => onOpen(h)} accessibilityLabel={`Open ${h.name}`} />;
+}
 
 export function FindDoctorsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -92,6 +97,9 @@ export function FindDoctorsScreen() {
     return acc;
   }, {});
 
+  // push(), not navigate(): see the note where the hospital list is drawn - back must step through each drill-down.
+  const openHospital = (h: Hospital) => navigation.push("FindDoctors", { hospitalId: h.hospital_id, hospitalName: h.name });
+
   return (
     <Screen>
       <BackHeader title="Find doctors" onBack={() => navigation.goBack()} />
@@ -104,6 +112,7 @@ export function FindDoctorsScreen() {
 
       {!preselectedHospital && (
         <View style={styles.searchRow}>
+          <Search size={18} color={NEUTRAL.textSecondary} strokeWidth={2.2} />
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -151,27 +160,16 @@ export function FindDoctorsScreen() {
           // whatever was underneath (Home), not the hospital list. push()
           // always adds a real new entry, so back correctly steps back
           // through each hospital drill-down one at a time.
-          hospitals.map((h) => (
-            <Pressable key={h.hospital_id} onPress={() => navigation.push("FindDoctors", { hospitalId: h.hospital_id, hospitalName: h.name })}>
-              <Card>
-                <Text style={styles.docName}>{h.name}</Text>
-                <Text style={styles.docSpec}>{h.city || h.state || "—"}</Text>
-              </Card>
-            </Pressable>
-          ))
+          <>
+            <Text style={styles.gridTitle}>Hospitals</Text>
+            {hospitals.map((h) => <HospitalCard key={h.hospital_id} h={h} onOpen={openHospital} />)}
+          </>
         )
       ) : !loading && doctors.length === 0 && searchedHospitals.length === 0 ? (
         <EmptyState text="No doctors or hospitals found. Try a different search." />
       ) : (
         <>
-          {searchedHospitals.map((h) => (
-            <Pressable key={h.hospital_id} onPress={() => navigation.push("FindDoctors", { hospitalId: h.hospital_id, hospitalName: h.name })}>
-              <Card>
-                <Text style={styles.docName}>{h.name}</Text>
-                <Text style={styles.docSpec}>{h.city || h.state || "—"}</Text>
-              </Card>
-            </Pressable>
-          ))}
+          {searchedHospitals.map((h) => <HospitalCard key={h.hospital_id} h={h} onOpen={openHospital} />)}
           {Object.entries(grouped).map(([hospital, docs]) => (
           <View key={hospital}>
             <Pressable
@@ -223,17 +221,11 @@ export function FindDoctorsScreen() {
 const styles = StyleSheet.create({
   contextBanner: { backgroundColor: NEUTRAL.surfaceAlt, borderRadius: 10, padding: 10, marginBottom: 12 },
   contextText: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textPrimary },
-  searchRow: { marginBottom: 12 },
-  searchInput: {
-    backgroundColor: NEUTRAL.surface,
-    borderWidth: 0.5,
-    borderColor: NEUTRAL.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 13,
-    color: NEUTRAL.textPrimary,
+  searchRow: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14,
+    backgroundColor: NEUTRAL.surface, borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 14, paddingHorizontal: 12,
   },
+  searchInput: { flex: 1, paddingVertical: 11, fontSize: 13.5, color: NEUTRAL.textPrimary },
   gridTitle: { fontSize: 12, fontWeight: "600", color: NEUTRAL.textSecondary, marginBottom: 10 },
   specGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 6 },
   specItem: { width: "25%", alignItems: "center", marginBottom: 14 },

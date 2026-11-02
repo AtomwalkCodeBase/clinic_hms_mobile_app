@@ -9,6 +9,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { Clock, ShieldCheck, ShieldAlert, ScanLine, Download, Link2 } from "lucide-react-native";
 import { CloseButton } from "@/components/IconButtons";
 import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
+import { formatClock } from "@/utils/indianTime";
 import { Card } from "@/components/Card";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
 import { NEUTRAL } from "@/theme/themes";
@@ -336,7 +337,7 @@ export function ShareRecordsScreen() {
             <Text style={styles.doneTitle}>Access granted</Text>
           </View>
           <Text style={styles.body}>
-            They can view your records{grantedUntil ? ` until ${new Date(grantedUntil).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : " for 2 hours"}. Manage it below.
+            They can view your records{grantedUntil ? ` until ${formatClock(grantedUntil)}` : " for 2 hours"}. Manage it below.
           </Text>
           <SecondaryButton label="Done" onPress={reset} style={{ marginTop: 12 }} />
         </Card>

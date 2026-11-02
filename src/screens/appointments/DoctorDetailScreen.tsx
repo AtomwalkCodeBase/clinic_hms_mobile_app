@@ -12,12 +12,11 @@ import { useAppTheme } from "@/context/ThemeContext";
 import { getDoctorDetail, getSlots } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
+import { formatTime12, istDateIso, shortDayLabel } from "@/utils/indianTime";
 
 function dateOffsetLabel(daysFromToday: number): { key: string; label: string } {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromToday);
-  const iso = d.toISOString().slice(0, 10);
-  const label = daysFromToday === 0 ? "Today" : daysFromToday === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const iso = istDateIso(daysFromToday);
+  const label = daysFromToday === 0 ? "Today" : daysFromToday === 1 ? "Tomorrow" : shortDayLabel(iso);
   return { key: iso, label };
 }
 
@@ -122,7 +121,7 @@ export function DoctorDetailScreen() {
                               ]}
                             >
                               <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: ON_ACTION }]}>
-                                {s.time}
+                                {formatTime12(s.time)}
                               </Text>
                               {!s.available && <Text style={styles.slotBookedCaption}>BOOKED</Text>}
                             </Pressable>

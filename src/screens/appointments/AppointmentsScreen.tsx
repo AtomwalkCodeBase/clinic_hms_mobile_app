@@ -23,7 +23,9 @@ import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
 import { MetalHero } from "@/components/MetalHero";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { IconBadge } from "@/components/IconBadge";
-import { CheckCircle2, ChevronRight } from "lucide-react-native";
+import { CheckCircle2 } from "lucide-react-native";
+import { ArrowChip, TAPPABLE_CARD } from "@/components/TapCard";
+import { formatTime12 } from "@/utils/indianTime";
 import { CARD_TEXT } from "@/theme/cardSizes";
 
 // "3 days ago" reads faster than a raw ISO date in a past-visits list — the
@@ -175,8 +177,8 @@ export function AppointmentsScreen() {
           if (segment === "past") {
             const rx = findPrescription(b);
             return (
-              <Pressable key={b.id} onPress={() => setDetailBooking(b)}>
-                <Card style={styles.pastCard}>
+              <Pressable key={b.id} onPress={() => setDetailBooking(b)} accessibilityRole="button" accessibilityLabel={`Open visit with ${b.doctor}`}>
+                <Card style={{ ...styles.pastCard, ...TAPPABLE_CARD }}>
                   <View style={styles.pastRow}>
                     <IconBadge icon={CheckCircle2} size={34} colors={HEADER_GRADIENT} shadowColor={BRAND_DEEP} iconColor={ON_BRAND} />
                     <View style={{ flex: 1 }}>
@@ -184,7 +186,7 @@ export function AppointmentsScreen() {
                         <Text style={styles.pastTimeAgo}>{timeAgo(b.date)}</Text>
                         <View style={styles.trailingRow}>
                           <Pill label="Completed" tone="success" />
-                          <ChevronRight size={16} color={NEUTRAL.textMuted} strokeWidth={2.2} />
+                          <ArrowChip />
                         </View>
                       </View>
                       <Text style={styles.hospitalName}>{b.doctor}</Text>
@@ -220,13 +222,13 @@ export function AppointmentsScreen() {
             );
           }
           return (
-            <Pressable key={b.id} onPress={() => setDetailBooking(b)}>
-              <Card>
+            <Pressable key={b.id} onPress={() => setDetailBooking(b)} accessibilityRole="button" accessibilityLabel={`Open appointment at ${b.hospital}`}>
+              <Card style={TAPPABLE_CARD}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.hospitalName}>{b.hospital}</Text>
                   <View style={styles.trailingRow}>
                     <Pill label={b.status.replace("_", " ")} tone={statusTone(b.status)} />
-                    <ChevronRight size={16} color={NEUTRAL.textMuted} strokeWidth={2.2} />
+                    <ArrowChip />
                   </View>
                 </View>
                 <Text style={styles.doctorLine}>
@@ -236,7 +238,7 @@ export function AppointmentsScreen() {
                 <View style={styles.rowBetween}>
                   <Text style={[styles.dateLine, { color: theme.text }]}>
                     {b.date}
-                    {b.time ? `, ${b.time}` : ""}
+                    {b.time ? `, ${formatTime12(b.time)}` : ""}
                   </Text>
                   {b.token_number != null && <Text style={styles.tokenLine}>Token #{b.token_number}</Text>}
                 </View>
@@ -285,7 +287,7 @@ export function AppointmentsScreen() {
         title="Cancel this appointment?"
         message={
           confirmTarget
-            ? `${confirmTarget.doctor} · ${confirmTarget.hospital} · ${confirmTarget.date}${confirmTarget.time ? `, ${confirmTarget.time}` : ""}`
+            ? `${confirmTarget.doctor} · ${confirmTarget.hospital} · ${confirmTarget.date}${confirmTarget.time ? `, ${formatTime12(confirmTarget.time)}` : ""}`
             : undefined
         }
         confirmLabel="Cancel appointment"
@@ -300,7 +302,7 @@ export function AppointmentsScreen() {
           <>
             <DetailRow label="Doctor" value={detailBooking.doctor} />
             {!!detailBooking.patient_name && <DetailRow label="Patient" value={detailBooking.patient_name} />}
-            <DetailRow label="Date" value={detailBooking.date + (detailBooking.time ? `, ${detailBooking.time}` : "")} />
+            <DetailRow label="Date" value={detailBooking.date + (detailBooking.time ? `, ${formatTime12(detailBooking.time)}` : "")} />
             <DetailRow
               label="Status"
               value={detailBooking.status.replace("_", " ")}

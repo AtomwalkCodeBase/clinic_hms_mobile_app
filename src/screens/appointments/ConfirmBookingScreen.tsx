@@ -12,6 +12,7 @@ import { book, getMyBookings } from "@/api/portal";
 import { apiErrorMessage, isLikelyNetworkError } from "@/api/client";
 import { useNetwork } from "@/context/NetworkContext";
 import { AppStackParamList } from "@/navigation/types";
+import { formatTime12 } from "@/utils/indianTime";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CheckCircle2 } from "lucide-react-native";
 import { CARD_TEXT } from "@/theme/cardSizes";
@@ -127,7 +128,7 @@ export function ConfirmBookingScreen() {
         <Text style={styles.hospital}>{params.hospitalName}</Text>
         <Text style={[styles.dateLine, { color: theme.text }]}>
           {params.date}
-          {params.time ? ` · ${params.time}` : " · next available token"} · for {params.patientName}
+          {params.time ? ` · ${formatTime12(params.time)}` : " · next available token"} · for {params.patientName}
         </Text>
         {!!params.consultationFee && (
           <View style={styles.feeRow}>
@@ -161,7 +162,7 @@ export function ConfirmBookingScreen() {
       <ConfirmDialog
         visible={confirmVisible}
         title="Confirm this booking?"
-        message={`${params.doctorName} · ${params.hospitalName} · ${params.date}${params.time ? ` · ${params.time}` : ""}. You can confirm now, or go back and edit the details first.`}
+        message={`${params.doctorName} · ${params.hospitalName} · ${params.date}${params.time ? ` · ${formatTime12(params.time)}` : ""}. You can confirm now, or go back and edit the details first.`}
         confirmLabel="Confirm booking"
         cancelLabel="Edit details"
         loading={loading}

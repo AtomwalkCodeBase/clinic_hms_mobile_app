@@ -85,7 +85,7 @@ export function MetalHero({
       <Decoration />
       <View style={styles.content}>
         {!!onBack && (
-          <BackButton onPress={onBack} variant="circle" diameter={32} size={20} background="rgba(255,255,255,0.35)" style={styles.backBtn} />
+          <BackButton onPress={onBack} style={styles.backBtn} />
         )}
         {children}
       </View>

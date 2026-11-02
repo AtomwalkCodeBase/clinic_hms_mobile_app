@@ -306,8 +306,8 @@ const styles = StyleSheet.create({
   // tighter than the shared hero: less padding, and the avatar rises beside the back button instead of under it
   hero: { marginBottom: 24, paddingTop: 14, paddingBottom: 20 },
   // the same height and top as the 32px back button beside it, with the text centred in that box so the two line up
-  versionCode: { position: "absolute", top: 0, right: 6, height: 32, textAlignVertical: "center", includeFontPadding: false, fontSize: 11, fontWeight: "600", color: ON_BRAND, opacity: 0.8 },
-  heroContent: { alignItems: "center", marginTop: -34 },
+  versionCode: { position: "absolute", top: 0, right: 6, height: 40, textAlignVertical: "center", includeFontPadding: false, fontSize: 11, fontWeight: "600", color: ON_BRAND, opacity: 0.8 },
+  heroContent: { alignItems: "center", marginTop: -42 },
   avwrap: { position: "relative", marginBottom: 6 },
   avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImg: { width: "100%", height: "100%" },

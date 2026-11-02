@@ -26,6 +26,7 @@ import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
 import { AppTabsParamList } from "@/navigation/types";
 import { useExitOnDoubleBack } from "@/utils/useExitOnDoubleBack";
+import { formatTime12, istDateIso, istHour, istTodayLong } from "@/utils/indianTime";
 import { CARD_TEXT } from "@/theme/cardSizes";
 
 type Nav = CompositeNavigationProp<
@@ -108,7 +109,7 @@ export function HomeScreen() {
   // "Your bookings" used to show the next 2 upcoming appointments regardless
   // of date, which could be a week out — narrowed to just today's, since
   // that's the useful "what's on for me right now" view on the dashboard.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = istDateIso();
   const todayBookings = upcoming.filter((b) => b.date === todayIso);
 
   if (isInitialLoading) {
@@ -157,10 +158,10 @@ export function HomeScreen() {
               </View>
             </View>
             <Text style={styles.greeting}>
-              {greetingForHour(now.getHours())}
+              {greetingForHour(istHour())}
               {firstName ? `, ${firstName}` : ""}
             </Text>
-            <Text style={styles.greetingDate}>{now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</Text>
+            <Text style={styles.greetingDate}>{istTodayLong()}</Text>
             <Text style={styles.greetingSub}>
               {stats ? `${stats.hospitals} hospital${stats.hospitals === 1 ? "" : "s"} · ${stats.doctors}+ doctors on the platform` : "Here's your health at a glance"}
             </Text>
@@ -182,7 +183,7 @@ export function HomeScreen() {
                   </Text>
                   <Text style={styles.remSub}>
                     {nextUp.doctor} · {nextUp.hospital} · {nextUp.date}
-                    {nextUp.time ? `, ${nextUp.time}` : ""}
+                    {nextUp.time ? `, ${formatTime12(nextUp.time)}` : ""}
                   </Text>
                 </>
               ) : (
@@ -255,7 +256,7 @@ export function HomeScreen() {
                     <Text style={styles.hospitalName}>{b.hospital}</Text>
                     <Text style={styles.doctorLine}>
                       {b.doctor}
-                      {b.time ? ` · ${b.time}` : ""}
+                      {b.time ? ` · ${formatTime12(b.time)}` : ""}
                     </Text>
                   </View>
                 </View>
