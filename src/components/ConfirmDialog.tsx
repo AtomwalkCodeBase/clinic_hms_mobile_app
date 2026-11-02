@@ -2,6 +2,7 @@ import { Modal, View, Text, StyleSheet } from "react-native";
 import { AlertTriangle, HelpCircle } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
+import { CloseButton, CORNER_CLOSE } from "@/components/IconButtons";
 
 /**
  * A themed replacement for React Native's native Alert.alert — the OS
@@ -34,6 +35,7 @@ export function ConfirmDialog({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          {!loading && <CloseButton onPress={onCancel} style={CORNER_CLOSE} />}
           <View style={[styles.iconWrap, { backgroundColor: danger ? NEUTRAL.dangerBg : NEUTRAL.surfaceAlt }]}>
             {danger ? (
               <AlertTriangle size={24} color={NEUTRAL.danger} strokeWidth={2.2} />

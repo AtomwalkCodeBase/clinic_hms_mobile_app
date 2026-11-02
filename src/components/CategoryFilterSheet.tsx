@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL, ON_BRAND } from "@/theme/themes";
 
 interface CategoryOption {
@@ -58,11 +59,15 @@ export function CategoryFilterSheet({
           <View style={styles.sheetGrab} />
           <View style={styles.sheetHead}>
             <Text style={styles.sheetTitle}>Filter by category</Text>
-            {draft.size > 0 && (
-              <Pressable onPress={() => setDraft(new Set())} hitSlop={8}>
-                <Text style={[styles.sheetClear, { color: accent }]}>Clear</Text>
-              </Pressable>
-            )}
+            <View style={styles.sheetActions}>
+              {draft.size > 0 && (
+                <Pressable onPress={() => setDraft(new Set())} hitSlop={8}>
+                  <Text style={[styles.sheetClear, { color: accent }]}>Clear</Text>
+                </Pressable>
+              )}
+              {/* the cross leaves without applying the picks; Done (or tapping outside) applies them */}
+              <CloseButton onPress={onClose} />
+            </View>
           </View>
           <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
             <Pressable style={styles.optRow} onPress={() => setDraft(new Set())}>
@@ -95,6 +100,7 @@ const styles = StyleSheet.create({
   sheetGrab: { alignSelf: "center", width: 36, height: 4, borderRadius: 999, backgroundColor: NEUTRAL.border, marginBottom: 12 },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   sheetTitle: { fontSize: 14, fontWeight: "700", color: NEUTRAL.textPrimary },
+  sheetActions: { flexDirection: "row", alignItems: "center", gap: 16 },
   sheetClear: { fontSize: 12, fontWeight: "600" },
   optRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: NEUTRAL.border },
   optLabel: { flex: 1, fontSize: 13, color: NEUTRAL.textPrimary },

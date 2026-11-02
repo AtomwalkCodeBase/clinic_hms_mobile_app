@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Modal, FlatList, TextInput } from "react-native";
 import { Check, ChevronDown } from "lucide-react-native";
+import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 
@@ -86,7 +87,10 @@ export function SelectField({
       <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
         <Pressable style={styles.backdrop} onPress={close}>
           <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-            <Text style={styles.sheetTitle}>{label}</Text>
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetTitle}>{label}</Text>
+              <CloseButton onPress={close} />
+            </View>
 
             {searchable && (
               <TextInput
@@ -187,7 +191,8 @@ const styles = StyleSheet.create({
   error: { fontSize: 11, color: NEUTRAL.danger, marginTop: 4 },
   backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: "75%" },
-  sheetTitle: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary, marginBottom: 8 },
+  sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  sheetTitle: { fontSize: 13, fontWeight: "700", color: NEUTRAL.textPrimary, flex: 1, paddingRight: 12 },
   searchInput: {
     backgroundColor: NEUTRAL.surfaceAlt,
     borderRadius: 8,

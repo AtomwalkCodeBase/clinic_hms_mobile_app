@@ -102,6 +102,9 @@ export function CloseButton({
   );
 }
 
+/** Where the cross sits in the top right corner of a dialog card or a sheet that has no header row of its own. */
+export const CORNER_CLOSE: ViewStyle = { position: "absolute", top: 14, right: 14, zIndex: 1 };
+
 const styles = StyleSheet.create({
   // just the arrow: no circle, no border, no background
   plainBack: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },

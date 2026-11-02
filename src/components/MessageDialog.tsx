@@ -2,6 +2,7 @@ import { Modal, View, Text, StyleSheet } from "react-native";
 import { CheckCircle2, XCircle } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton } from "@/components/Buttons";
+import { CloseButton, CORNER_CLOSE } from "@/components/IconButtons";
 import { useAppTheme } from "@/context/ThemeContext";
 
 /**
@@ -31,6 +32,7 @@ export function MessageDialog({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          <CloseButton onPress={onDismiss} style={CORNER_CLOSE} />
           <View style={[styles.iconWrap, { backgroundColor: isError ? neutral.dangerBg : theme.bg }]}>
             {isError ? (
               <XCircle size={26} color={neutral.danger} strokeWidth={2.2} />

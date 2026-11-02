@@ -4,6 +4,7 @@ import { AlertTriangle, File, FileCheck, FileX, Files, ImageOff, Images, Scale, 
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { PrimaryButton } from "@/components/Buttons";
+import { CloseButton, CORNER_CLOSE } from "@/components/IconButtons";
 import type { LucideIcon } from "@/theme/icons";
 import { MAX_FILES, MAX_FILE_BYTES, MAX_PHOTOS, MAX_TOTAL_BYTES, sizeText } from "@/utils/uploadLimits";
 
@@ -53,6 +54,7 @@ export function UploadGuidelinesModal({ visible, many, onChoose }: { visible: bo
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => onChoose(false)} statusBarTranslucent>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          <CloseButton onPress={() => onChoose(false)} style={CORNER_CLOSE} />
           <View style={styles.iconWrap}><AlertTriangle size={26} color={NEUTRAL.warning} strokeWidth={2.2} /></View>
           <Text style={styles.title}>Before you upload</Text>
 

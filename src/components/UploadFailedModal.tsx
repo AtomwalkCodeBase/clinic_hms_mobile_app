@@ -2,6 +2,7 @@ import { Modal, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
+import { CloseButton, CORNER_CLOSE } from "@/components/IconButtons";
 
 /**
  * Said once, on whatever screen the patient is on, when an upload that carried on in the background (the camera, Add
@@ -20,6 +21,7 @@ export function UploadFailedModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          <CloseButton onPress={onClose} style={CORNER_CLOSE} />
           <View style={styles.iconWrap}><AlertTriangle size={26} color={NEUTRAL.danger} strokeWidth={2.2} /></View>
           <Text style={styles.title}>Upload didn't finish</Text>
           <Text style={styles.body}>{message}</Text>

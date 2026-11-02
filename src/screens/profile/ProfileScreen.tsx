@@ -16,6 +16,7 @@ import { MetalHero } from "@/components/MetalHero";
 import { APP_VERSION_LABEL } from "@/utils/appVersion";
 import { ListRow } from "@/components/ListRow";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { CloseButton } from "@/components/IconButtons";
 import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -185,7 +186,8 @@ export function ProfileScreen() {
           <Modal visible={showPhotoSheet} transparent animationType="fade" onRequestClose={() => setShowPhotoSheet(false)}>
             <Pressable style={styles.sheetBackdrop} onPress={() => setShowPhotoSheet(false)}>
               <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-                <Text style={styles.sheetTitle}>Update profile photo</Text>
+                <CloseButton onPress={() => setShowPhotoSheet(false)} style={{ position: "absolute", top: 12, right: 14, zIndex: 1 }} />
+                <Text style={[styles.sheetTitle, { paddingHorizontal: 30 }]}>Update profile photo</Text>
                 <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("camera")}>
                   <Text style={styles.sheetOptText}>Take photo</Text>
                 </Pressable>

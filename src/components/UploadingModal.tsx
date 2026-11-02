@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, UploadCloud } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
+import { CloseButton, CORNER_CLOSE } from "@/components/IconButtons";
 
 /**
  * Shown from the moment Upload is pressed until the server has the files: its progress, and the reminder to keep the
@@ -26,6 +27,7 @@ export function UploadingModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onHide} statusBarTranslucent>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          <CloseButton onPress={onHide} label={sending ? "Hide" : "Close"} style={CORNER_CLOSE} />
           <View style={[styles.iconWrap, { backgroundColor: sending ? NEUTRAL.surfaceAlt : theme.bg }]}>
             {sending
               ? <UploadCloud size={26} color={NEUTRAL.textSecondary} strokeWidth={2.2} />

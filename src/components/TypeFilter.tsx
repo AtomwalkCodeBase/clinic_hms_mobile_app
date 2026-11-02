@@ -2,6 +2,7 @@ import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check, ChevronDown, Files, SlidersHorizontal } from "lucide-react-native";
 import type { LucideIcon } from "@/theme/icons";
+import { CloseButton } from "@/components/IconButtons";
 import { docTypeStyle } from "@/theme/docTypes";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
@@ -71,6 +72,7 @@ export function FilterSheet({
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
         <View style={[styles.sheet, { paddingBottom: Math.max(20, insets.bottom + 12) }]}>
           <View style={styles.handle} />
+          <CloseButton onPress={onClose} style={{ position: "absolute", top: 20, right: 18, zIndex: 1 }} />
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.sub}>{subtitle}</Text>
           <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }} nestedScrollEnabled>
@@ -113,7 +115,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10, maxHeight: "80%" },
   handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: NEUTRAL.border, alignSelf: "center", marginBottom: 12 },
-  title: { fontSize: 19, fontWeight: "800", color: NEUTRAL.textPrimary, textAlign: "center" },
+  title: { fontSize: 19, fontWeight: "800", color: NEUTRAL.textPrimary, textAlign: "center", paddingHorizontal: 34 },
   sub: { fontSize: 13, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 3, marginBottom: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 6 },
   rowLine: { borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },

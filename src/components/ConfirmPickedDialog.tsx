@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { AlertTriangle, FileText, Image as ImageIcon, UploadCloud } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
+import { CloseButton, CORNER_CLOSE } from "@/components/IconButtons";
 import type { PickedFile } from "@/utils/fileHelpers";
 import { batchProblem, fileProblem, sizeText } from "@/utils/uploadLimits";
 
@@ -28,6 +29,7 @@ export function ConfirmPickedDialog({ visible, files, onChoose }: { visible: boo
     <Modal visible={visible} transparent animationType="fade" onRequestClose={() => onChoose("cancel")} statusBarTranslucent>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          <CloseButton onPress={() => onChoose("cancel")} style={CORNER_CLOSE} />
           <View style={[styles.iconWrap, { backgroundColor: canUpload ? NEUTRAL.surfaceAlt : NEUTRAL.dangerBg }]}>
             {canUpload
               ? <UploadCloud size={24} color={NEUTRAL.textSecondary} strokeWidth={2.2} />
