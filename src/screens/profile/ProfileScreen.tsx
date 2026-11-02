@@ -303,12 +303,13 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { marginBottom: 28 },
+  // tighter than the shared hero: less padding, and the avatar rises beside the back button instead of under it
+  hero: { marginBottom: 24, paddingTop: 14, paddingBottom: 20 },
   // the same height and top as the 32px back button beside it, with the text centred in that box so the two line up
   versionCode: { position: "absolute", top: 0, right: 6, height: 32, textAlignVertical: "center", includeFontPadding: false, fontSize: 11, fontWeight: "600", color: ON_BRAND, opacity: 0.8 },
-  heroContent: { alignItems: "center", paddingVertical: 4 },
-  avwrap: { position: "relative", marginBottom: 8 },
-  avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  heroContent: { alignItems: "center", marginTop: -34 },
+  avwrap: { position: "relative", marginBottom: 6 },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImg: { width: "100%", height: "100%" },
   avatarText: { fontSize: 20, fontWeight: "700", color: ON_BRAND },
   camBtn: {
@@ -332,14 +333,14 @@ const styles = StyleSheet.create({
   sheetOptText: { fontSize: 13, color: NEUTRAL.textPrimary, fontWeight: "500" },
   sheetCancel: { paddingVertical: 13, alignItems: "center", marginTop: 4 },
   sheetCancelText: { fontSize: 13, color: NEUTRAL.textSecondary, fontWeight: "600" },
-  name: { fontWeight: "600", fontSize: 15, marginTop: 8, color: ON_BRAND },
+  name: { fontWeight: "600", fontSize: 15, marginTop: 6, color: ON_BRAND },
   awpid: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 2 },
   statCard: {
     flexDirection: "row",
     backgroundColor: NEUTRAL.surface,
     borderRadius: 16,
     marginTop: -34,
-    marginBottom: 18,
+    marginBottom: 2,
     paddingVertical: 12,
     shadowColor: ON_BRAND,
     shadowOffset: { width: 0, height: 6 },
