@@ -20,6 +20,8 @@ function uploadReason(err: unknown): string {
   if (status === 401) return "Your sign-in has ended. Please sign in again, then upload your files.";
   if (status === 403) return "You don't have permission to upload for this person.";
   if (status === 429) return "Too many uploads in a short time. Please wait a minute and try again.";
+  const e = err as { isAxiosError?: boolean; message?: string; response?: unknown };
+  if (e?.isAxiosError && !e.response && e.message === "Network Error") return "Could not reach the server. Please try again after some time.";
   return apiErrorMessage(err, "Upload failed, try again.");
 }
 

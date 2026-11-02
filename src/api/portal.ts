@@ -481,20 +481,37 @@ export async function uploadDocuments(
   onProgress?: (fraction: number) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
-  const form = new FormData();
-  files.forEach((f) => form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any));
-  form.append("mode", mode);
-  if (patientAwpid) form.append("patient_awpid", patientAwpid);
-  const res = await api.post<Envelope<UploadResult & { documents: any[] }>>(
-    "/records/upload/",
-    form,
-    {
-      headers: { "Content-Type": "multipart/form-data" },
-      timeout: 10 * 60 * 1000,
-      signal,      // lets a sign-out stop an upload that is still on its way
-      onUploadProgress: (e) => onProgress?.(e.total ? e.loaded / e.total : 0),
-    },
-  );
+  // A connection that went stale while the phone sat idle fails the first request at once, before a single byte is sent.
+  // Nothing reached the server then, so one more try is safe; once any data has gone out it is not repeated, as the
+  // server may already have the files.
+  let res: Awaited<ReturnType<typeof api.post<Envelope<UploadResult & { documents: any[] }>>>> | undefined;
+  for (let attempt = 0; !res; attempt++) {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", { uri: f.uri, name: f.name, type: f.mimeType } as any));
+    form.append("mode", mode);
+    if (patientAwpid) form.append("patient_awpid", patientAwpid);
+    let sending = false;
+    try {
+      res = await api.post<Envelope<UploadResult & { documents: any[] }>>(
+        "/records/upload/",
+        form,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 10 * 60 * 1000,
+          signal,      // lets a sign-out stop an upload that is still on its way
+          onUploadProgress: (e) => {
+            if (e.loaded > 0) sending = true;
+            onProgress?.(e.total ? e.loaded / e.total : 0);
+          },
+        },
+      );
+    } catch (err) {
+      const e = err as { isAxiosError?: boolean; message?: string; response?: unknown };
+      const noConnection = !!e?.isAxiosError && !e.response && e.message === "Network Error";
+      if (attempt > 0 || sending || !noConnection || signal?.aborted) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
   const data = res.data.data;
   return { ...data, documents: data.documents.map((d) => documentOf<UploadResult["documents"][number]>(d)) };
 }
