@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { Check, CheckCircle2, Clock, Eye, Building2, Pencil, User } from "lucide-react-native";
+import { Check, CheckCircle2, Clock, FileText, Building2, Pencil, User } from "lucide-react-native";
 import { CardMenu, MenuItem } from "@/components/CardMenu";
 import { docTypeStyle } from "@/theme/docTypes";
 import { NEUTRAL, BRAND_TEXT, BRAND_TINT } from "@/theme/themes";
@@ -84,7 +84,7 @@ export function FileItem({
         <View style={styles.doctorRow}>
           <Text style={styles.doctor} numberOfLines={1}>
             {doctorName ? (
-              <>Doctor <Text style={styles.doctorName}>Dr. {doctorName}</Text></>
+              <Text style={styles.doctorName}>Dr. {doctorName}</Text>
             ) : (
               <Text style={styles.doctorMissing}>Doctor not mentioned</Text>
             )}
@@ -134,9 +134,8 @@ export function SourceFooter({ hospital }: { hospital: boolean }) {
 /** Opens the file in the in-app viewer. */
 export function ViewButton({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel="View this file" style={styles.outlineBtn}>
-      <Eye size={16} color={BRAND_TEXT} strokeWidth={2.3} />
-      <Text style={styles.outlineText}>View</Text>
+    <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel="View this file" style={styles.viewBtn}>
+      <FileText size={20} color={BRAND_TEXT} strokeWidth={2.2} />
     </Pressable>
   );
 }
@@ -221,5 +220,6 @@ const styles = StyleSheet.create({
   srcValue: { fontSize: 16, fontWeight: "800", color: NEUTRAL.textPrimary },
 
   outlineBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 7 },
+  viewBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: BRAND_TEXT, backgroundColor: BRAND_TINT, borderRadius: 12 },
   outlineText: { fontSize: 13, fontWeight: "800", color: BRAND_TEXT },
 });
