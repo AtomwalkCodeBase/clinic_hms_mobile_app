@@ -1,6 +1,6 @@
 import { ReactNode, useCallback, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { AlertTriangle, File, FileCheck, FileX, Files, ImageOff, Images, Scale, Smartphone, Sun } from "lucide-react-native";
+import { AlertTriangle, File, FileCheck, FileX, Files, ImageOff, Images, Scale, Smartphone, Sun, UserX } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { PrimaryButton } from "@/components/Buttons";
@@ -27,6 +27,7 @@ const PHOTO_TIPS: Rule[] = [
   { icon: Smartphone, text: "Hold the phone upright, not rotated" },
   { icon: FileX, text: "No torn or crumpled papers" },
   { icon: ImageOff, text: "No blank pages, selfies or other unrelated photos" },
+  { icon: UserX, text: "Only your own documents. For a family member, switch to their profile first" },
 ];
 
 function Section({ title, rules }: { title: string; rules: Rule[] }) {
