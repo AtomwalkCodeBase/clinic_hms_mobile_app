@@ -1,3 +1,4 @@
+import { ActionGradient } from "@/components/ActionGradient";
 import { memo, startTransition, useEffect, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { NEUTRAL } from "@/theme/themes";
@@ -81,8 +82,10 @@ function SlidingTabsImpl<T extends string>({
         >
           <Animated.View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, spec.pills ? styles.pillThumb : styles.trackThumb, { borderRadius: spec.radius, opacity: fadeOf(o.key, on) }]}
-          />
+            style={[StyleSheet.absoluteFill, spec.pills ? styles.pillThumb : styles.trackThumb, { borderRadius: spec.radius, opacity: fadeOf(o.key, on), overflow: "hidden" }]}
+          >
+            {spec.pills && <ActionGradient />}
+          </Animated.View>
           <Text
             numberOfLines={1}
             adjustsFontSizeToFit={equal}

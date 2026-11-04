@@ -1,3 +1,4 @@
+import { ActionGradient } from "@/components/ActionGradient";
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
 import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,7 +36,8 @@ export function HelpSheet({ visible, onClose, items, title = "What you can do he
               </View>
             ))}
           </ScrollView>
-          <Pressable onPress={onClose} style={[styles.done, { backgroundColor: ACTION }]}>
+          <Pressable onPress={onClose} style={[styles.done, { backgroundColor: ACTION, overflow: "hidden" }]}>
+            <ActionGradient />
             <Text style={[styles.doneText, { color: ON_ACTION }]}>Got it</Text>
           </Pressable>
         </View>

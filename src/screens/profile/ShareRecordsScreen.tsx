@@ -1,3 +1,4 @@
+import { ActionGradient } from "@/components/ActionGradient";
 import { useEffect, useRef, useState } from "react";
 import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, TextInput, Share } from "react-native";
@@ -251,7 +252,8 @@ export function ShareRecordsScreen() {
 
           <Text style={[styles.h, { marginTop: 18 }]}>2. Scan their screen &amp; confirm</Text>
           <Text style={styles.body}>A QR appears on the doctor's screen. Scan it and approve — no code to type.</Text>
-          <Pressable style={[styles.scanBtn, { backgroundColor: ACTION }]} onPress={startScan}>
+          <Pressable style={[styles.scanBtn, { backgroundColor: ACTION, overflow: "hidden" }]} onPress={startScan}>
+            <ActionGradient />
             <ScanLine size={18} color={ON_ACTION} />
             <Text style={[styles.scanBtnText, { color: ON_ACTION }]}>Scan to approve</Text>
           </Pressable>

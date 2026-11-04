@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   tick: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   typeTile: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   title: { flex: 1, fontSize: 18.5, fontWeight: "800", color: NEUTRAL.textPrimary, lineHeight: 24 },
-  date: { fontSize: 15.5, fontWeight: "700", color: "#3D4B5C" },
+  date: { fontSize: 15.5, fontWeight: "700", color: NEUTRAL.textSecondary },
 
   doctorRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
   doctor: { flexShrink: 1, fontSize: 15, color: NEUTRAL.textSecondary },

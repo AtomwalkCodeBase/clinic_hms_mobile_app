@@ -12,7 +12,8 @@ import { CalendarDays, ClipboardList, FileText, QrCode, Bell, ChevronRight, Uplo
 import { Screen, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { Pill, statusTone } from "@/components/Pill";
-import { LogoPill } from "@/components/Logo";
+import { ActionGradient } from "@/components/ActionGradient";
+import { ProfileAvatar, ProfilePhotoSheet, useProfilePhoto } from "@/components/ProfilePhoto";
 import { MetalHero } from "@/components/MetalHero";
 import { IconBadge } from "@/components/IconBadge";
 import { GadgetCard } from "@/components/GadgetCard";
@@ -78,6 +79,8 @@ export function HomeScreen() {
   const statsQ = useQuery({ queryKey: ["stats"], queryFn: getStats });
   const bookingsQ = useQuery({ queryKey: ["bookings", 1], queryFn: () => getMyBookings() });
   const notifsQ = useQuery({ queryKey: ["notifications"], queryFn: () => getNotifications().catch(() => null) });
+  const [photoError, setPhotoError] = useState("");
+  const photo = useProfilePhoto(setPhotoError);
   const profileQ = useQuery({ queryKey: ["profile"], queryFn: () => getProfile().catch(() => null) });
   // Same cache entry My Documents reads for the signed-in patient; here only for the "to review" badge.
   const docCountsQ = useQuery({ queryKey: ["documentCounts", undefined], queryFn: () => getDocumentCounts().catch(() => null) });
@@ -89,7 +92,10 @@ export function HomeScreen() {
   const { refreshing: pulling, onRefresh: pullRefresh } = usePullToRefresh(refetchAll);
 
   const stats = statsQ.data ?? null;
-  const upcoming = (bookingsQ.data?.results ?? []).filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status));
+  // The server sends bookings newest first; the dashboard wants the soonest one first.
+  const upcoming = (bookingsQ.data?.results ?? [])
+    .filter((b) => ["scheduled", "waiting", "vitals_done", "in_progress"].includes(b.status))
+    .sort((x, y) => `${x.date} ${x.time ?? ""}`.localeCompare(`${y.date} ${y.time ?? ""}`));
   const unreadCount = notifsQ.data?.unread_count ?? 0;
   const awaitingReview = docCountsQ.data?.awaiting_review ?? 0;
   const firstName = profileQ.data?.full_name?.split(" ")[0] || "";
@@ -117,7 +123,7 @@ export function HomeScreen() {
       <Screen bottomInset={false}>
         <View style={[styles.hero, { padding: 16, height: 150, backgroundColor: BRAND, borderRadius: 24 }]}>
           <View style={styles.heroTop}>
-            <LogoPill size={40} />
+            <SkeletonBlock width={46} height={46} radius={23} style={{ backgroundColor: "rgba(255,255,255,0.25)" }} />
           </View>
           <SkeletonBlock width={170} height={18} style={{ marginTop: 14, backgroundColor: "rgba(255,255,255,0.25)" }} />
           <SkeletonBlock width={130} height={11} style={{ marginTop: 8, backgroundColor: "rgba(255,255,255,0.25)" }} />
@@ -145,7 +151,7 @@ export function HomeScreen() {
         <>
           <MetalHero compact curved style={styles.hero}>
             <View style={styles.heroTop}>
-              <LogoPill size={40} />
+              <ProfileAvatar photo={profileQ.data?.photo} name={profileQ.data?.full_name} size={46} busy={photo.busy} onPress={photo.openSheet} />
               <View style={styles.heroActions}>
                 <Pressable onPress={() => navigation.navigate("Notifications")} hitSlop={10} style={styles.bellBtn}>
                   <Bell size={18} color={ON_BRAND} strokeWidth={2.2} />
@@ -166,6 +172,8 @@ export function HomeScreen() {
               {stats ? `${stats.hospitals} hospital${stats.hospitals === 1 ? "" : "s"} · ${stats.doctors}+ doctors on the platform` : "Here's your health at a glance"}
             </Text>
           </MetalHero>
+          <ProfilePhotoSheet visible={photo.sheetOpen} hasPhoto={!!profileQ.data?.photo} onClose={photo.closeSheet} onPick={photo.pick} onRemove={photo.remove} />
+          {!!photoError && <ErrorBanner message={photoError} />}
 
           <FailedUploadBar />
           {!!error && <ErrorBanner message={apiErrorMessage(error, "Couldn't load your dashboard.")} onRetry={refetchAll} />}
@@ -199,6 +207,7 @@ export function HomeScreen() {
           {/* Promoted out of the quick-access grid — booking is what this app
               is actually for, not one tile among several. */}
           <Pressable onPress={onBookVisit} style={({ pressed }) => [styles.bookCta, pressed && { opacity: 0.92 }]}>
+            <ActionGradient />
             <View style={styles.bookIcon}>
               <CalendarDays size={22} color={ON_ACTION} strokeWidth={2.2} />
             </View>
@@ -280,11 +289,11 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   heroActions: { flexDirection: "row", alignItems: "center", gap: 10 },
   bellBtn: { position: "relative", padding: 4 },
-  badge: { position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: "#B23A3A", alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
+  badge: { position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: NEUTRAL.danger, alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
   badgeText: { color: "#fff", fontSize: 9, fontWeight: "700" },
   greeting: { fontSize: 16, fontWeight: "600", color: ON_BRAND, marginTop: 12 },
-  greetingDate: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 2 },
-  greetingSub: { fontSize: 11.5, color: "rgba(4,38,28,0.78)", marginTop: 6 },
+  greetingDate: { fontSize: 11, color: "rgba(255,255,255,0.88)", marginTop: 2 },
+  greetingSub: { fontSize: 11.5, color: "rgba(255,255,255,0.88)", marginTop: 6 },
   reminderCard: {
     flexDirection: "row",
     alignItems: "center",

@@ -5,9 +5,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { BackButton } from "@/components/IconButtons";
-import { LinearGradient } from "expo-linear-gradient";
-import { HEADER_GREEN, HEADER_GRADIENT, NEUTRAL, ON_BRAND } from "@/theme/themes";
+import { HEADER_GREEN, NEUTRAL, ON_BRAND } from "@/theme/themes";
 import { GlassSheen } from "@/components/GlassSheen";
+import { AngledGradient, HeaderGeometryProvider, StatusStripGradient } from "@/components/AngledGradient";
+import { AuroraBackground } from "@/components/AuroraBackground";
 import { useAppTheme } from "@/context/ThemeContext";
 import { TopProgressBar } from "@/components/TopProgressBar";
 
@@ -133,15 +134,17 @@ export function Screen({
   ) : undefined;
 
   return (
+    <HeaderGeometryProvider>
     <View style={styles.safe}>
+      <AuroraBackground />
       <StatusBar style="dark" />
       {topColor === HEADER_GREEN ? (
         <View style={{ height: insets.top }}>
-          <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+          <StatusStripGradient inset={insets.top} />
           <GlassSheen />
         </View>
       ) : (
-        <View style={{ height: insets.top, backgroundColor: topColor }} />
+        <View style={{ height: insets.top, backgroundColor: topColor === NEUTRAL.bg ? "transparent" : topColor }} />
       )}
       <SafeAreaView style={styles.safeInner} edges={edges}>
         <Animated.View style={{ flex: 1, opacity: fade, transform: [{ translateY: rise }] }}>
@@ -175,6 +178,7 @@ export function Screen({
         </Animated.View>
       </SafeAreaView>
     </View>
+    </HeaderGeometryProvider>
   );
 }
 
@@ -186,7 +190,7 @@ export function Screen({
 export function HeaderBand({ children, color }: { children: React.ReactNode; color?: string }) {
   return (
     <View style={[styles.band, !!color && { backgroundColor: color }]}>
-      {!color && <LinearGradient colors={HEADER_GRADIENT} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />}
+      {!color && <AngledGradient />}
       {!color && <GlassSheen />}
       {children}
     </View>

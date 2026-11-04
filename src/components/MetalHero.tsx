@@ -1,9 +1,8 @@
 import React from "react";
 import { View, StyleSheet, ViewStyle } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { BackButton } from "@/components/IconButtons";
-import { HEADER_GRADIENT } from "@/theme/themes";
 import { GlassSheen } from "@/components/GlassSheen";
+import { AngledGradient } from "@/components/AngledGradient";
 
 // The brand mark stays a fixed dark green regardless of the user's chosen
 // accent theme (see theme/themes.ts) — this hero uses the same fixed
@@ -13,7 +12,6 @@ import { GlassSheen } from "@/components/GlassSheen";
 // is the strip's own green (HEADER_GREEN) across the whole width and it only deepens downwards, so the two meet with no
 // line. (It used to run diagonally from a lighter green with a white sheen, and was pulled up under the status bar and
 // clipped, so its first visible row was never the strip's colour.)
-const METAL_STOPS = HEADER_GRADIENT;
 
 /**
  * Full-bleed metallic-green hero, meant to sit as the first child inside
@@ -74,12 +72,7 @@ export function MetalHero({
       {overrideColor ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: overrideColor }]} />
       ) : (
-        <LinearGradient
-          colors={METAL_STOPS}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-        />
+        <AngledGradient />
       )}
       <GlassSheen />
       <Decoration />

@@ -1,3 +1,4 @@
+import { ActionGradient } from "@/components/ActionGradient";
 import { useEffect, useState } from "react";
 import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, StyleSheet, Pressable } from "react-native";
@@ -107,8 +108,10 @@ export function RescheduleScreen() {
                   styles.slot,
                   !s.available && styles.slotDisabled,
                   active && { backgroundColor: ACTION, borderColor: ACTION },
+                  { overflow: "hidden" },
                 ]}
               >
+                {active && <ActionGradient />}
                 <Text style={[styles.slotText, !s.available && styles.slotTextDisabled, active && { color: ON_ACTION }]}>
                   {formatTime12(s.time)}
                 </Text>

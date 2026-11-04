@@ -134,6 +134,6 @@ export function DocumentDayScreen() {
 
 const styles = StyleSheet.create({
   title: { fontSize: 19, fontWeight: "800", color: ON_BRAND },
-  sub: { fontSize: 13.5, color: "rgba(4,38,28,0.75)", marginTop: 1 },
+  sub: { fontSize: 13.5, color: "rgba(255,255,255,0.88)", marginTop: 1 },
   filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
 });

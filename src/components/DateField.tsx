@@ -12,6 +12,9 @@ interface Props {
   error?: string;
   maximumDate?: Date;
   minimumDate?: Date;
+  /** The sign-in and onboarding look, matching TextField. */
+  auth?: boolean;
+  dense?: boolean;
 }
 
 function toDate(value: string): Date {
@@ -35,7 +38,7 @@ function formatDisplay(value: string): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function DateField({ label, value, onChange, placeholder = "Select date", error, maximumDate, minimumDate }: Props) {
+export function DateField({ label, value, onChange, placeholder = "Select date", error, maximumDate, minimumDate, auth, dense }: Props) {
   const [open, setOpen] = useState(false);
 
   const onPick = (event: { type: string }, selected?: Date) => {
@@ -47,13 +50,13 @@ export function DateField({ label, value, onChange, placeholder = "Select date",
   };
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.wrap, auth && (dense ? styles.authWrapDense : styles.authWrap)]}>
+      <Text style={[styles.label, auth && styles.authLabel]}>{label}</Text>
       <Pressable
         onPress={() => setOpen(true)}
-        style={[styles.inputRow, { borderColor: error ? NEUTRAL.danger : NEUTRAL.border }]}
+        style={[styles.inputRow, auth && (dense ? styles.authRowDense : styles.authRow), { borderColor: error ? NEUTRAL.danger : NEUTRAL.border }]}
       >
-        <Text style={[styles.value, !value && styles.placeholder]}>
+        <Text style={[styles.value, auth && styles.authValue, !value && styles.placeholder]}>
           {value ? formatDisplay(value) : placeholder}
         </Text>
         <Calendar size={15} color={NEUTRAL.textSecondary} strokeWidth={2.2} />
@@ -94,6 +97,12 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     backgroundColor: NEUTRAL.surface,
   },
+  authWrap: { marginBottom: 12 },
+  authWrapDense: { marginBottom: 6 },
+  authLabel: { fontSize: 12.5, textTransform: "none", letterSpacing: 0 },
+  authRow: { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14 },
+  authRowDense: { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8 },
+  authValue: { fontSize: 15 },
   value: { fontSize: 14, color: NEUTRAL.textPrimary },
   placeholder: { color: NEUTRAL.textMuted },
   error: { fontSize: 11, color: NEUTRAL.danger, marginTop: 4 },

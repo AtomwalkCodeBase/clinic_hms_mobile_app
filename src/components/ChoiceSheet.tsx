@@ -1,3 +1,4 @@
+import { ActionGradient } from "@/components/ActionGradient";
 import { Modal, Pressable, View, Text, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -85,9 +86,11 @@ export function ChoiceSheet({
                   styles.opt,
                   large && styles.optLarge,
                   a.primary && { backgroundColor: ACTION, borderColor: ACTION },
+                  { overflow: "hidden" },
                   pressed && { opacity: 0.9 },
                 ]}
               >
+                {a.primary && <ActionGradient />}
                 <Text style={[styles.optLabel, large && styles.optLabelLarge, a.primary && { color: ON_ACTION }]}>{a.label}</Text>
                 {!!a.sub && (
                   <Text style={[styles.optSub, a.primary && { color: "rgba(255,255,255,0.8)" }]}>{a.sub}</Text>

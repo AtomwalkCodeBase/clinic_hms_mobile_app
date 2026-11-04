@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, ErrorBanner } from "@/components/Layout";
+import { ErrorBanner } from "@/components/Layout";
+import { AuthLayout } from "@/components/AuthLayout";
 import { TextField } from "@/components/TextField";
 import { PrimaryButton } from "@/components/Buttons";
-import { LogoPill } from "@/components/Logo";
-import { MetalHero } from "@/components/MetalHero";
 import { NEUTRAL } from "@/theme/themes";
 import { forgotPasswordRequestOtp, forgotPasswordVerifyOtp, resetPassword } from "@/api/auth";
 import { apiErrorMessage } from "@/api/client";
@@ -116,70 +115,66 @@ export function ForgotPasswordScreen() {
   }[step];
 
   return (
-    <Screen>
-      <MetalHero compact style={styles.hero} curved onBack={onBack}>
-        <View style={styles.heroInner}>
-          <LogoPill size={44} />
-        </View>
-      </MetalHero>
-      <View style={styles.header}>
-        <Text style={styles.title}>{stepTitle}</Text>
-        <Text style={styles.subtitle}>{stepSubtitle}</Text>
-      </View>
-
-      {!!error && <ErrorBanner message={error} />}
-
-      {step === "identify" && (
-        <>
-          <TextField
-            label="Email"
-            placeholder="you@example.com"
-            value={identifier}
-            onChangeText={setIdentifier}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-          <PrimaryButton label="Send verification code" onPress={requestCode} loading={loading} />
-        </>
-      )}
-
-      {step === "code" && (
-        <>
-          <TextField label="6-digit code" placeholder="000000" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} />
-          <PrimaryButton label="Verify code" onPress={verifyCode} loading={loading} />
-          <Pressable onPress={requestCode} disabled={resendIn > 0 || loading} style={styles.resendWrap}>
-            <Text style={styles.resend}>{resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}</Text>
+    <AuthLayout
+      title={stepTitle}
+      subtitle={stepSubtitle}
+      onBack={onBack}
+      footer={() =>
+        step !== "done" ? (
+          <Pressable onPress={() => navigation.navigate("Login")} style={styles.backToLoginWrap}>
+            <Text style={styles.backToLogin}>Back to login</Text>
           </Pressable>
-        </>
-      )}
-
-      {step === "password" && (
+        ) : null
+      }
+    >
+      {(compact) => (
         <>
-          <TextField label="New password" placeholder="Minimum 8 characters" value={newPassword} onChangeText={setNewPassword} isPassword />
-          <TextField label="Confirm new password" placeholder="Re-enter your new password" value={confirmPassword} onChangeText={setConfirmPassword} isPassword />
-          <PrimaryButton label="Reset password" onPress={onResetPassword} loading={loading} />
+          {!!error && <ErrorBanner message={error} />}
+
+          {step === "identify" && (
+            <>
+              <TextField
+                auth
+                dense={compact}
+                label="Email"
+                placeholder="you@example.com"
+                value={identifier}
+                onChangeText={setIdentifier}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <PrimaryButton label="Send verification code" onPress={requestCode} loading={loading} />
+            </>
+          )}
+
+          {step === "code" && (
+            <>
+              <TextField auth dense={compact} label="6-digit code" placeholder="000000" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} />
+              <PrimaryButton label="Verify code" onPress={verifyCode} loading={loading} />
+              <Pressable onPress={requestCode} disabled={resendIn > 0 || loading} style={styles.resendWrap}>
+                <Text style={styles.resend}>{resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}</Text>
+              </Pressable>
+            </>
+          )}
+
+          {step === "password" && (
+            <>
+              <TextField auth dense={compact} label="New password" placeholder="Minimum 8 characters" value={newPassword} onChangeText={setNewPassword} isPassword />
+              <TextField auth dense={compact} label="Confirm new password" placeholder="Re-enter your new password" value={confirmPassword} onChangeText={setConfirmPassword} isPassword />
+              <PrimaryButton label="Reset password" onPress={onResetPassword} loading={loading} />
+            </>
+          )}
+
+          {step === "done" && <PrimaryButton label="Go to sign in" onPress={() => navigation.navigate("Login")} />}
         </>
       )}
-
-      {step === "done" && <PrimaryButton label="Go to sign in" onPress={() => navigation.navigate("Login")} />}
-
-      {step !== "done" && (
-        <Pressable onPress={() => navigation.navigate("Login")} style={styles.backToLoginWrap}>
-          <Text style={styles.backToLogin}>Back to login</Text>
-        </Pressable>
-      )}
-    </Screen>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { marginBottom: 18 },
-  heroInner: { alignItems: "center", paddingVertical: 4 },
-  header: { alignItems: "center", marginBottom: 20 },
-  title: { fontSize: 17, fontWeight: "600", color: NEUTRAL.textPrimary, marginTop: 10 },
-  subtitle: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 12 },
-  resendWrap: { alignSelf: "center", marginTop: 14 },
-  resend: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
-  backToLoginWrap: { alignSelf: "center", marginTop: 16 },
-  backToLogin: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
+  resendWrap: { alignSelf: "center", marginTop: 12, padding: 6 },
+  resend: { fontSize: 13.5, color: NEUTRAL.textSecondary, fontWeight: "700" },
+  backToLoginWrap: { padding: 8 },
+  backToLogin: { fontSize: 16, color: NEUTRAL.textSecondary, fontWeight: "700" },
 });

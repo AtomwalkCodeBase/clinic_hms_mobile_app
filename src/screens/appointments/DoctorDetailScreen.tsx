@@ -1,3 +1,4 @@
+import { ActionGradient } from "@/components/ActionGradient";
 import { useState } from "react";
 import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { View, Text, StyleSheet, Pressable } from "react-native";
@@ -118,8 +119,10 @@ export function DoctorDetailScreen() {
                                 !s.available && styles.slotBooked,
                                 active && { backgroundColor: ACTION, borderColor: ACTION },
                                 !active && s.available && { borderColor: NEUTRAL.border },
+                                { overflow: "hidden" },
                               ]}
                             >
+                              {active && <ActionGradient />}
                               <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: ON_ACTION }]}>
                                 {formatTime12(s.time)}
                               </Text>

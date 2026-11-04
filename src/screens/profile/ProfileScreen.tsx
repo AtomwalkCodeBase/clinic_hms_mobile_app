@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Modal } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -8,7 +8,7 @@ import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Camera, IdCard, HeartPulse, Users, Building2, Headphones, Droplet, Lock, Fingerprint } from "lucide-react-native";
+import { IdCard, HeartPulse, Users, Building2, Headphones, Droplet, Lock, Fingerprint } from "lucide-react-native";
 import { Screen, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Pill } from "@/components/Pill";
 import { SecondaryButton } from "@/components/Buttons";
@@ -16,14 +16,13 @@ import { MetalHero } from "@/components/MetalHero";
 import { APP_VERSION_LABEL } from "@/utils/appVersion";
 import { ListRow } from "@/components/ListRow";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { CloseButton } from "@/components/IconButtons";
-import { NEUTRAL, ON_BRAND, BRAND, BRAND_DEEP } from "@/theme/themes";
+import { ProfileAvatar, ProfilePhotoSheet, useProfilePhoto } from "@/components/ProfilePhoto";
+import { NEUTRAL, ON_BRAND, BRAND } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useDocumentUpload } from "@/context/DocumentUploadContext";
-import { getProfile, getHealthSummary, getFamily, updateProfile } from "@/api/portal";
+import { getProfile, getHealthSummary, getFamily } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
-import { pickImage, pickImageFromCamera, fileToDataUri } from "@/utils/fileHelpers";
 import { Toggle } from "@/components/Toggle";
 import { getBiometricLockEnabled, setBiometricLockEnabled } from "@/utils/storage";
 import { AppStackParamList, AppTabsParamList } from "@/navigation/types";
@@ -36,13 +35,12 @@ export function ProfileScreen() {
   const { logout } = useAuth();
   const { uploading } = useDocumentUpload();
   const queryClient = useQueryClient();
-  const [showPhotoSheet, setShowPhotoSheet] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [mutationError, setMutationError] = useState("");
+  const photo = useProfilePhoto(setMutationError);
 
   const onSignOut = async () => {
     setSigningOut(true);
@@ -104,35 +102,6 @@ export function ProfileScreen() {
     }
   };
 
-  const onPickPhoto = async (source: "camera" | "gallery") => {
-    setShowPhotoSheet(false);
-    try {
-      const file = source === "camera" ? await pickImageFromCamera() : await pickImage();
-      if (!file) return;
-      setUploadingPhoto(true);
-      const dataUri = await fileToDataUri(file);
-      const updated = await updateProfile({ photo: dataUri });
-      queryClient.setQueryData(["profile"], updated);
-    } catch (err) {
-      setMutationError(apiErrorMessage(err, "Couldn't update your photo."));
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
-  const onRemovePhoto = async () => {
-    setShowPhotoSheet(false);
-    setUploadingPhoto(true);
-    try {
-      const updated = await updateProfile({ photo: "" });
-      queryClient.setQueryData(["profile"], updated);
-    } catch (err) {
-      setMutationError(apiErrorMessage(err, "Couldn't remove your photo."));
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
   if (isInitialLoading) {
     return (
       <Screen bottomInset={false}>
@@ -160,21 +129,7 @@ export function ProfileScreen() {
               {!!APP_VERSION_LABEL && <Text style={styles.versionCode}>{APP_VERSION_LABEL}</Text>}
               <View style={styles.heroContent}>
                 <View style={styles.avwrap}>
-                  <View style={styles.avatar}>
-                    {profile.photo ? (
-                      <Image source={{ uri: profile.photo }} style={styles.avatarImg} />
-                    ) : (
-                      <Text style={styles.avatarText}>{profile.full_name?.[0] || "?"}</Text>
-                    )}
-                  </View>
-                  <Pressable
-                    onPress={() => setShowPhotoSheet(true)}
-                    style={styles.camBtn}
-                    hitSlop={8}
-                    disabled={uploadingPhoto}
-                  >
-                    {uploadingPhoto ? <Text style={styles.camIcon}>…</Text> : <Camera size={13} color={BRAND_DEEP} strokeWidth={2.4} />}
-                  </Pressable>
+                  <ProfileAvatar photo={profile.photo} name={profile.full_name} size={56} busy={photo.busy} onPress={photo.openSheet} />
                 </View>
                 <Pill label="Verified account" tone="neutral" />
                 <Text style={styles.name}>{profile.full_name}</Text>
@@ -183,28 +138,7 @@ export function ProfileScreen() {
             </MetalHero>
           )}
 
-          <Modal visible={showPhotoSheet} transparent animationType="fade" onRequestClose={() => setShowPhotoSheet(false)}>
-            <Pressable style={styles.sheetBackdrop} onPress={() => setShowPhotoSheet(false)}>
-              <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-                <CloseButton onPress={() => setShowPhotoSheet(false)} style={{ position: "absolute", top: 12, right: 14, zIndex: 1 }} />
-                <Text style={[styles.sheetTitle, { paddingHorizontal: 30 }]}>Update profile photo</Text>
-                <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("camera")}>
-                  <Text style={styles.sheetOptText}>Take photo</Text>
-                </Pressable>
-                <Pressable style={styles.sheetOpt} onPress={() => onPickPhoto("gallery")}>
-                  <Text style={styles.sheetOptText}>Choose from gallery</Text>
-                </Pressable>
-                {!!profile?.photo && (
-                  <Pressable style={styles.sheetOpt} onPress={onRemovePhoto}>
-                    <Text style={[styles.sheetOptText, { color: NEUTRAL.danger }]}>Remove photo</Text>
-                  </Pressable>
-                )}
-                <Pressable style={styles.sheetCancel} onPress={() => setShowPhotoSheet(false)}>
-                  <Text style={styles.sheetCancelText}>Cancel</Text>
-                </Pressable>
-              </View>
-            </Pressable>
-          </Modal>
+          <ProfilePhotoSheet visible={photo.sheetOpen} hasPhoto={!!profile?.photo} onClose={photo.closeSheet} onPick={photo.pick} onRemove={photo.remove} />
 
           {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
           {!!mutationError && <ErrorBanner message={mutationError} />}
@@ -309,32 +243,8 @@ const styles = StyleSheet.create({
   versionCode: { position: "absolute", top: 0, right: 6, height: 40, textAlignVertical: "center", includeFontPadding: false, fontSize: 11, fontWeight: "600", color: ON_BRAND, opacity: 0.8 },
   heroContent: { alignItems: "center", marginTop: -42 },
   avwrap: { position: "relative", marginBottom: 6 },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  avatarImg: { width: "100%", height: "100%" },
-  avatarText: { fontSize: 20, fontWeight: "700", color: ON_BRAND },
-  camBtn: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 2,
-    borderColor: BRAND_DEEP,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  camIcon: { fontSize: 12 },
-  sheetBackdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
-  sheetTitle: { fontSize: 12.5, fontWeight: "700", color: NEUTRAL.textPrimary, textAlign: "center", marginBottom: 12 },
-  sheetOpt: { paddingVertical: 13, borderRadius: 10, backgroundColor: NEUTRAL.surfaceAlt, alignItems: "center", marginBottom: 8 },
-  sheetOptText: { fontSize: 13, color: NEUTRAL.textPrimary, fontWeight: "500" },
-  sheetCancel: { paddingVertical: 13, alignItems: "center", marginTop: 4 },
-  sheetCancelText: { fontSize: 13, color: NEUTRAL.textSecondary, fontWeight: "600" },
   name: { fontWeight: "600", fontSize: 15, marginTop: 6, color: ON_BRAND },
-  awpid: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 2 },
+  awpid: { fontSize: 11, color: "rgba(255,255,255,0.88)", marginTop: 2 },
   statCard: {
     flexDirection: "row",
     backgroundColor: NEUTRAL.surface,

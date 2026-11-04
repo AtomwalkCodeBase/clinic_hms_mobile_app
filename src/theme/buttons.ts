@@ -1,8 +1,8 @@
 /**
- * The colour of every button and every selected tab, pill, slot and date. It is a little deeper than the brand fill
- * (BRAND) so white text on it reads clearly; BRAND itself stays for headers, tiles and badges.
+ * The colour of every button and every selected tab, pill, slot and date. White text on it reads at 4.6:1. Primary
+ * buttons draw AURORA.action (a green-to-sky gradient) over this colour; flat uses (a selected chip) use it as is.
  */
-export const ACTION = "#11A46C";
+export const ACTION = "#0C8A63";
 export const ON_ACTION = "#FFFFFF";
 /** Corner radius of buttons (the pills and chips keep their own). */
 export const BUTTON_RADIUS = 14;

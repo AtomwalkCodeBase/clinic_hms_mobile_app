@@ -10,6 +10,7 @@ import { Marker } from "@/components/health/Marker";
 import { TONES } from "@/components/health/journeyTheme";
 import { J } from "@/components/health/journeyStyles";
 import { attentionItems, glanceLanes, isoOf, tileHints, visibleLanes, type LaneModel } from "@/utils/journey";
+import { BRAND_TEXT } from "@/theme/themes";
 
 /**
  * The overview: four small counts and a short timeline of what matters most, both for the last 3 years, and anything
@@ -63,7 +64,7 @@ export function OverviewSection({ timeline, lanes, onOpenTimeline, onBook }: {
           <LaneChart lanes={glance} dob={timeline.patient.dob} from={timeline.period.from} to={timeline.period.to} axis="age" fit compact />
           <Pressable accessibilityRole="link" onPress={onOpenTimeline} style={[J.linkRow, { marginTop: 4 }]}>
             <Text style={J.linkText}>Open full timeline</Text>
-            <ChevronRight size={18} color="#0F4A3A" strokeWidth={2.4} />
+            <ChevronRight size={18} color={BRAND_TEXT} strokeWidth={2.4} />
           </Pressable>
         </View>
       )}

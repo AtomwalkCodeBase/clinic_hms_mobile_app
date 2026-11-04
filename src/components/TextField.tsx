@@ -7,19 +7,24 @@ interface Props extends TextInputProps {
   label: string;
   error?: string;
   isPassword?: boolean;
+  /** The sign-in and onboarding look: sentence-case label, taller rounded field. */
+  auth?: boolean;
+  /** Tighter spacing, for when the keyboard leaves little room. */
+  dense?: boolean;
 }
 
-export function TextField({ label, error, isPassword, style, ...rest }: Props) {
+export function TextField({ label, error, isPassword, auth, dense, style, ...rest }: Props) {
   const { theme } = useAppTheme();
   const [focused, setFocused] = useState(false);
   const [hidden, setHidden] = useState(!!isPassword);
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.wrap, auth && (dense ? styles.authWrapDense : styles.authWrap)]}>
+      <Text style={[styles.label, auth && styles.authLabel]}>{label}</Text>
       <View
         style={[
           styles.inputRow,
+          auth && styles.authRow,
           { borderColor: error ? NEUTRAL.danger : focused ? theme.fill : NEUTRAL.border },
         ]}
       >
@@ -44,7 +49,7 @@ export function TextField({ label, error, isPassword, style, ...rest }: Props) {
             : null)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={[styles.input, style]}
+          style={[styles.input, auth && (dense ? styles.authInputDense : styles.authInput), style]}
           placeholderTextColor={NEUTRAL.textMuted}
         />
         {isPassword && (
@@ -77,5 +82,11 @@ const styles = StyleSheet.create({
     backgroundColor: NEUTRAL.surface,
   },
   input: { flex: 1, paddingVertical: 11, fontSize: 14, color: NEUTRAL.textPrimary },
+  authWrap: { marginBottom: 12 },
+  authWrapDense: { marginBottom: 6 },
+  authLabel: { fontSize: 12.5, textTransform: "none", letterSpacing: 0 },
+  authRow: { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 14 },
+  authInput: { paddingVertical: 14, fontSize: 15 },
+  authInputDense: { paddingVertical: 8, fontSize: 15 },
   error: { fontSize: 11, color: NEUTRAL.danger, marginTop: 4 },
 });

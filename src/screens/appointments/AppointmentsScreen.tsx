@@ -145,31 +145,34 @@ export function AppointmentsScreen() {
       refreshing={pulling}
       backgroundLoading={isFetchingAny && !pulling}
       bottomInset={false}
+      header={
+        <>
+          <MetalHero compact curved style={styles.hero} onBack={() => navigation.navigate("Home")}>
+            <Text style={styles.bannerTitle}>Find a doctor instantly</Text>
+            <Text style={styles.bannerSub}>Book across every hospital on the platform</Text>
+            <Pressable onPress={() => navigation.navigate("BookingFor", undefined)} style={styles.bannerBtn}>
+              <Text style={[styles.bannerBtnText, { color: theme.text }]}>Book now</Text>
+            </Pressable>
+          </MetalHero>
+
+          {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
+          {!!offlineMsg && <ErrorBanner message={offlineMsg} />}
+          {!!cancelMutation.error && <ErrorBanner message={apiErrorMessage(cancelMutation.error, "Couldn't cancel this appointment.")} />}
+
+          <SlidingTabs
+            label="Visits"
+            look="large"
+            options={[
+              { key: "upcoming", label: "Upcoming" },
+              { key: "past", label: "Past visits" },
+            ]}
+            value={segment}
+            onChange={setSegment}
+            style={{ marginBottom: 12 }}
+          />
+        </>
+      }
     >
-      <MetalHero compact curved style={styles.hero} onBack={() => navigation.navigate("Home")}>
-        <Text style={styles.bannerTitle}>Find a doctor instantly</Text>
-        <Text style={styles.bannerSub}>Book across every hospital on the platform</Text>
-        <Pressable onPress={() => navigation.navigate("BookingFor", undefined)} style={styles.bannerBtn}>
-          <Text style={[styles.bannerBtnText, { color: theme.text }]}>Book now</Text>
-        </Pressable>
-      </MetalHero>
-
-      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={refetchAll} />}
-      {!!offlineMsg && <ErrorBanner message={offlineMsg} />}
-      {!!cancelMutation.error && <ErrorBanner message={apiErrorMessage(cancelMutation.error, "Couldn't cancel this appointment.")} />}
-
-      <SlidingTabs
-        label="Visits"
-        look="large"
-        options={[
-          { key: "upcoming", label: "Upcoming" },
-          { key: "past", label: "Past visits" },
-        ]}
-        value={segment}
-        onChange={setSegment}
-        style={{ marginBottom: 12 }}
-      />
-
       {shown.length === 0 ? (
         <EmptyState text={segment === "upcoming" ? "No upcoming appointments." : "No past visits yet."} />
       ) : (
@@ -336,7 +339,7 @@ export function AppointmentsScreen() {
 const styles = StyleSheet.create({
   hero: { marginBottom: 18 },
   bannerTitle: { fontSize: 14, fontWeight: "600", color: ON_BRAND },
-  bannerSub: { fontSize: 11.5, color: "rgba(4,38,28,0.78)", marginTop: 2, marginBottom: 10 },
+  bannerSub: { fontSize: 11.5, color: "rgba(255,255,255,0.88)", marginTop: 2, marginBottom: 10 },
   bannerBtn: { alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: "#FFFFFF" },
   bannerBtnText: { fontSize: 12.5, fontWeight: "700" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

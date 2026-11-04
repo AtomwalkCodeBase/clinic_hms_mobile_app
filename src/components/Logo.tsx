@@ -1,4 +1,5 @@
-import { View, Image, StyleSheet } from "react-native";
+import { View, Image, Text, StyleSheet } from "react-native";
+import { NEUTRAL } from "@/theme/themes";
 
 // Real aspect ratio of assets/logo.png (1981x1009) — used so the mark scales
 // cleanly at any height without distortion instead of hardcoding a width.
@@ -24,7 +25,19 @@ export function LogoPill({ size = 20 }: { size?: number }) {
   );
 }
 
+/** The HealthNet mark for the welcome and sign-in pages: the app icon with the name beside it, centred as one piece. */
+export function HealthNetLogo({ size = 52 }: { size?: number }) {
+  return (
+    <View style={styles.brand} accessible accessibilityRole="image" accessibilityLabel="HealthNet">
+      <Image source={require("../../assets/icon.png")} style={{ width: size, height: size, borderRadius: size * 0.29 }} />
+      <Text style={[styles.brandName, { fontSize: size * 0.5 }]}>HealthNet</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  brand: { flexDirection: "row", alignItems: "center", gap: 12 },
+  brandName: { fontWeight: "700", color: NEUTRAL.textPrimary, letterSpacing: -0.4 },
   pill: {
     backgroundColor: "#FFFFFF",
     shadowColor: "#000",

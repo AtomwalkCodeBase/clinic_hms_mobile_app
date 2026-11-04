@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View, ActivityIndicator } from "react-nati
 import type { LucideIcon } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { ACTION, ON_ACTION, BUTTON_RADIUS } from "@/theme/buttons";
+import { ActionGradient } from "@/components/ActionGradient";
 
 /**
  * The one button that sits at the bottom of a screen: Add record, Upload, Add a vaccine. Full width on a white strip,
@@ -26,6 +27,7 @@ export function FooterAction({ label, onPress, icon: Icon, loading, disabled, ab
         accessibilityLabel={label}
         style={({ pressed }) => [styles.btn, (pressed || disabled) && { opacity: 0.85 }]}
       >
+        <ActionGradient />
         {loading ? <ActivityIndicator color={ON_ACTION} /> : (
           <View style={styles.row}>
             {Icon && <Icon size={20} color={ON_ACTION} strokeWidth={2.4} />}
@@ -41,5 +43,5 @@ const styles = StyleSheet.create({
   bar: { paddingTop: 12, paddingBottom: 12, paddingHorizontal: 10, backgroundColor: NEUTRAL.surface, borderTopWidth: 0.5, borderTopColor: NEUTRAL.border },
   btn: { height: 52, borderRadius: BUTTON_RADIUS, backgroundColor: ACTION, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  text: { fontSize: 17, fontWeight: "800" },
+  text: { fontSize: 17, fontWeight: "700" },
 });

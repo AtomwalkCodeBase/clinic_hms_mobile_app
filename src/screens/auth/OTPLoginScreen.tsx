@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, ErrorBanner } from "@/components/Layout";
+import { ErrorBanner } from "@/components/Layout";
+import { AuthLayout } from "@/components/AuthLayout";
 import { TextField } from "@/components/TextField";
 import { PrimaryButton } from "@/components/Buttons";
-import { LogoPill } from "@/components/Logo";
-import { MetalHero } from "@/components/MetalHero";
 import { NEUTRAL } from "@/theme/themes";
 import { useAuth } from "@/context/AuthContext";
 import { otpLoginRequestOtp, otpLoginVerifyOtp, otpLogin } from "@/api/auth";
@@ -81,57 +80,51 @@ export function OTPLoginScreen() {
   };
 
   return (
-    <Screen>
-      <MetalHero compact style={styles.hero} curved onBack={onBack}>
-        <View style={styles.heroInner}>
-          <LogoPill size={44} />
-        </View>
-      </MetalHero>
-      <View style={styles.header}>
-        <Text style={styles.title}>{step === "identify" ? "Sign in with email" : "Enter your code"}</Text>
-        <Text style={styles.subtitle}>
-          {step === "identify"
-            ? "We'll email you a one-time code — no password needed."
-            : maskedIdentifier
-              ? `Enter the code sent to ${maskedIdentifier}.`
-              : "Enter the code we sent you."}
-        </Text>
-      </View>
-
-      {!!error && <ErrorBanner message={error} />}
-
-      {step === "identify" && (
+    <AuthLayout
+      title={step === "identify" ? "Sign in with email" : "Enter your code"}
+      subtitle={
+        step === "identify"
+          ? "We'll email you a one-time code — no password needed."
+          : maskedIdentifier
+            ? `Enter the code sent to ${maskedIdentifier}.`
+            : "Enter the code we sent you."
+      }
+      onBack={onBack}
+      footer={() => (
+        <Pressable onPress={() => navigation.navigate("Login")} style={styles.backToLoginWrap}>
+          <Text style={styles.backToLogin}>Sign in with password instead</Text>
+        </Pressable>
+      )}
+    >
+      {(compact) => (
         <>
-          <TextField label="Email" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-          <PrimaryButton label="Send code" onPress={requestCode} loading={loading} />
+          {!!error && <ErrorBanner message={error} />}
+
+          {step === "identify" && (
+            <>
+              <TextField auth dense={compact} label="Email" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+              <PrimaryButton label="Send code" onPress={requestCode} loading={loading} />
+            </>
+          )}
+
+          {step === "code" && (
+            <>
+              <TextField auth dense={compact} label="6-digit code" placeholder="000000" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} />
+              <PrimaryButton label="Sign in" onPress={verifyAndSignIn} loading={loading} />
+              <Pressable onPress={requestCode} disabled={resendIn > 0 || loading} style={styles.resendWrap}>
+                <Text style={styles.resend}>{resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}</Text>
+              </Pressable>
+            </>
+          )}
         </>
       )}
-
-      {step === "code" && (
-        <>
-          <TextField label="6-digit code" placeholder="000000" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} />
-          <PrimaryButton label="Sign in" onPress={verifyAndSignIn} loading={loading} />
-          <Pressable onPress={requestCode} disabled={resendIn > 0 || loading} style={styles.resendWrap}>
-            <Text style={styles.resend}>{resendIn > 0 ? `Resend code in ${resendIn}s` : "Resend code"}</Text>
-          </Pressable>
-        </>
-      )}
-
-      <Pressable onPress={() => navigation.navigate("Login")} style={styles.backToLoginWrap}>
-        <Text style={styles.backToLogin}>Sign in with password instead</Text>
-      </Pressable>
-    </Screen>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { marginBottom: 18 },
-  heroInner: { alignItems: "center", paddingVertical: 4 },
-  header: { alignItems: "center", marginBottom: 20 },
-  title: { fontSize: 17, fontWeight: "600", color: NEUTRAL.textPrimary, marginTop: 10 },
-  subtitle: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 12 },
-  resendWrap: { alignSelf: "center", marginTop: 14 },
-  resend: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
-  backToLoginWrap: { alignSelf: "center", marginTop: 16 },
-  backToLogin: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
+  resendWrap: { alignSelf: "center", marginTop: 12, padding: 6 },
+  resend: { fontSize: 13.5, color: NEUTRAL.textSecondary, fontWeight: "700" },
+  backToLoginWrap: { padding: 8 },
+  backToLogin: { fontSize: 16, color: NEUTRAL.textSecondary, fontWeight: "700" },
 });

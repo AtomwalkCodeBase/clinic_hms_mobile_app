@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, KeyboardAvoidingView, Platform } from "react-native";
+import { Text, StyleSheet, Pressable, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
-import { Screen, ErrorBanner } from "@/components/Layout";
+import { ErrorBanner } from "@/components/Layout";
+import { AuthLayout } from "@/components/AuthLayout";
 import { TextField } from "@/components/TextField";
+import { Fingerprint, Mail } from "lucide-react-native";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
-import { LogoPill } from "@/components/Logo";
-import { MetalHero } from "@/components/MetalHero";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -85,96 +85,77 @@ export function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-      <Screen>
-        <MetalHero style={styles.hero} curved>
-          {!!APP_VERSION_LABEL && <Text style={styles.version}>{APP_VERSION_LABEL}</Text>}
-          <View style={styles.heroInner}>
-            <LogoPill size={58} />
+    <AuthLayout
+      title="Let’s get you signed in"
+      subtitle="Sign in to your profile"
+      topRight={APP_VERSION_LABEL || undefined}
+      footer={() => (
+        <>
+          <Pressable onPress={() => navigation.navigate("Register")} style={styles.newPatientWrap} accessibilityRole="button">
+            <Text style={styles.newPatient}>
+              New patient? <Text style={[styles.newPatientLink, { color: theme.text }]}>Create an account</Text>
+            </Text>
+          </Pressable>
+          <Text style={styles.supportFooter}>Trouble signing in? Contact support@atomwalk.com</Text>
+        </>
+      )}
+    >
+      {(compact) => (
+        <>
+          {!!submitError && <ErrorBanner message={submitError} />}
+
+          <TextField
+            auth
+            dense={compact}
+            label="Mobile number or patient ID"
+            placeholder="9000030000"
+            value={mobile}
+            onChangeText={setMobile}
+            keyboardType="default"
+            autoCapitalize="none"
+            error={errors.mobile}
+          />
+          <TextField
+            auth
+            dense={compact}
+            label="Password"
+            placeholder="••••••••"
+            value={password}
+            onChangeText={setPassword}
+            isPassword
+            error={errors.password}
+          />
+
+          <Pressable onPress={() => navigation.navigate("ForgotPassword")} style={styles.forgotWrap}>
+            <Text style={[styles.forgot, { color: theme.text }]}>Forgot password?</Text>
+          </Pressable>
+
+          <PrimaryButton label="Sign in" onPress={onSubmit} loading={loading} />
+
+          <View style={styles.orRow}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>or</Text>
+            <View style={styles.orLine} />
           </View>
-        </MetalHero>
-        <View style={styles.header}>
-          <Text style={styles.title}>Let’s get you signed in</Text>
-          <Text style={styles.subtitle}>Sign in to your profile</Text>
-        </View>
-
-        {!!submitError && <ErrorBanner message={submitError} />}
-
-        <TextField
-          label="Mobile number or patient ID"
-          placeholder="9000030000"
-          value={mobile}
-          onChangeText={setMobile}
-          keyboardType="default"
-          autoCapitalize="none"
-          error={errors.mobile}
-        />
-        <TextField
-          label="Password"
-          placeholder="••••••••"
-          value={password}
-          onChangeText={setPassword}
-          isPassword
-          error={errors.password}
-        />
-
-        <Pressable onPress={() => navigation.navigate("ForgotPassword")} style={styles.forgotWrap}>
-          <Text style={[styles.forgot, { color: theme.text }]}>Forgot password?</Text>
-        </Pressable>
-
-        <PrimaryButton label="Sign in" onPress={onSubmit} loading={loading} style={{ marginTop: 6 }} />
-
-        {biometricReady && (
-          <>
-            <View style={styles.orRow}>
-              <View style={styles.orLine} />
-              <Text style={styles.orText}>or</Text>
-              <View style={styles.orLine} />
-            </View>
-            <SecondaryButton
-              label="Sign in with fingerprint"
-              onPress={onBiometric}
-              loading={biometricBusy}
-              style={styles.bioBtn}
-            />
-          </>
-        )}
-
-        <Pressable onPress={() => navigation.navigate("OTPLogin")} style={styles.otpLoginWrap}>
-          <Text style={[styles.otpLoginText, { color: theme.text }]}>Sign in with a code instead</Text>
-        </Pressable>
-
-        <Pressable onPress={() => navigation.navigate("Register")} style={styles.footerWrap}>
-          <Text style={styles.footer}>
-            New patient? <Text style={[styles.footerLink, { color: theme.text }]}>Create an account</Text>
-          </Text>
-        </Pressable>
-
-        <Text style={styles.supportFooter}>Trouble signing in? Contact support@atomwalk.com</Text>
-      </Screen>
-    </KeyboardAvoidingView>
+          {biometricReady && (
+            <SecondaryButton label="Sign in with fingerprint" icon={Fingerprint} onPress={onBiometric} loading={biometricBusy} style={styles.altBtn} />
+          )}
+          <SecondaryButton label="Sign in with a code instead" icon={Mail} onPress={() => navigation.navigate("OTPLogin")} style={styles.altBtn} />
+        </>
+      )}
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  // The app version, small in the top right corner of the green hero (it used to sit above the hero, on the page colour,
-  // which left a pale gap at the top of the screen).
-  version: { position: "absolute", top: -4, right: 0, fontSize: 11, color: "rgba(4,38,28,0.6)" },
-  hero: { marginBottom: 20 },
-  heroInner: { alignItems: "center", paddingVertical: 10 },
-  header: { alignItems: "center", marginBottom: 24 },
-  title: { fontSize: 18, fontWeight: "600", color: NEUTRAL.textPrimary, marginTop: 14 },
-  subtitle: { fontSize: 12.5, color: NEUTRAL.textSecondary, marginTop: 4, textAlign: "center" },
-  forgotWrap: { alignSelf: "flex-end", marginBottom: 18, marginTop: -6 },
-  forgot: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
-  orRow: { flexDirection: "row", alignItems: "center", marginTop: 16, marginBottom: 12 },
+  forgotWrap: { alignSelf: "flex-end", marginBottom: 18, marginTop: -2, padding: 4 },
+  forgot: { fontSize: 13.5, fontWeight: "600" },
+  orRow: { flexDirection: "row", alignItems: "center", marginTop: 18, marginBottom: 14 },
   orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: NEUTRAL.border },
-  orText: { fontSize: 11.5, color: NEUTRAL.textMuted, marginHorizontal: 10 },
-  bioBtn: { alignSelf: "stretch" },
-  otpLoginWrap: { alignSelf: "center", marginTop: 14 },
-  otpLoginText: { fontSize: 12.5, fontWeight: "600" },
-  footerWrap: { alignSelf: "center", marginTop: 18 },
-  footer: { fontSize: 12.5, color: NEUTRAL.textSecondary },
-  footerLink: { fontWeight: "600" },
-  supportFooter: { fontSize: 11, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 20 },
+  orText: { fontSize: 12.5, color: NEUTRAL.textMuted, marginHorizontal: 12 },
+  altBtn: { alignSelf: "stretch", marginBottom: 10 },
+  newPatientWrap: { padding: 8 },
+  newPatient: { fontSize: 16, color: NEUTRAL.textSecondary },
+  newPatientLink: { fontWeight: "700" },
+  supportFooter: { fontSize: 12.5, color: NEUTRAL.textMuted, textAlign: "center", marginTop: 10 },
 });

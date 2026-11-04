@@ -190,8 +190,8 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, fontWeight: "700", color: ON_BRAND },
   accentBadge: { paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 10 },
   accentBadgeText: { fontSize: 10, fontWeight: "700" },
-  meta: { fontSize: 11.5, color: "rgba(4,38,28,0.78)", marginTop: 3 },
-  lastVisit: { fontSize: 11, color: "rgba(4,38,28,0.78)", marginTop: 6 },
+  meta: { fontSize: 11.5, color: "rgba(255,255,255,0.88)", marginTop: 3 },
+  lastVisit: { fontSize: 11, color: "rgba(255,255,255,0.88)", marginTop: 6 },
   switchCard: {
     flexDirection: "row", alignItems: "center", backgroundColor: NEUTRAL.surface, borderRadius: 18,
     marginTop: 14, marginBottom: 16, paddingVertical: 4,

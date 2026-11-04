@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { Text, StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, ErrorBanner } from "@/components/Layout";
+import { ErrorBanner } from "@/components/Layout";
+import { AuthLayout } from "@/components/AuthLayout";
 import { TextField } from "@/components/TextField";
 import { DateField } from "@/components/DateField";
 import { PrimaryButton } from "@/components/Buttons";
-import { LogoPill } from "@/components/Logo";
-import { MetalHero } from "@/components/MetalHero";
 import { NEUTRAL } from "@/theme/themes";
 import { registerRequestOtp, registerVerifyOtp, registerAccount } from "@/api/auth";
 import { apiErrorMessage } from "@/api/client";
@@ -119,62 +118,59 @@ export function RegisterScreen() {
     password: "Last step — choose a password to protect your account.",
   }[step];
 
+  const stepNumber = { details: 1, otp: 2, password: 3 }[step];
+
   return (
-    <Screen>
-      <MetalHero compact style={styles.hero} curved onBack={onBack}>
-        <View style={styles.heroInner}>
-          <LogoPill size={44} />
-        </View>
-      </MetalHero>
-      <View style={styles.header}>
-        <Text style={styles.title}>{stepTitle}</Text>
-        <Text style={styles.subtitle}>{stepSubtitle}</Text>
-      </View>
-
-      {!!error && <ErrorBanner message={error} />}
-
-      {step === "details" && (
-        <>
-          <TextField label="Full name" placeholder="e.g. Rohan Sharma" value={fullName} onChangeText={setFullName} />
-          <TextField label="Mobile number" placeholder="98xxxxxxxx" value={mobile} onChangeText={setMobile} keyboardType="number-pad" maxLength={10} />
-          <TextField label="Email" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-          <Text style={styles.hint}>We'll send a verification code to confirm it's really you.</Text>
-          <DateField label="Date of birth" value={dob} onChange={setDob} maximumDate={new Date()} />
-          <PrimaryButton label="Continue" onPress={onContinueFromDetails} loading={loading} />
-        </>
-      )}
-
-      {step === "otp" && (
-        <>
-          <TextField label="6-digit code" placeholder="000000" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
-          <PrimaryButton label="Verify code" onPress={onVerifyOtp} loading={loading} />
+    <AuthLayout
+      title={stepTitle}
+      subtitle={stepSubtitle}
+      onBack={onBack}
+      step={{ current: stepNumber, total: 3 }}
+      footer={() =>
+        step !== "details" ? (
           <Pressable onPress={() => navigation.navigate("Login")} style={styles.backToLoginWrap}>
             <Text style={styles.backToLogin}>Back to login</Text>
           </Pressable>
-        </>
-      )}
-
-      {step === "password" && (
+        ) : null
+      }
+    >
+      {(compact) => (
         <>
-          <TextField label="Password" placeholder="Minimum 8 characters" value={password} onChangeText={setPassword} isPassword />
-          <TextField label="Confirm password" placeholder="Re-enter your password" value={confirmPassword} onChangeText={setConfirmPassword} isPassword />
-          <PrimaryButton label="Create account" onPress={onSetPasswordAndCreate} loading={loading} />
-          <Pressable onPress={() => navigation.navigate("Login")} style={styles.backToLoginWrap}>
-            <Text style={styles.backToLogin}>Back to login</Text>
-          </Pressable>
+          {!!error && <ErrorBanner message={error} />}
+
+          {step === "details" && (
+            <>
+              <TextField auth dense={compact} label="Full name" placeholder="e.g. Rohan Sharma" value={fullName} onChangeText={setFullName} />
+              <TextField auth dense={compact} label="Mobile number" placeholder="98xxxxxxxx" value={mobile} onChangeText={setMobile} keyboardType="number-pad" maxLength={10} />
+              <TextField auth dense={compact} label="Email" placeholder="you@example.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+              {!compact && <Text style={styles.hint}>We'll send a verification code to confirm it's really you.</Text>}
+              <DateField auth dense={compact} label="Date of birth" value={dob} onChange={setDob} maximumDate={new Date()} />
+              <PrimaryButton label="Continue" onPress={onContinueFromDetails} loading={loading} />
+            </>
+          )}
+
+          {step === "otp" && (
+            <>
+              <TextField auth dense={compact} label="6-digit code" placeholder="000000" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
+              <PrimaryButton label="Verify code" onPress={onVerifyOtp} loading={loading} />
+            </>
+          )}
+
+          {step === "password" && (
+            <>
+              <TextField auth dense={compact} label="Password" placeholder="Minimum 8 characters" value={password} onChangeText={setPassword} isPassword />
+              <TextField auth dense={compact} label="Confirm password" placeholder="Re-enter your password" value={confirmPassword} onChangeText={setConfirmPassword} isPassword />
+              <PrimaryButton label="Create account" onPress={onSetPasswordAndCreate} loading={loading} />
+            </>
+          )}
         </>
       )}
-    </Screen>
+    </AuthLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { marginBottom: 18 },
-  heroInner: { alignItems: "center", paddingVertical: 4 },
-  header: { alignItems: "center", marginBottom: 20 },
-  title: { fontSize: 17, fontWeight: "600", color: NEUTRAL.textPrimary, marginTop: 10 },
-  subtitle: { fontSize: 12, color: NEUTRAL.textSecondary, marginTop: 4, textAlign: "center", paddingHorizontal: 12 },
-  hint: { fontSize: 11, color: NEUTRAL.textMuted, marginTop: -8, marginBottom: 14 },
-  backToLoginWrap: { alignSelf: "center", marginTop: 16 },
-  backToLogin: { fontSize: 12.5, color: NEUTRAL.textSecondary, fontWeight: "600" },
+  hint: { fontSize: 11.5, color: NEUTRAL.textMuted, marginTop: -6, marginBottom: 12 },
+  backToLoginWrap: { padding: 8 },
+  backToLogin: { fontSize: 16, color: NEUTRAL.textSecondary, fontWeight: "700" },
 });
