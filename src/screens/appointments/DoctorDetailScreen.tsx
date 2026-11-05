@@ -1,19 +1,18 @@
-import { ActionGradient } from "@/components/ActionGradient";
 import { useState } from "react";
-import { ACTION, ON_ACTION } from "@/theme/buttons";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
-import { Screen, BackHeader, ErrorBanner, SectionTitle, EmptyState } from "@/components/Layout";
-import { PrimaryButton } from "@/components/Buttons";
+import { Screen, BackHeader, ErrorBanner, SectionTitle } from "@/components/Layout";
+import { FooterAction } from "@/components/FooterAction";
+import { SlotHeader, SlotGrid } from "@/components/SlotPicker";
 import { SlidingTabs } from "@/components/SlidingTabs";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { getDoctorDetail, getSlots } from "@/api/portal";
 import { apiErrorMessage } from "@/api/client";
 import { AppStackParamList } from "@/navigation/types";
-import { formatTime12, istDateIso, shortDayLabel } from "@/utils/indianTime";
+import { istDateIso, shortDayLabel } from "@/utils/indianTime";
 
 function dateOffsetLabel(daysFromToday: number): { key: string; label: string } {
   const iso = istDateIso(daysFromToday);
@@ -42,147 +41,77 @@ export function DoctorDetailScreen() {
     queryFn: () => getSlots(hospitalId, doctorId, selectedDate),
   });
 
+  const onBook = () => {
+    if (!doctor || !selectedTime) return;
+    // Who this booking is for was already decided one screen back
+    // (BookingForScreen, reached before this screen for a fresh
+    // booking) — patientAwpid/patientName just ride along from
+    // there, same as they already did for "Book follow-up".
+    navigation.navigate("ConfirmBooking", {
+      hospitalId,
+      doctorId,
+      doctorName: doctor.name,
+      hospitalName: typeof doctor.hospital === "object" ? doctor.hospital.name : String(doctor.hospital || ""),
+      date: selectedDate,
+      time: selectedTime,
+      chiefComplaint: initialComplaint,
+      patientAwpid,
+      patientName: patientName || "You",
+      consultationFee: doctor.consultation_fee,
+    });
+  };
+
+  // Everything above the slots stays put; only the slot grid scrolls, and the button stays at the bottom.
   return (
-    <Screen>
-      <BackHeader title="Doctor profile" onBack={() => navigation.goBack()} />
-      {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={loadDoctor} />}
-      {loading ? (
-        <Text style={styles.loading}>Loading…</Text>
-      ) : !doctor ? null : (
-        <View style={styles.body}>
-          <View style={[styles.avatar, { backgroundColor: theme.bg }]}>
-            <Text style={[styles.avatarText, { color: theme.text }]}>{doctor.name.replace("Dr. ", "")[0]}</Text>
-          </View>
-          <Text style={styles.name}>{doctor.name}</Text>
-          <Text style={styles.spec}>
-            {doctor.specialisation || "General physician"}
-            {doctor.experience_years ? ` · ${doctor.experience_years} yrs experience` : ""}
-          </Text>
-          {!!doctor.bio && <Text style={styles.bio}>{doctor.bio}</Text>}
-          {!!doctor.known_for && <Text style={styles.knownFor}>Known for: {doctor.known_for}</Text>}
-          {!!doctor.consultation_fee && (
-            <View style={[styles.feeBox, { backgroundColor: theme.bg }]}>
-              <Text style={[styles.feeLabel, { color: theme.text }]}>CONSULTATION FEE</Text>
-              <Text style={[styles.feeValue, { color: theme.text }]}>₹{doctor.consultation_fee}</Text>
+    <Screen
+      header={
+        <>
+          <BackHeader title="Doctor profile" onBack={() => navigation.goBack()} />
+          {!!error && <ErrorBanner message={apiErrorMessage(error)} onRetry={loadDoctor} />}
+          {loading ? (
+            <Text style={styles.loading}>Loading…</Text>
+          ) : !doctor ? null : (
+            <View style={styles.body}>
+              <View style={[styles.avatar, { backgroundColor: theme.bg }]}>
+                <Text style={[styles.avatarText, { color: theme.text }]}>{doctor.name.replace("Dr. ", "")[0]}</Text>
+              </View>
+              <Text style={styles.name}>{doctor.name}</Text>
+              <Text style={styles.spec}>
+                {doctor.specialisation || "General physician"}
+                {doctor.experience_years ? ` · ${doctor.experience_years} yrs experience` : ""}
+              </Text>
+              {!!doctor.bio && <Text style={styles.bio}>{doctor.bio}</Text>}
+              {!!doctor.known_for && <Text style={styles.knownFor}>Known for: {doctor.known_for}</Text>}
+              {!!doctor.consultation_fee && (
+                <View style={[styles.feeBox, { backgroundColor: theme.bg }]}>
+                  <Text style={[styles.feeLabel, { color: theme.text }]}>CONSULTATION FEE</Text>
+                  <Text style={[styles.feeValue, { color: theme.text }]}>₹{doctor.consultation_fee}</Text>
+                </View>
+              )}
+
+              <View style={{ alignSelf: "stretch" }}>
+                <SectionTitle>Choose a date</SectionTitle>
+                <SlidingTabs
+                  label="Date"
+                  look="chips"
+                  options={dateOptions}
+                  value={selectedDate}
+                  onChange={(d) => { setSelectedDate(d); setSelectedTime(null); }}
+                  style={{ marginBottom: 12 }}
+                />
+              </View>
+
+              <View style={{ alignSelf: "stretch" }}>
+                <SlotHeader showFilter={slots.length > 0} availableOnly={availableOnly} onChange={setAvailableOnly} />
+              </View>
             </View>
           )}
-
-          <View style={{ alignSelf: "stretch" }}>
-            <SectionTitle>Choose a date</SectionTitle>
-            <SlidingTabs
-              label="Date"
-              look="chips"
-              options={dateOptions}
-              value={selectedDate}
-              onChange={(d) => { setSelectedDate(d); setSelectedTime(null); }}
-              style={{ marginBottom: 12 }}
-            />
-          </View>
-
-          <View style={{ alignSelf: "stretch" }}>
-            <View style={styles.slotHeaderRow}>
-              <SectionTitle>Choose a time slot</SectionTitle>
-              {slots.length > 0 && (
-                <SlidingTabs
-                  label="Slots to show"
-                  look="small"
-                  options={[{ key: "all", label: "All slots" }, { key: "free", label: "Available only" }]}
-                  value={availableOnly ? "free" : "all"}
-                  onChange={(k) => setAvailableOnly(k === "free")}
-                  style={styles.filterRow}
-                />
-              )}
-            </View>
-            {slotsLoading ? (
-              <Text style={styles.slotsLoading}>Loading slots…</Text>
-            ) : slots.length === 0 ? (
-              <EmptyState text="No slots configured for this day — try a different date." />
-            ) : (
-              <>
-                {(() => {
-                  const visibleSlots = availableOnly ? slots.filter((s) => s.available) : slots;
-                  const hiddenCount = slots.length - visibleSlots.length;
-                  return visibleSlots.length === 0 ? (
-                    <EmptyState text="All slots are booked for this day — try a different date." />
-                  ) : (
-                    <>
-                      <View style={styles.slotGrid}>
-                        {visibleSlots.map((s) => {
-                          const active = s.time === selectedTime;
-                          return (
-                            <Pressable
-                              key={s.time}
-                              disabled={!s.available}
-                              onPress={() => setSelectedTime(s.time)}
-                              style={[
-                                styles.slot,
-                                !s.available && styles.slotBooked,
-                                active && { backgroundColor: ACTION, borderColor: ACTION },
-                                !active && s.available && { borderColor: NEUTRAL.border },
-                                { overflow: "hidden" },
-                              ]}
-                            >
-                              {active && <ActionGradient />}
-                              <Text style={[styles.slotText, !s.available && styles.slotTextBooked, active && { color: ON_ACTION }]}>
-                                {formatTime12(s.time)}
-                              </Text>
-                              {!s.available && <Text style={styles.slotBookedCaption}>BOOKED</Text>}
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                      {availableOnly && hiddenCount > 0 && (
-                        <Text style={styles.hiddenHint}>
-                          {hiddenCount} booked slot{hiddenCount > 1 ? "s" : ""} hidden
-                        </Text>
-                      )}
-                    </>
-                  );
-                })()}
-                <View style={styles.legendRow}>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { borderColor: NEUTRAL.border, backgroundColor: NEUTRAL.surface }]} />
-                    <Text style={styles.legendText}>Available</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendSwatch, { backgroundColor: ACTION, borderColor: ACTION }]} />
-                    <Text style={styles.legendText}>Selected</Text>
-                  </View>
-                  {!availableOnly && (
-                    <View style={styles.legendItem}>
-                      <View style={[styles.legendSwatch, styles.slotBooked]} />
-                      <Text style={styles.legendText}>Booked</Text>
-                    </View>
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-
-          <PrimaryButton
-            label={selectedTime ? "Book appointment" : "Pick a slot to continue"}
-            disabled={!selectedTime}
-            style={{ alignSelf: "stretch" }}
-            onPress={() =>
-              // Who this booking is for was already decided one screen back
-              // (BookingForScreen, reached before this screen for a fresh
-              // booking) — patientAwpid/patientName just ride along from
-              // there, same as they already did for "Book follow-up".
-              navigation.navigate("ConfirmBooking", {
-                hospitalId,
-                doctorId,
-                doctorName: doctor.name,
-                hospitalName: typeof doctor.hospital === "object" ? doctor.hospital.name : String(doctor.hospital || ""),
-                date: selectedDate,
-                time: selectedTime || undefined,
-                chiefComplaint: initialComplaint,
-                patientAwpid,
-                patientName: patientName || "You",
-                consultationFee: doctor.consultation_fee,
-              })
-            }
-          />
-        </View>
+        </>
+      }
+      footer={doctor ? <FooterAction label={selectedTime ? "Book appointment" : "Pick a slot to continue"} disabled={!selectedTime} onPress={onBook} /> : undefined}
+    >
+      {!!doctor && (
+        <SlotGrid slots={slots} loading={slotsLoading} selectedTime={selectedTime} availableOnly={availableOnly} onSelect={setSelectedTime} />
       )}
     </Screen>
   );
@@ -209,18 +138,4 @@ const styles = StyleSheet.create({
   },
   feeLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
   feeValue: { fontSize: 17, fontWeight: "800" },
-  slotHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  filterRow: { width: 170 },
-  hiddenHint: { fontSize: 10, color: NEUTRAL.textMuted, marginTop: -2, marginBottom: 8 },
-  slotsLoading: { fontSize: 12, color: NEUTRAL.textMuted, marginTop: 4, marginBottom: 8 },
-  slotGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
-  slot: { borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: NEUTRAL.surface, alignItems: "center" },
-  slotBooked: { backgroundColor: NEUTRAL.dangerBg, borderColor: "#F3D3D3" },
-  slotText: { fontSize: 12, color: NEUTRAL.textPrimary, fontWeight: "600" },
-  slotTextBooked: { color: NEUTRAL.danger, fontWeight: "600", textDecorationLine: "line-through" },
-  slotBookedCaption: { fontSize: 8, color: NEUTRAL.danger, fontWeight: "700", marginTop: 1, letterSpacing: 0.3 },
-  legendRow: { flexDirection: "row", gap: 14, marginBottom: 4 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendSwatch: { width: 9, height: 9, borderRadius: 2, borderWidth: 1 },
-  legendText: { fontSize: 9.5, color: NEUTRAL.textSecondary },
 });

@@ -54,7 +54,7 @@ export function AppStack() {
       <Stack.Screen name="DoctorDetail" component={DoctorDetailScreen} />
       <Stack.Screen name="BookingFor" component={BookingForScreen} />
       <Stack.Screen name="ConfirmBooking" component={ConfirmBookingScreen} />
-      <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false }} />
+      <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} options={{ gestureEnabled: false, animation: "fade_from_bottom" }} />
       <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       <Stack.Screen name="MyDocuments" component={MyDocumentsScreen} />
       <Stack.Screen name="DocumentDay" component={DocumentDayScreen} />

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import * as LocalAuthentication from "expo-local-authentication";
-import { getAccessToken, getRefreshToken, saveTokens, clearTokens, getBiometricLockEnabled } from "@/utils/storage";
+import { getAccessToken, getRefreshToken, saveTokens, clearTokens, getBiometricLockEnabled, setBiometricLockEnabled, clearBiometricPromptSeen } from "@/utils/storage";
 import { loginPatient, logout as apiLogout } from "@/api/auth";
 import { setSessionExpiredHandler } from "@/api/client";
 import { setUpNotifications } from "@/utils/pushNotifications";
@@ -120,6 +120,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // best-effort — clear local session regardless of server call outcome
     }
     await clearTokens();
+    // Fingerprint sign-in needs the saved session, so it goes with it (the sign-out dialog says so). The next sign-in is
+    // offered the one-time "turn on fingerprint" screen again. An expired session does not come through here and keeps it.
+    await setBiometricLockEnabled(false);
+    await clearBiometricPromptSeen();
     setNeedsUnlock(false);
     setIsAuthenticated(false);
     // Drop every saved screen (profile, family, documents...) so the next person to sign in on this phone starts

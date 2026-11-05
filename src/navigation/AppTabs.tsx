@@ -1,5 +1,7 @@
-import { View, StyleSheet } from "react-native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useEffect, useRef } from "react";
+import { Animated, View, StyleSheet, Pressable, Text } from "react-native";
+import * as Haptics from "expo-haptics";
+import { createBottomTabNavigator, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Home, CalendarDays, HeartPulse, UserRound } from "lucide-react-native";
 import { AppTabsParamList } from "./types";
@@ -20,34 +22,53 @@ const ICONS: Record<keyof AppTabsParamList, LucideIcon> = {
   Profile: UserRound,
 };
 
-export function AppTabs() {
+/** One tab: the pill behind the icon grows in with a spring when the tab is chosen, and the icon lifts a touch. */
+function TabButton({ label, Icon, focused, onPress, onLongPress }: { label: string; Icon: LucideIcon; focused: boolean; onPress: () => void; onLongPress: () => void }) {
   const { theme } = useAppTheme();
-  // The fixed bar height below must grow with the device's bottom safe-area
-  // inset (gesture nav bar / home indicator) — hardcoding just the content
-  // height without it squeezed icons/labels into whatever sliver was left
-  // above the system nav on devices with a inset, reading as "shrunk".
+  const v = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(v, { toValue: focused ? 1 : 0, useNativeDriver: true, speed: 18, bounciness: 8 }).start();
+  }, [focused, v]);
+  const color = focused ? theme.text : NEUTRAL.textMuted;
+  return (
+    <Pressable onPress={onPress} onLongPress={onLongPress} accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={label} style={styles.item}>
+      <View style={styles.iconWrap}>
+        <Animated.View style={[styles.pill, { backgroundColor: theme.bg, opacity: v, transform: [{ scaleX: v.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) }] }]} />
+        <Animated.View style={{ transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -1] }) }, { scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }] }}>
+          <Icon size={19} color={color} strokeWidth={2.2} />
+        </Animated.View>
+      </View>
+      <Text style={[styles.label, { color }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** The bottom bar: same look as before, with the sliding pill and a light tick when you switch tabs. */
+function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  // The fixed bar height must grow with the device's bottom safe-area inset (gesture nav bar / home indicator), or the
+  // icons and labels get squeezed into whatever sliver is left above the system nav.
   const insets = useSafeAreaInsets();
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: theme.text,
-        tabBarInactiveTintColor: NEUTRAL.textMuted,
-        tabBarStyle: [styles.bar, { height: 56 + insets.bottom, paddingBottom: Math.max(insets.bottom, 8) }],
-        // A filled pill behind the active icon (not just a tint-color swap)
-        // reads as a real "you are here" indicator instead of flat text —
-        // same idea as the reference's highlighted active tab circle.
-        tabBarIcon: ({ color, focused }) => {
-          const Icon = ICONS[route.name as keyof AppTabsParamList];
-          return (
-            <View style={[styles.iconWrap, focused && { backgroundColor: theme.bg }]}>
-              <Icon size={19} color={color} strokeWidth={2.2} />
-            </View>
-          );
-        },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
+    <View style={[styles.bar, { height: 56 + insets.bottom, paddingBottom: Math.max(insets.bottom, 8) }]}>
+      {state.routes.map((route, index) => {
+        const focused = state.index === index;
+        const label = (descriptors[route.key].options.title as string) ?? route.name;
+        const onPress = () => {
+          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!focused && !event.defaultPrevented) {
+            Haptics.selectionAsync().catch(() => {});
+            navigation.navigate(route.name as never);
+          }
+        };
+        return <TabButton key={route.key} label={label} Icon={ICONS[route.name as keyof AppTabsParamList]} focused={focused} onPress={onPress} onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })} />;
       })}
-    >
+    </View>
+  );
+}
+
+export function AppTabs() {
+  return (
+    <Tab.Navigator tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false }} sceneContainerStyle={{ backgroundColor: NEUTRAL.bg }}>
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Appointments" component={AppointmentsScreen} options={{ title: "Visits" }} />
       <Tab.Screen name="Health" component={HealthScreen} />
@@ -58,6 +79,7 @@ export function AppTabs() {
 
 const styles = StyleSheet.create({
   bar: {
+    flexDirection: "row",
     borderTopWidth: 1,
     borderTopColor: NEUTRAL.border,
     borderTopLeftRadius: 20,
@@ -77,5 +99,8 @@ const styles = StyleSheet.create({
     // platforms (iOS never used elevation to begin with).
     elevation: 0,
   },
-  iconWrap: { width: 34, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  item: { flex: 1, alignItems: "center", justifyContent: "center", gap: 2 },
+  iconWrap: { width: 34, height: 26, alignItems: "center", justifyContent: "center" },
+  pill: { position: "absolute", width: 34, height: 26, borderRadius: 13 },
+  label: { fontSize: 10, fontWeight: "600" },
 });

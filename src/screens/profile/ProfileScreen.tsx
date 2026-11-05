@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { SkeletonBlock, SkeletonRow } from "@/components/Skeleton";
@@ -34,7 +34,6 @@ export function ProfileScreen() {
   const { theme } = useAppTheme();
   const { logout } = useAuth();
   const { uploading } = useDocumentUpload();
-  const queryClient = useQueryClient();
   const [signOutConfirmVisible, setSignOutConfirmVisible] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -222,9 +221,10 @@ export function ProfileScreen() {
         danger
         title="Sign out?"
         message={
-          uploading
+          (uploading
             ? "Files are still uploading and will stop if you sign out. Wait for them to finish, or sign out anyway. You'll need to sign in again to view your appointments and records."
-            : "You'll need to sign in again to view your appointments and records."
+            : "You'll need to sign in again to view your appointments and records.") +
+          (biometricEnabled ? " Fingerprint sign-in will be turned off on this device. Next time, sign in with your password; you can turn it on again afterwards." : "")
         }
         confirmLabel="Sign out"
         cancelLabel="Stay signed in"

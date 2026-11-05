@@ -2,20 +2,32 @@ import { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, BackHeader, ErrorBanner, SectionTitle } from "@/components/Layout";
+import { Screen, BackHeader, ErrorBanner } from "@/components/Layout";
 import { Card } from "@/components/Card";
 import { TextField } from "@/components/TextField";
-import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
+import { SecondaryButton } from "@/components/Buttons";
+import { FooterAction } from "@/components/FooterAction";
 import { NEUTRAL } from "@/theme/themes";
 import { useAppTheme } from "@/context/ThemeContext";
 import { book, getMyBookings } from "@/api/portal";
 import { apiErrorMessage, isLikelyNetworkError } from "@/api/client";
 import { useNetwork } from "@/context/NetworkContext";
 import { AppStackParamList } from "@/navigation/types";
-import { formatTime12 } from "@/utils/indianTime";
+import { formatTime12, shortDayLabel } from "@/utils/indianTime";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { CheckCircle2 } from "lucide-react-native";
-import { CARD_TEXT } from "@/theme/cardSizes";
+import Svg, { Path } from "react-native-svg";
+
+// The mark at the top: a tick in a ring that is left open, because nothing is booked until the patient confirms. Light lime,
+// so it reads as "almost there" and not as the green of a finished booking.
+const PENDING_LIME = "#B8CC1C";
+function PendingTick({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={PENDING_LIME} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21.205 8.093A10 10 0 1 1 15.907 2.795" />
+      <Path d="m9 12 2 2 4-4" />
+    </Svg>
+  );
+}
 
 // This screen exists specifically so booking a slot is never one tap —
 // the patient reviews doctor/hospital/date here and must explicitly confirm
@@ -113,10 +125,27 @@ export function ConfirmBookingScreen() {
   };
 
   return (
-    <Screen>
+    <Screen
+      footer={
+        <FooterAction
+          label="Confirm booking"
+          onPress={() => setConfirmVisible(true)}
+          loading={loading}
+          above={
+            maybeBooked ? (
+              <SecondaryButton
+                label="Check my appointments"
+                onPress={() => navigation.navigate("Tabs" as any, { screen: "Appointments" } as any)}
+                style={{ marginBottom: 8 }}
+              />
+            ) : undefined
+          }
+        />
+      }
+    >
       <BackHeader title="Confirm booking" onBack={() => navigation.goBack()} />
       <View style={styles.iconWrap}>
-        <CheckCircle2 size={28} color={theme.text} strokeWidth={2.2} />
+        <PendingTick size={40} />
       </View>
       <Text style={styles.title}>Confirm your appointment</Text>
       <Text style={styles.subtitle}>Review the details before booking — this won't be confirmed until you tap below.</Text>
@@ -126,10 +155,28 @@ export function ConfirmBookingScreen() {
       <Card>
         <Text style={styles.doctor}>{params.doctorName}</Text>
         <Text style={styles.hospital}>{params.hospitalName}</Text>
-        <Text style={[styles.dateLine, { color: theme.text }]}>
-          {params.date}
-          {params.time ? ` · ${formatTime12(params.time)}` : " · next available token"} · for {params.patientName}
-        </Text>
+
+        <View style={styles.details}>
+          <View style={styles.cell}>
+            <Text style={styles.cellLabel}>DATE</Text>
+            <Text style={[styles.cellValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {/^\d{4}-\d{2}-\d{2}$/.test(params.date) ? shortDayLabel(params.date) : params.date}
+            </Text>
+          </View>
+          <View style={[styles.cell, styles.cellDivider]}>
+            <Text style={styles.cellLabel}>TIME</Text>
+            <Text style={[styles.cellValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {params.time ? formatTime12(params.time) : "Next token"}
+            </Text>
+          </View>
+          <View style={[styles.cell, styles.cellDivider]}>
+            <Text style={styles.cellLabel}>FOR</Text>
+            <Text style={[styles.cellValue, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {params.patientName}
+            </Text>
+          </View>
+        </View>
+
         {!!params.consultationFee && (
           <View style={styles.feeRow}>
             <Text style={styles.feeLabel}>Consultation fee</Text>
@@ -138,8 +185,9 @@ export function ConfirmBookingScreen() {
         )}
       </Card>
 
-      <SectionTitle>Reason for visit (optional)</SectionTitle>
+      <Text style={styles.sectionTitle}>Reason for visit (optional)</Text>
       <TextField
+        auth
         label="Chief complaint"
         placeholder="e.g. Fever since 2 days"
         value={complaint}
@@ -148,16 +196,6 @@ export function ConfirmBookingScreen() {
 
       <Text style={styles.payNote}>Payment is collected at the hospital's front desk when you arrive.</Text>
 
-      {maybeBooked && (
-        <SecondaryButton
-          label="Check my appointments"
-          onPress={() => navigation.navigate("Tabs" as any, { screen: "Appointments" } as any)}
-          style={{ marginBottom: 8 }}
-        />
-      )}
-
-      <PrimaryButton label="Confirm booking" onPress={() => setConfirmVisible(true)} loading={loading} style={{ marginBottom: 8 }} />
-      <SecondaryButton label="Cancel" onPress={() => navigation.goBack()} />
 
       <ConfirmDialog
         visible={confirmVisible}
@@ -174,22 +212,27 @@ export function ConfirmBookingScreen() {
 }
 
 const styles = StyleSheet.create({
-  iconWrap: { alignItems: "center", marginTop: 4, marginBottom: 8 },
-  title: { fontSize: 16, fontWeight: "600", textAlign: "center", color: NEUTRAL.textPrimary },
-  subtitle: { fontSize: 12, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 4, marginBottom: 16, paddingHorizontal: 8 },
-  doctor: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
-  hospital: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
-  dateLine: { fontSize: CARD_TEXT.body, fontWeight: "600", marginTop: 8 },
+  iconWrap: { alignItems: "center", marginTop: 4, marginBottom: 6 },
+  title: { fontSize: 22, fontWeight: "700", textAlign: "center", color: NEUTRAL.textPrimary, letterSpacing: -0.3 },
+  subtitle: { fontSize: 14.5, lineHeight: 20, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 4, marginBottom: 14, paddingHorizontal: 10 },
+  doctor: { fontSize: 20, fontWeight: "700", color: NEUTRAL.textPrimary, letterSpacing: -0.2 },
+  hospital: { fontSize: 15, color: NEUTRAL.textSecondary, marginTop: 3 },
+  details: { flexDirection: "row", marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: NEUTRAL.border },
+  cell: { flex: 1, paddingRight: 6 },
+  cellDivider: { borderLeftWidth: 1, borderLeftColor: NEUTRAL.border, paddingLeft: 12 },
+  cellLabel: { fontSize: 11.5, fontWeight: "700", letterSpacing: 0.8, color: NEUTRAL.textMuted },
+  cellValue: { fontSize: 17, fontWeight: "700", marginTop: 5 },
   feeRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: NEUTRAL.border,
   },
-  feeLabel: { fontSize: 11, fontWeight: "600", color: NEUTRAL.textSecondary },
-  feeValue: { fontSize: 17, fontWeight: "800" },
-  payNote: { fontSize: 11.5, color: NEUTRAL.textMuted, marginTop: 12, marginBottom: 16, lineHeight: 16 },
+  feeLabel: { fontSize: 15, fontWeight: "600", color: NEUTRAL.textSecondary },
+  feeValue: { fontSize: 22, fontWeight: "800", letterSpacing: -0.3 },
+  sectionTitle: { fontSize: 16, fontWeight: "700", color: NEUTRAL.textPrimary, marginTop: 14, marginBottom: 8 },
+  payNote: { fontSize: 13.5, color: NEUTRAL.textMuted, marginTop: 10, marginBottom: 10, lineHeight: 19 },
 });

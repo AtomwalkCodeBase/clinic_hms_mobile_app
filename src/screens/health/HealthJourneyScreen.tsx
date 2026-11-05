@@ -3,7 +3,7 @@ import { InteractionManager, StyleSheet, View } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { Calendar, Camera, Clock, ListFilter, Plus, Syringe, TrendingUp, Users } from "lucide-react-native";
+import { Calendar, Clock, ListFilter, Plus, Syringe, TrendingUp, Upload, Users } from "lucide-react-native";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { usePeople, usePersonSwitcher, paramsFor } from "@/hooks/usePeople";
 import { Screen, BackHeader } from "@/components/Layout";
@@ -25,19 +25,19 @@ const HELP: HelpItem[] = [
   { icon: Clock, title: "Overview", text: "The counts for the last 3 years at the top, anything that needs attention, and a short timeline of what matters most in those 3 years." },
   { icon: ListFilter, title: "Timeline", text: "Tap any mark to see what happened, and slide the chart sideways to go back in time. A long bar is a condition that continues, a dot is a short illness, a diamond is hospital care, a tick is a given vaccine and a cross an overdue one. A circular arrow means it keeps coming back. The two switches flip between list and chart, and between age and date." },
   { icon: TrendingUp, title: "Growth", text: "Choose Weight, Height or Head size, then tap a dot to see its date, age and centile. The blue band is the expected range for the child's age (2nd to 98th centile) and the dashed line is the 50th. An orange diamond is a reading to talk to the doctor about. A child born early is measured by corrected age until 2 years." },
-  { icon: Syringe, title: "Vaccines", text: "Tap an age group to see its doses. Book a dose that is overdue, due or coming up, one at a time or the whole group. Scan a card or add a vaccine by hand with the buttons at the bottom." },
+  { icon: Syringe, title: "Vaccines", text: "Tap an age group to see its doses. Book a dose that is overdue, due or coming up, one at a time or the whole group. Upload a vaccination card or add a vaccine by hand with the buttons at the bottom." },
   { icon: Calendar, title: "Period", text: "Changes how far back the timeline goes: 6 months, 1 year, 3 years or since birth." },
   { icon: Users, title: "Another person", text: "The three dots at the top right, next to this ?, switch to another family member's records." },
 ];
 
-/** The scan and add buttons pinned at the bottom of the Vaccines tab; it reads the tab itself so the screen need not. */
+/** The upload and add buttons pinned at the bottom of the Vaccines tab; it reads the tab itself so the screen need not. */
 function VaccinesFooter({ patientAwpid, patientName, child }: { patientAwpid: string | undefined; patientName: string; child: boolean }) {
   const navigation = useNavigation<Nav>();
   const section = useJourney("section");
   if (section !== "vaccines" || !child) return null;
   return (
     <View style={styles.footer}>
-      <SecondaryButton label="Scan vaccination card" icon={Camera} onPress={() => navigation.navigate("DocumentUpload", { patientAwpid })} style={{ flex: 1 }} />
+      <SecondaryButton label="Upload vaccination card" icon={Upload} onPress={() => navigation.navigate("DocumentUpload", { patientAwpid })} style={{ flex: 1 }} />
       <SecondaryButton label="Add a vaccine" icon={Plus} onPress={() => navigation.navigate("AddVaccine", { patientAwpid, patientName })} style={{ flex: 1 }} />
     </View>
   );
@@ -45,7 +45,7 @@ function VaccinesFooter({ patientAwpid, patientName, child }: { patientAwpid: st
 
 /**
  * One screen for a child's whole health story: Overview, Timeline, Growth and Vaccines as four sections. The tabs and the
- * controls of the section stay pinned at the top, only the content scrolls, and on the Vaccines tab the scan and add buttons
+ * controls of the section stay pinned at the top, only the content scrolls, and on the Vaccines tab the upload and add buttons
  * stay pinned at the bottom. The episode details are a sheet over it; a tapped mark or dot opens a floating card.
  *
  * This component only holds what everything on it shares (who, the header, the help sheet). The choices (section, period,

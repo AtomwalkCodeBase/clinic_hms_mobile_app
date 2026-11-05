@@ -1,4 +1,5 @@
-import { Modal, Pressable, View, Text, StyleSheet } from "react-native";
+import { Pressable, View, Text, StyleSheet } from "react-native";
+import { SheetModal } from "@/components/SheetModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Camera, Files } from "lucide-react-native";
 import { CloseButton } from "@/components/IconButtons";
@@ -8,8 +9,9 @@ import type { LucideIcon } from "@/theme/icons";
 import { LIMITS_LINE, SINGLE_LIMITS_LINE } from "@/utils/uploadLimits";
 
 /**
- * "Add documents": the one place the patient chooses how to add files, from Bulk Upload (several files) and from the
- * + in My Documents (one file). The caller does the work: asking whose file it is, the picker, the camera.
+ * "Add documents": the one place the patient chooses how to add files, from Bulk Upload (several files, chosen from the
+ * phone) and from the + in My Documents (one file, chosen or photographed). The caller does the work: asking whose file
+ * it is, the picker, the camera. Only a caller that passes `onCamera` gets the camera option.
  */
 export function UploadSheet({
   visible, many, onClose, onFiles, onCamera,
@@ -19,7 +21,7 @@ export function UploadSheet({
   many: boolean;
   onClose: () => void;
   onFiles: () => void;
-  onCamera: () => void;
+  onCamera?: () => void;
 }) {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
@@ -31,30 +33,29 @@ export function UploadSheet({
     </Pressable>
   );
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+    <SheetModal visible={visible} onClose={onClose}>
+      <>
         <View style={[styles.sheet, { paddingBottom: Math.max(24, insets.bottom + 16) }]} onStartShouldSetResponder={() => true}>
           <View style={styles.handle} />
           <View style={styles.head}>
             <Text style={styles.title}>{many ? "Add documents" : "Add document"}</Text>
             <CloseButton onPress={onClose} style={styles.close} />
           </View>
-          <Text style={styles.lead}>{many ? "Upload multiple files or take photos." : "Upload a single file or take a photo."}</Text>
-          <Text style={styles.sub}>We read them and suggest a type for each.</Text>
+          <Text style={styles.lead}>{many ? "Choose several files from your phone." : "Choose a file or take a photo."}</Text>
+          <Text style={styles.sub}>{many ? "We read them and suggest a type for each." : "We read it and suggest a type."}</Text>
           <Text style={styles.limits}>{many ? LIMITS_LINE : SINGLE_LIMITS_LINE}. Photos are made smaller automatically.</Text>
           {row(Files, many ? "Choose files" : "Choose a file", onFiles)}
-          {row(Camera, many?"Take photos":"Take photo or scan", onCamera)}
+          {onCamera && row(Camera, "Take photo or scan", onCamera)}
           <Pressable onPress={onClose} style={styles.cancel} accessibilityRole="button" accessibilityLabel="Cancel">
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
         </View>
-      </Pressable>
-    </Modal>
+      </>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20,
     paddingTop: 12, minHeight: "38%",

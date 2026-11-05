@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, RefreshControl, Animated, Keyboard, Platform, TextInput, useWindowDimensions, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { BackButton } from "@/components/IconButtons";
@@ -14,6 +14,34 @@ import { TopProgressBar } from "@/components/TopProgressBar";
 
 /** How close to the bottom (in pixels) a scroll counts as "near the end". */
 const NEAR_END_PX = 700;
+
+/**
+ * Keeps the field being typed in above the keyboard. Android does not resize the page for the keyboard, so a field low
+ * on a scrolling page ended up hidden behind it. While the keyboard is open the page gets that much extra room at the
+ * bottom, and if the focused field sits under the keyboard the page scrolls just far enough to show it.
+ */
+function useKeyboardRoom(scrollRef: React.RefObject<ScrollView | null>, offsetRef: React.MutableRefObject<number>, enabled: boolean) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    const ios = Platform.OS === "ios";
+    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", (e) => {
+      setHeight(e.endCoordinates.height);
+      const field = (TextInput as any).State?.currentlyFocusedInput?.();
+      if (!field?.measureInWindow) return;
+      // wait a beat so the extra room below has been laid out before scrolling into it
+      setTimeout(() => {
+        field.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+          const over = y + h + 24 - e.endCoordinates.screenY;
+          if (over > 0) scrollRef.current?.scrollTo({ y: offsetRef.current + over, animated: true });
+        });
+      }, 60);
+    });
+    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () => setHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, [enabled, scrollRef, offsetRef]);
+  return height;
+}
 
 export function Screen({
   children,
@@ -79,6 +107,11 @@ export function Screen({
   onNearEnd?: () => void;
 }) {
   const Body = scroll ? ScrollView : View;
+  const bodyRef = useRef<ScrollView>(null);
+  const scrollOffset = useRef(0);
+  // every mounted page hears the keyboard, but only the one on top should make room for it
+  const focused = useIsFocused();
+  const keyboardRoom = useKeyboardRoom(bodyRef, scrollOffset, scroll && focused);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme } = useAppTheme();
@@ -167,10 +200,18 @@ export function Screen({
           <Body
             style={styles.body}
             stickyHeaderIndices={scroll ? stickyHeaderIndices : undefined}
-            contentContainerStyle={scroll ? (header ? styles.scrollContentUnderHeader : styles.scrollContent) : undefined}
+            contentContainerStyle={scroll ? [header ? styles.scrollContentUnderHeader : styles.scrollContent, keyboardRoom > 0 && { paddingBottom: 32 + keyboardRoom }] : undefined}
             refreshControl={header ? undefined : refreshControl}
             keyboardShouldPersistTaps={header ? "handled" : undefined}
             {...scrollProps}
+            {...(scroll ? {
+              ref: bodyRef,
+              scrollEventThrottle: scrollProps?.scrollEventThrottle ?? 32,
+              onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                scrollOffset.current = e.nativeEvent.contentOffset.y;
+                scrollProps?.onScroll(e);
+              },
+            } : null)}
           >
             {children}
           </Body>

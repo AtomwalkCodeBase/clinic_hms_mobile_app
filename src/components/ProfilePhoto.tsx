@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { View, Text, Image, Pressable, Modal, StyleSheet } from "react-native";
+import { SheetModal } from "@/components/SheetModal";
+import { View, Text, Image, Pressable, StyleSheet } from "react-native";
 import { Camera } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { CloseButton } from "@/components/IconButtons";
@@ -87,8 +88,8 @@ export function ProfilePhotoSheet({
   onRemove: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+    <SheetModal visible={visible} onClose={onClose}>
+      <>
         <View style={styles.sheet} onStartShouldSetResponder={() => true}>
           <CloseButton onPress={onClose} style={{ position: "absolute", top: 12, right: 14, zIndex: 1 }} />
           <Text style={[styles.sheetTitle, { paddingHorizontal: 30 }]}>Update profile photo</Text>
@@ -107,8 +108,8 @@ export function ProfilePhotoSheet({
             <Text style={styles.sheetCancelText}>Cancel</Text>
           </Pressable>
         </View>
-      </Pressable>
-    </Modal>
+      </>
+    </SheetModal>
   );
 }
 
@@ -118,7 +119,6 @@ const styles = StyleSheet.create({
   avatarText: { fontWeight: "700", color: ON_BRAND },
   camBtn: { position: "absolute", right: -3, bottom: -3, backgroundColor: "#FFFFFF", borderWidth: 2, borderColor: BRAND_DEEP, alignItems: "center", justifyContent: "center" },
   camBusy: { fontSize: 12 },
-  sheetBackdrop: { flex: 1, backgroundColor: "rgba(14,42,35,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
   sheetTitle: { fontSize: 12.5, fontWeight: "700", color: NEUTRAL.textPrimary, textAlign: "center", marginBottom: 12 },
   sheetOpt: { paddingVertical: 13, borderRadius: 10, backgroundColor: NEUTRAL.surfaceAlt, alignItems: "center", marginBottom: 8 },

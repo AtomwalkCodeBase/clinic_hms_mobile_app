@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Image } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -15,14 +15,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Mode = "qr" | "photo";
 
-// How many photos one bulk capture session holds before it makes you upload and
-// start again — keeps the tray manageable. Add Document (instant) takes exactly one.
-const MAX_SHOTS = 20;
-
 // The bottom bar holds the shutter: 16 of padding above it and the 66 px button. The system navigation bar (Android) or the home indicator
 // (iOS) sits below that, and its height is added from the screen's safe-area inset, so the shutter is never under it.
 const BAR_CONTENT = 16 + 66;
-const TRAY_HEIGHT = 8 + 68 + 8;                          // the strip of photo thumbnails above the bar: padding, thumbnail, padding
+const TRAY_HEIGHT = 8 + 68 + 8;                          // the strip with the photo's thumbnail above the bar: padding, thumbnail, padding
 
 // The camera already saves each photo as a file and hands back its path, and the upload is one multipart request built
 // straight from a file path, so the photo is never turned into text. It is only moved (instantly) from the camera's cache
@@ -40,20 +36,15 @@ async function shotToCandidate(shotUri: string, i: number): Promise<UploadCandid
 }
 
 /**
- * One camera screen, opened from two places (route param `mode`):
- *   • "instant" (Add Document in My Documents) — one document. Two modes chosen by a toggle at the top:
- *       "Scan QR" — a bounded frame; a document QR held inside it auto-snaps and uploads on its own.
- *       "Photo"   — full-screen viewfinder + shutter, exactly one shot, then "Upload".
- *     Afterwards My Documents opens with that document, to confirm its type.
- *   • "bulk" (Bulk Upload) — Photo mode only. Each tap adds a page to a tray; "Upload N" sends them all and
- *     returns to Bulk Upload, where they are reviewed. At MAX_SHOTS the shutter locks until you upload.
+ * The camera for Add Document in My Documents: one document. Two modes chosen by a toggle at the top:
+ *   "Scan QR" — a bounded frame; a document QR held inside it auto-snaps and uploads on its own.
+ *   "Photo"   — full-screen viewfinder + shutter, exactly one shot, then "Upload".
+ * Afterwards My Documents opens with that document, to confirm its type. Bulk Upload has no camera: it only takes files.
  */
 export function CaptureScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const route = useRoute<RouteProp<AppStackParamList, "DocumentCapture">>();
   const patientAwpid = route.params?.patientAwpid;
-  const uploadMode = route.params?.mode ?? "instant";
-  const maxShots = uploadMode === "instant" ? 1 : MAX_SHOTS;
   const { queueUpload } = useDocumentUpload();
   const insets = useSafeAreaInsets();
   const bottomPad = insets.bottom + 14;                  // the space under the shutter, above the system bar
@@ -62,31 +53,26 @@ export function CaptureScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const camRef = useRef<CameraView>(null);
-  const [mode, setMode] = useState<Mode>(uploadMode === "instant" ? "qr" : "photo");
-  const [shots, setShots] = useState<string[]>([]);     // the photos taken (file paths), photo mode
-  const [capturing, setCapturing] = useState(false);     // guards double-tap while grabbing a frame
+  const [mode, setMode] = useState<Mode>("qr");
+  const [shot, setShot] = useState<string | null>(null);   // the photo taken (a file path), photo mode
+  const [capturing, setCapturing] = useState(false);       // guards double-tap while grabbing a frame
   const [error, setError] = useState("");
   const handledQr = useRef(false);
 
   // Leave the camera as soon as the upload has been started, without waiting for it to finish (it carries on in the
-  // background): an instant document goes back to My Documents (a bar there follows the upload, then the reading, then
-  // offers the confirmation); a bulk upload goes back to Bulk Upload for the review.
+  // background): My Documents opens with a bar that follows the upload, then the reading, then offers the confirmation.
   const leaveAfterUpload = useCallback(() => {
-    if (uploadMode === "instant") {
-      setViewingPerson(patientAwpid);          // My Documents shows the person the photo was taken for
-      navigation.navigate("MyDocuments");
-    } else {
-      navigation.navigate({ name: "DocumentUpload", params: patientAwpid ? { patientAwpid } : undefined, merge: true });
-    }
-  }, [navigation, patientAwpid, uploadMode]);
+    setViewingPerson(patientAwpid);          // My Documents shows the person the photo was taken for
+    navigation.navigate("MyDocuments");
+  }, [navigation, patientAwpid]);
 
   const grabFrame = useCallback(async (): Promise<string | null> => {
     if (!camRef.current) return null;
-    const shot = await camRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
-    return shot?.uri ?? null;
+    const frame = await camRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
+    return frame?.uri ?? null;
   }, []);
 
-  // ── QR: capture the frame and upload it as one instant document ──
+  // ── QR: capture the frame and upload it as the document ──
   const captureQr = useCallback(async (_qrToken: string) => {
     if (capturing) return;
     setCapturing(true);
@@ -120,52 +106,43 @@ export function CaptureScreen() {
     captureQr(data);
   }, [capturing, captureQr]);
 
-  // ── Photo: add to the tray ──────────────────────────────────────────────
-  const addShot = useCallback(async () => {
-    if (capturing || shots.length >= maxShots) return;
+  // ── Photo: take the one shot ────────────────────────────────────────────
+  const takeShot = useCallback(async () => {
+    if (capturing || shot) return;
     setCapturing(true);
     try {
-      const shotUri = await grabFrame();
-      if (shotUri) setShots((s) => (s.length >= maxShots ? s : [...s, shotUri]));
+      setShot(await grabFrame());
     } catch (err) {
       setError(isPhoneFull(err) ? PHONE_FULL : "Couldn't use the camera. Try again.");
     }
     setCapturing(false);
-  }, [capturing, shots.length, grabFrame, maxShots]);
+  }, [capturing, shot, grabFrame]);
 
-  const removeShot = (i: number) => {
-    FileSystem.deleteAsync(shots[i], { idempotent: true }).catch(() => {});
-    setShots((s) => s.filter((_, idx) => idx !== i));
+  const removeShot = () => {
+    if (shot) FileSystem.deleteAsync(shot, { idempotent: true }).catch(() => {});
+    setShot(null);
   };
 
-  const uploadAll = useCallback(async () => {
-    if (shots.length === 0 || capturing) return;
-    setCapturing(true);                                // a second tap while the photos are being moved would move them twice
+  const uploadShot = useCallback(async () => {
+    if (!shot || capturing) return;
+    setCapturing(true);                                // a second tap while the photo is being moved would move it twice
     setError("");
-    // The photos are moved one by one; if one fails, the tray must still point at where every photo is now.
-    const current = [...shots];
-    const candidates: UploadCandidate[] = [];
     try {
-      for (let i = 0; i < current.length; i++) {
-        const candidate = await shotToCandidate(current[i], i);
-        candidates.push(candidate);
-        current[i] = candidate.uri;
-      }
-      const outcome = queueUpload(candidates, uploadMode, patientAwpid);
+      const candidate = await shotToCandidate(shot, 0);
+      const outcome = queueUpload([candidate], "instant", patientAwpid);
       if (outcome.status !== "queued") {
         setError(outcome.reason);
-        setShots(current);
+        setShot(candidate.uri);                        // the photo has moved: the thumbnail must point at where it is now
         return;
       }
-      setShots([]);
+      setShot(null);
       leaveAfterUpload();
     } catch (err) {
-      setShots(current);
-      setError(isPhoneFull(err) ? PHONE_FULL : "Couldn't prepare your photos for upload. Please try again.");
+      setError(isPhoneFull(err) ? PHONE_FULL : "Couldn't prepare your photo for upload. Please try again.");
     } finally {
       setCapturing(false);
     }
-  }, [shots, capturing, queueUpload, uploadMode, patientAwpid, leaveAfterUpload]);
+  }, [shot, capturing, queueUpload, patientAwpid, leaveAfterUpload]);
 
   const switchMode = (m: Mode) => {
     if (m === mode) return;
@@ -193,8 +170,7 @@ export function CaptureScreen() {
   }
 
   const isQr = mode === "qr";
-  const atLimit = shots.length >= maxShots;
-  const aboveBar = barHeight + (!isQr && shots.length > 0 ? TRAY_HEIGHT : 0);     // the free space for the guide and the hint: not under the bar or the tray
+  const aboveBar = barHeight + (!isQr && shot ? TRAY_HEIGHT : 0);     // the free space for the guide and the hint: not under the bar or the thumbnail
 
   return (
     <View style={styles.fill}>
@@ -206,8 +182,8 @@ export function CaptureScreen() {
         onBarcodeScanned={isQr && !capturing ? onBarcode : undefined}
       />
 
-      {/* mode toggle (only Add Document can scan a QR) */}
-      {uploadMode === "instant" && <View style={[styles.toggleWrap, { top: topInset }]}>
+      {/* mode toggle */}
+      <View style={[styles.toggleWrap, { top: topInset }]}>
         <View style={styles.toggle}>
           <Pressable style={[styles.toggleBtn, isQr && styles.toggleBtnOn]} onPress={() => switchMode("qr")}>
             <QrCode size={13} color={isQr ? "#111" : "#fff"} />
@@ -218,7 +194,7 @@ export function CaptureScreen() {
             <Text style={[styles.toggleText, !isQr && styles.toggleTextOn]}>Photo</Text>
           </Pressable>
         </View>
-      </View>}
+      </View>
 
       {/* overlay differs by mode */}
       {isQr ? (
@@ -228,31 +204,21 @@ export function CaptureScreen() {
         </View>
       ) : (
         <View style={[styles.overlay, { bottom: aboveBar }]} pointerEvents="none">
-          <Text style={styles.hint}>
-            {atLimit
-              ? (uploadMode === "instant" ? "Got it — tap Upload." : `That's ${maxShots} pages — upload them, then keep going.`)
-              : (uploadMode === "instant"
-                ? "Fit the whole page in view, in good light, then tap the shutter."
-                : "Fit the whole page in view, in good light, then tap the shutter. Add as many pages as you need.")}
-          </Text>
+          <Text style={styles.hint}>{shot ? "Got it — tap Upload." : "Fit the whole page in view, in good light, then tap the shutter."}</Text>
         </View>
       )}
 
       <CloseButton variant="overlay" style={[styles.close, { top: topInset }]} onPress={() => navigation.goBack()} />
 
-      {/* photo-mode tray */}
-      {!isQr && shots.length > 0 && (
+      {/* photo-mode thumbnail */}
+      {!isQr && shot && (
         <View style={[styles.tray, { bottom: barHeight }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trayRow}>
-            {shots.map((shotUri, i) => (
-              <View key={i} style={styles.thumbWrap}>
-                <Image source={{ uri: shotUri }} style={styles.thumb} />
-                <Pressable style={styles.thumbX} hitSlop={8} onPress={() => removeShot(i)}>
-                  <X size={11} color="#fff" strokeWidth={3} />
-                </Pressable>
-              </View>
-            ))}
-          </ScrollView>
+          <View style={styles.thumbWrap}>
+            <Image source={{ uri: shot }} style={styles.thumb} />
+            <Pressable style={styles.thumbX} hitSlop={8} onPress={removeShot}>
+              <X size={11} color="#fff" strokeWidth={3} />
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -264,17 +230,15 @@ export function CaptureScreen() {
           </View>
         ) : (
           <View style={styles.photoBar}>
-            <View style={styles.sideSlot}>
-              {shots.length > 0 && uploadMode === "bulk" && <Text style={styles.countText}>{shots.length}/{maxShots}</Text>}
-            </View>
-            <Pressable style={[styles.shutter, atLimit && styles.shutterOff]} disabled={capturing || atLimit} onPress={addShot}>
+            <View style={styles.sideSlot} />
+            <Pressable style={[styles.shutter, !!shot && styles.shutterOff]} disabled={capturing || !!shot} onPress={takeShot}>
               <View style={styles.shutterInner} />
             </Pressable>
             <View style={styles.sideSlot}>
-              {shots.length > 0 && (
-                <Pressable style={styles.uploadBtn} onPress={uploadAll}>
+              {shot && (
+                <Pressable style={styles.uploadBtn} onPress={uploadShot}>
                   <Check size={15} color="#111" strokeWidth={3} />
-                  <Text style={styles.uploadBtnText}>{uploadMode === "instant" ? "Upload" : `Upload ${shots.length}`}</Text>
+                  <Text style={styles.uploadBtnText}>Upload</Text>
                 </Pressable>
               )}
             </View>
@@ -313,8 +277,7 @@ const styles = StyleSheet.create({
 
   close: { position: "absolute", left: 18 },
 
-  tray: { position: "absolute", left: 0, right: 0, paddingVertical: 8 },
-  trayRow: { paddingHorizontal: 14, gap: 8 },
+  tray: { position: "absolute", left: 0, right: 0, paddingVertical: 8, paddingHorizontal: 14 },
   thumbWrap: { width: 52, height: 68, borderRadius: 6, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.6)" },
   thumb: { width: "100%", height: "100%" },
   thumbX: { position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: 8, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
@@ -325,7 +288,6 @@ const styles = StyleSheet.create({
 
   photoBar: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sideSlot: { width: 108, alignItems: "center", justifyContent: "center" },
-  countText: { color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },
   shutter: { width: 66, height: 66, borderRadius: 33, borderWidth: 4, borderColor: "#fff", alignItems: "center", justifyContent: "center" },
   shutterOff: { opacity: 0.35 },
   shutterInner: { width: 50, height: 50, borderRadius: 25, backgroundColor: "#fff" },

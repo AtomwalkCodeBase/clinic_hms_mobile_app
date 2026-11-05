@@ -1,5 +1,6 @@
 import { ActionGradient } from "@/components/ActionGradient";
-import { Modal, Pressable, View, Text, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
+import { SheetModal } from "@/components/SheetModal";
+import { Pressable, View, Text, ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { ACTION, ON_ACTION } from "@/theme/buttons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CloseButton } from "@/components/IconButtons";
@@ -45,11 +46,7 @@ export function ChoiceSheet({
   const dismiss = actions.find(isDismiss);
   const rest = actions.filter((a) => !isDismiss(a));
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.backdrop}>
-        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
-            touch first and blocks the list from scrolling. */}
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+    <SheetModal visible={visible} onClose={onClose}>
         <View style={[styles.sheet, { paddingBottom: Math.max(26, insets.bottom + 12) }]}>
           <View style={styles.grab} />
           <CloseButton
@@ -100,13 +97,11 @@ export function ChoiceSheet({
           )}
           </ScrollView>
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.42)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: NEUTRAL.surface,
     borderTopLeftRadius: 22,

@@ -43,7 +43,7 @@ export function PrimaryButton({ label, onPress, loading, disabled, style, compac
         ) : (
           <View style={styles.content}>
             {Icon && <Icon size={compact ? 15 : 18} color={ON_ACTION} strokeWidth={2.3} />}
-            <Text style={[styles.label, compact && styles.compactLabel, { color: ON_ACTION }]}>{label}</Text>
+            <Text style={[styles.label, compact && styles.compactLabel, { color: ON_ACTION }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{label}</Text>
           </View>
         )}
       </View>
@@ -74,7 +74,7 @@ export function SecondaryButton({ label, onPress, loading, disabled, style, dang
         ) : (
           <View style={styles.content}>
             {Icon && <Icon size={compact ? 15 : 18} color={color} strokeWidth={2.2} />}
-            <Text style={[styles.label, compact && styles.compactLabel, { color }]}>{label}</Text>
+            <Text style={[styles.label, compact && styles.compactLabel, { color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{label}</Text>
           </View>
         )}
       </View>

@@ -1,4 +1,5 @@
-import { Modal, Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
+import { Pressable, View, Text, ScrollView, StyleSheet } from "react-native";
+import { SheetModal } from "@/components/SheetModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Check } from "lucide-react-native";
 import { CloseButton } from "@/components/IconButtons";
@@ -26,11 +27,7 @@ export function TypePickerSheet({
   const insets = useSafeAreaInsets();
   const { types } = useDocumentTypes();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.backdrop}>
-        {/* The tap-outside-to-close area sits behind the sheet, not around it: a touch handler on a parent of the list takes the
-            touch first and blocks the list from scrolling. */}
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+    <SheetModal visible={visible} onClose={onClose}>
         <View style={[styles.sheet, { paddingBottom: Math.max(18, insets.bottom + 10) }]}>
           <View style={styles.handle} />
           <View style={styles.head}>
@@ -59,13 +56,11 @@ export function TypePickerSheet({
             })}
           </ScrollView>
         </View>
-      </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: NEUTRAL.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 16, paddingTop: 8, maxHeight: "82%" },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: NEUTRAL.border, alignSelf: "center", marginBottom: 10 },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

@@ -1,12 +1,11 @@
-import { ActionGradient } from "@/components/ActionGradient";
 import { useEffect, useState } from "react";
-import { ACTION, ON_ACTION } from "@/theme/buttons";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { Text, StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Screen, BackHeader, ErrorBanner, SectionTitle, EmptyState } from "@/components/Layout";
+import { Screen, BackHeader, ErrorBanner, SectionTitle } from "@/components/Layout";
 import { Card } from "@/components/Card";
-import { PrimaryButton } from "@/components/Buttons";
+import { FooterAction } from "@/components/FooterAction";
+import { SlotHeader, SlotGrid } from "@/components/SlotPicker";
 import { SlidingTabs } from "@/components/SlidingTabs";
 import { NEUTRAL } from "@/theme/themes";
 import { getSlots, rescheduleBooking } from "@/api/portal";
@@ -16,7 +15,7 @@ import { SlotEntry } from "@/api/types";
 import { AppStackParamList } from "@/navigation/types";
 import { MessageDialog } from "@/components/MessageDialog";
 import { CARD_TEXT } from "@/theme/cardSizes";
-import { formatTime12, istDateIso, shortDayLabel } from "@/utils/indianTime";
+import { istDateIso, shortDayLabel } from "@/utils/indianTime";
 
 function dateOffsetLabel(daysFromToday: number): { key: string; label: string } {
   const iso = istDateIso(daysFromToday);
@@ -38,6 +37,7 @@ export function RescheduleScreen() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [availableOnly, setAvailableOnly] = useState(false);
 
   useEffect(() => {
     setSelectedTime(null);
@@ -75,59 +75,29 @@ export function RescheduleScreen() {
   };
 
   return (
-    <Screen>
-      <BackHeader title="Reschedule" onBack={() => navigation.goBack()} />
+    <Screen
+      header={
+        <>
+          <BackHeader title="Reschedule" onBack={() => navigation.goBack()} />
 
-      <Card>
-        <Text style={styles.doctor}>{doctorName}</Text>
-        <Text style={styles.hospital}>
-          {hospitalName} · for {patientName}
-        </Text>
-      </Card>
+          <Card>
+            <Text style={styles.doctor}>{doctorName}</Text>
+            <Text style={styles.hospital}>
+              {hospitalName} · for {patientName}
+            </Text>
+          </Card>
 
-      {!!error && <ErrorBanner message={error} />}
+          {!!error && <ErrorBanner message={error} />}
 
-      <SectionTitle>Choose a new date</SectionTitle>
-      <SlidingTabs label="Date" look="chips" options={dateOptions} value={selectedDate} onChange={setSelectedDate} style={{ marginBottom: 12 }} />
+          <SectionTitle>Choose a new date</SectionTitle>
+          <SlidingTabs label="Date" look="chips" options={dateOptions} value={selectedDate} onChange={setSelectedDate} style={{ marginBottom: 12 }} />
 
-      <SectionTitle>Choose a time slot</SectionTitle>
-      {slotsLoading ? (
-        <Text style={styles.slotsLoading}>Loading slots…</Text>
-      ) : slots.length === 0 ? (
-        <EmptyState text="No slots configured for this day — try a different date." />
-      ) : (
-        <View style={styles.slotGrid}>
-          {slots.map((s) => {
-            const active = s.time === selectedTime;
-            return (
-              <Pressable
-                key={s.time}
-                disabled={!s.available}
-                onPress={() => setSelectedTime(s.time)}
-                style={[
-                  styles.slot,
-                  !s.available && styles.slotDisabled,
-                  active && { backgroundColor: ACTION, borderColor: ACTION },
-                  { overflow: "hidden" },
-                ]}
-              >
-                {active && <ActionGradient />}
-                <Text style={[styles.slotText, !s.available && styles.slotTextDisabled, active && { color: ON_ACTION }]}>
-                  {formatTime12(s.time)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      <PrimaryButton
-        label={selectedTime ? "Confirm new time" : "Pick a slot to continue"}
-        disabled={!selectedTime}
-        onPress={onConfirm}
-        loading={saving}
-        style={{ marginTop: 16 }}
-      />
+          <SlotHeader showFilter={slots.length > 0} availableOnly={availableOnly} onChange={setAvailableOnly} />
+        </>
+      }
+      footer={<FooterAction label={selectedTime ? "Confirm new time" : "Pick a slot to continue"} disabled={!selectedTime} loading={saving} onPress={onConfirm} />}
+    >
+      <SlotGrid slots={slots} loading={slotsLoading} selectedTime={selectedTime} availableOnly={availableOnly} onSelect={setSelectedTime} />
 
       <MessageDialog
         visible={done}
@@ -146,10 +116,4 @@ export function RescheduleScreen() {
 const styles = StyleSheet.create({
   doctor: { fontSize: CARD_TEXT.title, fontWeight: "600", color: NEUTRAL.textPrimary },
   hospital: { fontSize: CARD_TEXT.meta, color: NEUTRAL.textSecondary, marginTop: 3 },
-  slotsLoading: { fontSize: 12, color: NEUTRAL.textMuted, marginTop: 4, marginBottom: 8 },
-  slotGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
-  slot: { borderWidth: 1, borderColor: NEUTRAL.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: NEUTRAL.surface },
-  slotDisabled: { backgroundColor: NEUTRAL.surfaceAlt, borderColor: NEUTRAL.surfaceAlt },
-  slotText: { fontSize: 12, color: NEUTRAL.textPrimary, fontWeight: "600" },
-  slotTextDisabled: { color: NEUTRAL.textMuted, fontWeight: "400" },
 });

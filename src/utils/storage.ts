@@ -91,3 +91,8 @@ export async function getBiometricPromptSeen(): Promise<boolean> {
 export async function setBiometricPromptSeen() {
   await setItem(BIOMETRIC_PROMPT_SEEN_KEY, "1");
 }
+
+// Signing out on purpose turns fingerprint unlock off, so the next sign-in is offered the one-time screen again.
+export async function clearBiometricPromptSeen() {
+  await deleteItem(BIOMETRIC_PROMPT_SEEN_KEY);
+}

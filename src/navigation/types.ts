@@ -45,8 +45,8 @@ export type AppStackParamList = {
   // One upload day of the By-date view: its files. `date` is "2026-05-12"; `byType` is how many of each type that day
   // holds (from the day card), so the type filter inside the day can show its counts without another request.
   DocumentDay: { date: string; patientAwpid?: string; byType: Record<string, number> };
-  // mode "instant" = one document on the fast lane (QR scan or one photo); "bulk" = several photos at once
-  DocumentCapture: { mode: "instant" | "bulk"; patientAwpid?: string };
+  // one document on the fast lane (QR scan or one photo); Bulk Upload has no camera
+  DocumentCapture: { patientAwpid?: string };
   DocumentUpload: { patientAwpid?: string } | undefined;
   // The full-screen viewer: the files of the list it was opened from (ids), which one to open (index), whose they are.
   DocumentViewer: { ids: number[]; index: number; patientAwpid?: string };

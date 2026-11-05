@@ -1,4 +1,5 @@
-import { Modal, View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
+import { PopModal } from "@/components/PopModal";
 import { CheckCircle2, XCircle } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton } from "@/components/Buttons";
@@ -29,8 +30,7 @@ export function MessageDialog({
   const { theme, neutral } = useAppTheme();
   const isError = tone === "error";
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
-      <View style={styles.backdrop}>
+    <PopModal visible={visible} onRequestClose={onDismiss}>
         <View style={styles.card}>
           <CloseButton onPress={onDismiss} style={CORNER_CLOSE} />
           <View style={[styles.iconWrap, { backgroundColor: isError ? neutral.dangerBg : theme.bg }]}>
@@ -48,13 +48,11 @@ export function MessageDialog({
             style={[styles.btn, isError ? { backgroundColor: neutral.danger } : null] as any}
           />
         </View>
-      </View>
-    </Modal>
+    </PopModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.45)", alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
   card: {
     width: "100%",
     maxWidth: 340,

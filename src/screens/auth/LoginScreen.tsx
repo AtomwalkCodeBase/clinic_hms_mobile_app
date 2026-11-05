@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Text, StyleSheet, Pressable, View } from "react-native";
+import { useShake } from "@/components/Motion";
+import { Animated, Text, StyleSheet, Pressable, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -25,6 +26,11 @@ export function LoginScreen() {
   const [errors, setErrors] = useState<{ mobile?: string; password?: string }>({});
   const [submitError, setSubmitError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { shake, style: shakeStyle } = useShake();
+  // a rejected sign-in or a missing field nudges the form sideways
+  useEffect(() => {
+    if (submitError || errors.mobile || errors.password) shake();
+  }, [submitError, errors]);
   // Only true when there's genuinely a stored session to unlock — a fresh
   // install or a full sign-out has no tokens, so fingerprint can't produce a
   // login here and the button stays hidden. Present when a patient with
@@ -102,6 +108,7 @@ export function LoginScreen() {
     >
       {(compact) => (
         <>
+          <Animated.View style={shakeStyle}>
           {!!submitError && <ErrorBanner message={submitError} />}
 
           <TextField
@@ -125,6 +132,7 @@ export function LoginScreen() {
             isPassword
             error={errors.password}
           />
+          </Animated.View>
 
           <Pressable onPress={() => navigation.navigate("ForgotPassword")} style={styles.forgotWrap}>
             <Text style={[styles.forgot, { color: theme.text }]}>Forgot password?</Text>

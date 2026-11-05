@@ -1,4 +1,5 @@
-import { Modal, View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
+import { PopModal } from "@/components/PopModal";
 import { AlertTriangle, HelpCircle } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
@@ -32,8 +33,7 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
-      <View style={styles.backdrop}>
+    <PopModal visible={visible} onRequestClose={onCancel}>
         <View style={styles.card}>
           {!loading && <CloseButton onPress={onCancel} style={CORNER_CLOSE} />}
           <View style={[styles.iconWrap, { backgroundColor: danger ? NEUTRAL.dangerBg : NEUTRAL.surfaceAlt }]}>
@@ -55,13 +55,11 @@ export function ConfirmDialog({
             />
           </View>
         </View>
-      </View>
-    </Modal>
+    </PopModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(12,35,64,0.45)", alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
   card: {
     width: "100%",
     maxWidth: 340,
@@ -81,5 +79,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: "700", color: NEUTRAL.textPrimary, textAlign: "center" },
   message: { fontSize: 12.5, color: NEUTRAL.textSecondary, textAlign: "center", marginTop: 8, lineHeight: 18 },
   actions: { flexDirection: "row", gap: 10, marginTop: 22, width: "100%" },
-  btn: { flex: 1, paddingVertical: 12 },
+  // both buttons the same height whatever their label, so a longer one never makes its neighbour look different
+  btn: { flex: 1, height: 52 },
 });

@@ -86,7 +86,7 @@ type PickerState = { doc: PatientDocument } | null;
 type Notice = { title: string; message: string; tone: "success" | "error" } | null;
 
 const HELP: HelpItem[] = [
-  { icon: Upload, title: "Upload button", text: "At the top. Opens a sheet where you choose files or take photos with the camera." },
+  { icon: Upload, title: "Upload button", text: "At the top. Opens a sheet where you choose several files from your phone." },
   { icon: FileWarning, title: "File limits", text: `${LIMITS_LINE}. Photos are made smaller automatically; PDFs are sent as they are. A file over the limit is not uploaded: the app tells you which one and why, and all your other files go through.` },
   { icon: ListChecks, title: "View", text: "Opens the file here in the app so you can check it is the right one. Pinch or double-tap to zoom." },
   { icon: CheckCircle2, title: "Ready to submit", text: "On a file's card: moves it to the Ready to Submit tab. It is greyed out until the file has a type." },
@@ -246,14 +246,6 @@ export function DocumentUploadScreen() {
     } catch (err) {
       setNotice({ title: "Can't upload", message: apiErrorMessage(err, "Couldn't upload those files."), tone: "error" });
     }
-  }
-
-  async function takePhotos() {
-    if (!(await askGuidelines(true))) return;
-    const target = await who.ask();
-    if (!target) return;
-    setPatientAwpid(target.awpid);
-    navigation.navigate("DocumentCapture", { mode: "bulk", ...(target.awpid ? { patientAwpid: target.awpid } : {}) });
   }
 
   /** The Upload sheet closes first, then the chosen action starts (a sheet and a dialog can't both be on screen). */
@@ -571,7 +563,6 @@ export function DocumentUploadScreen() {
         many
         onClose={() => setUploadOpen(false)}
         onFiles={() => chooseUpload(addFiles)}
-        onCamera={() => chooseUpload(takePhotos)}
       />
       <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} items={HELP} />
 

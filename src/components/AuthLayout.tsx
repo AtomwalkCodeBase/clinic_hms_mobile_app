@@ -72,7 +72,7 @@ export function AuthLayout({
           {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
 
           <ScrollView
-            style={styles.fill}
+            style={styles.scroll}
             contentContainerStyle={styles.body}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -90,6 +90,8 @@ export function AuthLayout({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // runs to the screen edges (the page's 24 side padding is given back inside) so a shaking form isn't clipped
+  scroll: { flex: 1, marginHorizontal: -24 },
   page: { flex: 1, paddingHorizontal: 24, paddingBottom: 14 },
   top: { height: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   topRight: { fontSize: 12, color: NEUTRAL.textMuted },
@@ -99,6 +101,6 @@ const styles = StyleSheet.create({
   stepOn: { backgroundColor: BRAND },
   title: { fontSize: 28, fontWeight: "600", color: NEUTRAL.textPrimary, letterSpacing: -0.6, lineHeight: 32 },
   subtitle: { fontSize: 14, color: NEUTRAL.textSecondary, lineHeight: 20, marginTop: 6 },
-  body: { paddingTop: 28, paddingBottom: 8 },
+  body: { paddingTop: 28, paddingBottom: 8, paddingHorizontal: 24 },
   footer: { alignItems: "center", marginTop: 22 },
 });

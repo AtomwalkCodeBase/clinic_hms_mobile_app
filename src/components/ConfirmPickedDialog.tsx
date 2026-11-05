@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AlertTriangle, FileText, Image as ImageIcon, UploadCloud } from "lucide-react-native";
 import { NEUTRAL } from "@/theme/themes";
 import { PrimaryButton, SecondaryButton } from "@/components/Buttons";
@@ -17,7 +17,7 @@ export function ConfirmPickedDialog({ visible, files, onChoose }: { visible: boo
   const checked = files.map((f) => ({ file: f, problem: f.problem ?? fileProblem({ mimeType: f.mimeType, size: f.size ?? 0 }) }));
   const ok = checked.filter((c) => !c.problem);
   const bad = checked.filter((c) => c.problem);
-  // Too many files, too many photos or too big in total: nothing can be sent until the patient chooses again.
+  // Too many files or too big in total: nothing can be sent until the patient chooses again.
   const together = batchProblem(ok.map((c) => ({ mimeType: c.file.mimeType, size: c.file.size ?? 0 })));
   const title = ok.length === 0
     ? (files.length === 1 ? "This file can't be uploaded" : "These files can't be uploaded")
